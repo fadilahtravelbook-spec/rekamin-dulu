@@ -141,6 +141,10 @@ object StorageHelper {
      */
     fun scanDeletedFile(context: Context, file: File) {
         try {
+            com.bangdillah.rekamindulu.library.LibraryAdapter.invalidateCache(file.absolutePath)
+        } catch (ignored: Exception) {}
+
+        try {
             val resolver: ContentResolver = context.contentResolver
             @Suppress("DEPRECATION")
             val where = "${MediaStore.Video.Media.DATA} = ?"

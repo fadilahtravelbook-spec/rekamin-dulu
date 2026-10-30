@@ -86,11 +86,12 @@ class FloatingOverlayService : Service() {
             addAction(ScreenRecordingService.ACTION_RECORDING_STATUS_CHANGED)
             addAction(ScreenRecordingService.ACTION_RECORDING_STOPPED)
         }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            registerReceiver(statusReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
-        } else {
-            registerReceiver(statusReceiver, filter)
-        }
+        androidx.core.content.ContextCompat.registerReceiver(
+            this,
+            statusReceiver,
+            filter,
+            androidx.core.content.ContextCompat.RECEIVER_NOT_EXPORTED
+        )
         setupOverlayWindow()
     }
 
@@ -144,7 +145,7 @@ class FloatingOverlayService : Service() {
         val container = overlayView?.findViewById<View>(R.id.overlay_container)
         container?.visibility = View.VISIBLE
 
-        setupDragTouchListener(overlayView)
+        setupDragTouchListener(container ?: overlayView)
 
         // Close/Stop Button
         overlayView?.findViewById<ImageView>(R.id.overlay_close_btn)?.setOnClickListener {
@@ -192,6 +193,7 @@ class FloatingOverlayService : Service() {
             Choreographer.getInstance().postFrameCallback(frameCallback)
         } catch (e: Exception) {
             e.printStackTrace()
+            stopSelf()
         }
     }
 
@@ -229,20 +231,25 @@ class FloatingOverlayService : Service() {
                         initialTouchX = event.rawX
                         initialTouchY = event.rawY
                         isDrag = false
-                        return false // allow children click events
+                        return true
                     }
                     MotionEvent.ACTION_MOVE -> {
                         val dx = (event.rawX - initialTouchX).toInt()
                         val dy = (event.rawY - initialTouchY).toInt()
-                        if (Math.abs(dx) > 12 || Math.abs(dy) > 12) {
+                        if (Math.abs(dx) > 6 || Math.abs(dy) > 6) {
                             isDrag = true
                             currentParams.x = initialX + dx
                             currentParams.y = initialY + dy
-                            windowManager?.updateViewLayout(overlayView, currentParams)
+                            try {
+                                windowManager?.updateViewLayout(overlayView, currentParams)
+                            } catch (ignored: Exception) {}
                             return true
                         }
                     }
                     MotionEvent.ACTION_UP -> {
+                        if (!isDrag) {
+                            v.performClick()
+                        }
                         return isDrag
                     }
                 }
@@ -251,7 +258,11 @@ class FloatingOverlayService : Service() {
         })
     }
 
+    private var isStopping = false
+
     fun stopOverlay() {
+        if (isStopping) return
+        isStopping = true
         handler.removeCallbacks(timerRunnable)
         try {
             unregisterReceiver(statusReceiver)

@@ -1,6 +1,7 @@
 package com.bangdillah.rekamindulu.service
 
 import android.Manifest
+import android.app.Activity
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -137,30 +138,79 @@ open class ScreenRecordingService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val action = intent?.action ?: return START_NOT_STICKY
 
+        createNotificationChannel()
+
         when (action) {
             ACTION_START -> {
-                val resultCode = intent.getIntExtra(EXTRA_RESULT_CODE, -1)
+                val resultCode = intent.getIntExtra(EXTRA_RESULT_CODE, Activity.RESULT_OK)
                 val resultData = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                     intent.getParcelableExtra(EXTRA_RESULT_DATA, Intent::class.java)
+                        ?: @Suppress("DEPRECATION") (intent.getParcelableExtra(EXTRA_RESULT_DATA) as? Intent)
                 } else {
                     @Suppress("DEPRECATION")
-                    intent.getParcelableExtra(EXTRA_RESULT_DATA)
+                    intent.getParcelableExtra(EXTRA_RESULT_DATA) as? Intent
                 }
-                if (resultCode != -1 && resultData != null) {
+                val isResultCodeValid = (resultCode == Activity.RESULT_OK) || (intent.hasExtra(EXTRA_RESULT_CODE) && resultCode != Activity.RESULT_CANCELED)
+                if (isResultCodeValid && resultData != null) {
                     startRecording(resultCode, resultData)
                 } else {
-                    Log.e(TAG, "Missing resultCode or resultData in ACTION_START")
-                    createNotificationChannel()
-                    startForeground(NOTIFICATION_ID, buildNotification("Gagal memulai"))
+                    Log.e(TAG, "Missing resultCode or resultData in ACTION_START (resultCode=$resultCode, hasData=${resultData != null})")
+                    safeStartForeground(buildNotification("Gagal memulai"))
+                    broadcastError("Izin tangkap layar diperlukan untuk memulai perekaman.")
                     stopRecording()
                 }
             }
-            ACTION_STOP -> stopRecording()
-            ACTION_PAUSE -> pauseRecording()
-            ACTION_RESUME -> resumeRecording()
+            ACTION_STOP -> {
+                safeStartForeground(buildSavingNotification())
+                stopRecording()
+            }
+            ACTION_PAUSE -> {
+                pauseRecording()
+                safeStartForeground(buildNotification())
+            }
+            ACTION_RESUME -> {
+                resumeRecording()
+                safeStartForeground(buildNotification())
+            }
         }
 
         return START_NOT_STICKY
+    }
+
+    /**
+     * Memastikan startForeground selalu dipanggil dengan ForegroundServiceType yang valid di Android 14+
+     */
+    private fun safeStartForeground(notification: Notification) {
+        createNotificationChannel()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            val prefs = AppPreferences(this)
+            val hasMicPermission = ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
+            val wantsAudio = prefs.audioSource != "MUTE"
+            val fgsType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && hasMicPermission && wantsAudio) {
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION or ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
+            } else {
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION
+            }
+            try {
+                startForeground(NOTIFICATION_ID, notification, fgsType)
+            } catch (eFgs: Exception) {
+                Log.w(TAG, "safeStartForeground with combined types failed, falling back to MEDIA_PROJECTION only", eFgs)
+                try {
+                    startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION)
+                } catch (eFgsFallback: Exception) {
+                    Log.e(TAG, "safeStartForeground fallback failed", eFgsFallback)
+                    try {
+                        startForeground(NOTIFICATION_ID, notification)
+                    } catch (ignored: Exception) {}
+                }
+            }
+        } else {
+            try {
+                startForeground(NOTIFICATION_ID, notification)
+            } catch (e: Exception) {
+                Log.e(TAG, "startForeground pre-Q failed", e)
+            }
+        }
     }
 
     /**
@@ -170,45 +220,12 @@ open class ScreenRecordingService : Service() {
         if (isRecording || isStarting) return
         isStarting = true
         val prefs = AppPreferences(this)
-        val hasMicPermission = ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
-        val wantsAudio = prefs.audioSource != "MUTE"
 
         // 1. Inisialisasi WakeLock untuk menjamin proses latar belakang tidak tertidur oleh OS
         acquireWakeLock()
 
         // 2. Buat Notification Channel dan promosikan Service ke Foreground Service
-        createNotificationChannel()
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            val fgsType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                if (hasMicPermission && wantsAudio) {
-                    ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION or ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
-                } else {
-                    ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION
-                }
-            } else {
-                ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION
-            }
-            try {
-                startForeground(
-                    NOTIFICATION_ID,
-                    buildNotification(),
-                    fgsType
-                )
-            } catch (eFgs: Exception) {
-                Log.w(TAG, "startForeground with multiple types failed, falling back to MEDIA_PROJECTION only", eFgs)
-                try {
-                    startForeground(
-                        NOTIFICATION_ID,
-                        buildNotification(),
-                        ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION
-                    )
-                } catch (eFgsFallback: Exception) {
-                    Log.e(TAG, "startForeground failed completely", eFgsFallback)
-                }
-            }
-        } else {
-            startForeground(NOTIFICATION_ID, buildNotification())
-        }
+        safeStartForeground(buildNotification())
 
         try {
             // 3. Ambil dimensi layar fisik perangkat
@@ -373,7 +390,7 @@ open class ScreenRecordingService : Service() {
 
         // Clamp maximum dimension so mobile hardware encoders never reject out-of-spec heights
         val maxLong = when (resolutionPref) {
-            "4K" -> 2160
+            "4K" -> 3840
             "1080p" -> 1920
             "720p" -> 1280
             else -> 854
@@ -500,6 +517,8 @@ open class ScreenRecordingService : Service() {
         val safeH = if (isPortrait) 1280 else 720
         Log.w(TAG, "Tier 2 gagal, mencoba Tier 3 (HD 720p H.264)")
         if (configureAndPrepare(wantsAudio, safeW, safeH, 3_500_000, 30)) {
+            screenWidth = safeW
+            screenHeight = safeH
             Log.i(TAG, "Tier 3: MediaRecorder 720p siap (audio=$wantsAudio)")
             return
         }
@@ -507,17 +526,21 @@ open class ScreenRecordingService : Service() {
         // Tier 4: Fallback ke HD 720p video-only murni
         Log.w(TAG, "Tier 3 gagal, mencoba Tier 4 (HD 720p video-only)")
         if (configureAndPrepare(false, safeW, safeH, 3_000_000, 30)) {
+            screenWidth = safeW
+            screenHeight = safeH
             Log.i(TAG, "Tier 4: MediaRecorder 720p video-only siap")
             return
         }
 
-        // Tier 5: Fallback paling aman 480p universal video-only
-        val ultraSafeW = if (isPortrait) 480 else 854
-        val ultraSafeH = if (isPortrait) 854 else 480
+        // Tier 5: Fallback paling aman 480p universal video-only (848 divisible by 16)
+        val ultraSafeW = if (isPortrait) 480 else 848
+        val ultraSafeH = if (isPortrait) 848 else 480
         Log.w(TAG, "Tier 4 gagal, mencoba Tier 5 (480p universal)")
         if (!configureAndPrepare(false, ultraSafeW, ultraSafeH, 1_500_000, 30)) {
             throw RuntimeException("Perangkat tidak dapat menginisialisasi encoder video untuk perekaman layar.")
         }
+        screenWidth = ultraSafeW
+        screenHeight = ultraSafeH
     }
 
     /**
@@ -562,8 +585,7 @@ open class ScreenRecordingService : Service() {
         if (isStopping) return
         if (!isRecording && !isPaused && mediaRecorder == null && virtualDisplay == null) {
             try {
-                createNotificationChannel()
-                startForeground(NOTIFICATION_ID, buildNotification("Selesai"))
+                safeStartForeground(buildNotification("Selesai"))
                 @Suppress("DEPRECATION")
                 stopForeground(true)
                 stopSelf()
@@ -587,15 +609,26 @@ open class ScreenRecordingService : Service() {
                 Log.w(TAG, "Error displaying saving notification", e)
             }
 
-            // 1. Beri jeda pengaman singkat SEBELUM virtualDisplay dimatikan agar hardware encoder menerima frame yang cukup
+            // 1. Beri jeda pengaman singkat SEBELUM perekaman dihentikan agar hardware encoder menerima frame yang cukup
             val elapsedDuration = System.currentTimeMillis() - startTimeMillis
-            if (startTimeMillis > 0L && elapsedDuration in 0..1200) {
+            if (startTimeMillis > 0L && elapsedDuration in 0..500) {
                 try {
-                    Thread.sleep(1200 - elapsedDuration)
+                    Thread.sleep(500 - elapsedDuration)
                 } catch (ignored: InterruptedException) {}
             }
 
-            // 2. Matikan VirtualDisplay setelah encoder menerima frame yang cukup
+            // 2. Hentikan mediaRecorder TERLEBIH DAHULU agar container MP4 difinalisasi dengan aman saat pipeline masih hidup
+            var recordingStoppedCleanly = false
+            try {
+                mediaRecorder?.stop()
+                recordingStoppedCleanly = true
+            } catch (e: RuntimeException) {
+                Log.w(TAG, "Notice stopping mediaRecorder (recording may be too short or interrupted): ${e.message}")
+            } catch (e: Exception) {
+                Log.e(TAG, "Error stopping mediaRecorder", e)
+            }
+
+            // 3. Matikan VirtualDisplay setelah MediaRecorder selesai memproses frame
             try {
                 virtualDisplay?.release()
             } catch (e: Exception) {
@@ -604,7 +637,7 @@ open class ScreenRecordingService : Service() {
                 virtualDisplay = null
             }
 
-            // 3. Hentikan session MediaProjection
+            // 4. Hentikan session MediaProjection
             try {
                 mediaProjectionCallback?.let {
                     mediaProjection?.unregisterCallback(it)
@@ -615,17 +648,6 @@ open class ScreenRecordingService : Service() {
                 Log.e(TAG, "Error stopping mediaProjection", e)
             } finally {
                 mediaProjection = null
-            }
-
-            // 4. Hentikan mediaRecorder yang sekarang aman tanpa ada buffer frame baru yang masuk
-            var recordingStoppedCleanly = false
-            try {
-                mediaRecorder?.stop()
-                recordingStoppedCleanly = true
-            } catch (e: RuntimeException) {
-                Log.w(TAG, "Notice stopping mediaRecorder (recording may be too short or interrupted): ${e.message}")
-            } catch (e: Exception) {
-                Log.e(TAG, "Error stopping mediaRecorder", e)
             }
 
             try {
@@ -650,7 +672,8 @@ open class ScreenRecordingService : Service() {
             val savedPath = currentVideoFilePath
             if (!savedPath.isNullOrEmpty()) {
                 val savedFile = File(savedPath)
-                if (recordingStoppedCleanly && savedFile.exists() && savedFile.length() > 500) {
+                val isValidRecording = savedFile.exists() && savedFile.length() > 2048
+                if (isValidRecording) {
                     StorageHelper.scanVideoFile(this, savedFile)
                     MainActivity.hasPendingSaveDialog = true
                     lastRecordedFilePath = savedPath
@@ -794,15 +817,19 @@ open class ScreenRecordingService : Service() {
 
     private fun updateNotification(customMessage: String? = null) {
         try {
-            val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-            manager.notify(NOTIFICATION_ID, buildNotification(customMessage))
+            if (isRecording || isPaused) {
+                startForeground(NOTIFICATION_ID, buildNotification(customMessage))
+            } else {
+                val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+                manager.notify(NOTIFICATION_ID, buildNotification(customMessage))
+            }
         } catch (e: Exception) {
             Log.w(TAG, "Failed updating recording notification", e)
         }
     }
 
-    private fun updateSavingNotification() {
-        val savingNotification = NotificationCompat.Builder(this, CHANNEL_ID)
+    private fun buildSavingNotification(): Notification {
+        return NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("⏳ Menyimpan Rekaman...")
             .setContentText("Memproses dan mengoptimalkan video...")
             .setSmallIcon(R.drawable.ic_record)
@@ -811,8 +838,15 @@ open class ScreenRecordingService : Service() {
             .setProgress(0, 0, true)
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .build()
-        val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        manager.notify(NOTIFICATION_ID, savingNotification)
+    }
+
+    private fun updateSavingNotification() {
+        try {
+            startForeground(NOTIFICATION_ID, buildSavingNotification())
+        } catch (e: Exception) {
+            val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            manager.notify(NOTIFICATION_ID, buildSavingNotification())
+        }
     }
 
     private fun buildNotification(customMessage: String? = null): Notification {

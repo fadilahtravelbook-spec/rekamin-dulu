@@ -25,6 +25,14 @@ class LibraryAdapter(
     private val onDeleteClick: (file: File) -> Unit
 ) : RecyclerView.Adapter<LibraryAdapter.ViewHolder>() {
 
+    companion object {
+        private val metadataCache = HashMap<String, Pair<String, String>>()
+
+        fun invalidateCache(filePath: String) {
+            metadataCache.remove(filePath)
+        }
+    }
+
     private val dateFormat = SimpleDateFormat("dd MMM yyyy • HH:mm", Locale.getDefault())
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
@@ -58,23 +66,32 @@ class LibraryAdapter(
             val fileSizeMb = file.length() / (1024.0 * 1024.0)
             val dateFormatted = dateFormat.format(Date(file.lastModified()))
 
-            // Extract duration and resolution from metadata
-            var durationText = "00:00"
-            var resolutionText = "1080p"
-            try {
-                val retriever = MediaMetadataRetriever()
-                retriever.setDataSource(file.absolutePath)
-                val durMs = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: 0L
-                val width = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH) ?: "1080"
-                val height = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT) ?: "1920"
-                retriever.release()
+            // Extract duration and resolution from metadata (cached to ensure smooth scrolling)
+            val cached = metadataCache[file.absolutePath]
+            var durationText = cached?.first ?: "00:00"
+            var resolutionText = cached?.second ?: "1080p"
 
-                val sec = (durMs / 1000).toInt()
-                val min = sec / 60
-                durationText = String.format(Locale.getDefault(), "%02d:%02d", min, sec % 60)
-                resolutionText = "${width}x${height}"
-            } catch (e: Exception) {
-                // Keep defaults if reading metadata fails
+            if (cached == null) {
+                var retriever: MediaMetadataRetriever? = null
+                try {
+                    retriever = MediaMetadataRetriever()
+                    retriever.setDataSource(file.absolutePath)
+                    val durMs = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: 0L
+                    val width = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH) ?: "1080"
+                    val height = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT) ?: "1920"
+
+                    val sec = (durMs / 1000).toInt()
+                    val min = sec / 60
+                    durationText = String.format(Locale.getDefault(), "%02d:%02d", min, sec % 60)
+                    resolutionText = "${width}x${height}"
+                    metadataCache[file.absolutePath] = Pair(durationText, resolutionText)
+                } catch (e: Exception) {
+                    // Keep defaults if reading metadata fails
+                } finally {
+                    try {
+                        retriever?.release()
+                    } catch (ignored: Exception) {}
+                }
             }
 
             durationView.text = String.format(

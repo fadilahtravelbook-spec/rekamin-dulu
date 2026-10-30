@@ -16,6 +16,7 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat
 import com.bangdillah.rekamindulu.HomeActivity
 import com.bangdillah.rekamindulu.R
 import com.bangdillah.rekamindulu.library.LibraryActivity
@@ -90,9 +91,41 @@ class SettingsActivity : AppCompatActivity() {
 
         appPreferences = AppPreferences(this)
 
+        checkAppLock()
         initViews()
         setupListeners()
         setupBottomNavigation()
+    }
+
+    private fun checkAppLock() {
+        if (appPreferences.isAppLockEnabled && appPreferences.appLockPin.isNotEmpty() && !HomeActivity.isSessionUnlocked) {
+            val input = EditText(this).apply {
+                inputType = InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_VARIATION_PASSWORD
+                hint = "Masukkan 4 angka PIN"
+                maxLines = 1
+                setPadding(48, 36, 48, 36)
+            }
+
+            AlertDialog.Builder(this)
+                .setTitle("🔒 Kunci Pengaturan")
+                .setMessage("Pengaturan dilindungi PIN. Masukkan PIN keamanan untuk mengakses:")
+                .setView(input)
+                .setCancelable(false)
+                .setPositiveButton("Buka Kunci") { dialog, _ ->
+                    val entered = input.text.toString().trim()
+                    if (entered == appPreferences.appLockPin) {
+                        HomeActivity.isSessionUnlocked = true
+                        dialog.dismiss()
+                    } else {
+                        Toast.makeText(this, "PIN salah!", Toast.LENGTH_SHORT).show()
+                        finish()
+                    }
+                }
+                .setNegativeButton("Kembali") { _, _ ->
+                    finish()
+                }
+                .show()
+        }
     }
 
     override fun onResume() {
@@ -104,11 +137,7 @@ class SettingsActivity : AppCompatActivity() {
             addAction(ScreenRecordingService.ACTION_RECORDING_STOPPED)
             addAction(ScreenRecordingService.ACTION_RECORDING_STATUS_CHANGED)
         }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            registerReceiver(recordingReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
-        } else {
-            registerReceiver(recordingReceiver, filter)
-        }
+        ContextCompat.registerReceiver(this, recordingReceiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED)
 
         if (ScreenRecordingService.isRecording) {
             liveTimerHandler.post(liveTimerRunnable)

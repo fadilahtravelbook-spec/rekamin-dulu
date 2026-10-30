@@ -18,6 +18,7 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
@@ -130,11 +131,7 @@ class LibraryActivity : AppCompatActivity() {
             addAction(ScreenRecordingService.ACTION_RECORDING_STOPPED)
             addAction(ScreenRecordingService.ACTION_RECORDING_STATUS_CHANGED)
         }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            registerReceiver(recordingReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
-        } else {
-            registerReceiver(recordingReceiver, filter)
-        }
+        ContextCompat.registerReceiver(this, recordingReceiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED)
 
         if (ScreenRecordingService.isRecording) {
             liveTimerHandler.post(liveTimerRunnable)
@@ -500,22 +497,27 @@ class LibraryActivity : AppCompatActivity() {
         Thread {
             val (success, audioFile) = AudioExtractorHelper.extractAudio(this, file)
             runOnUiThread {
-                progressDialog.dismiss()
-                if (success && audioFile != null && audioFile.exists()) {
-                    AlertDialog.Builder(this)
-                        .setTitle("Ekstrak Audio Berhasil! 🎉")
-                        .setIcon(R.drawable.ic_check_circle)
-                        .setMessage("Audio disimpan sebagai:\n${audioFile.name}\nUkuran: ${String.format(Locale.getDefault(), "%.1f MB", audioFile.length() / (1024.0 * 1024.0))}")
-                        .setPositiveButton("Putar Audio") { _, _ ->
-                            playAudioFile(audioFile)
-                        }
-                        .setNeutralButton("Bagikan") { _, _ ->
-                            shareAudioFile(audioFile)
-                        }
-                        .setNegativeButton("Tutup", null)
-                        .show()
-                } else {
-                    Toast.makeText(this, "Tidak dapat mengekstrak audio atau rekaman ini tidak memiliki audio.", Toast.LENGTH_LONG).show()
+                if (!isFinishing && !isDestroyed) {
+                    try {
+                        progressDialog.dismiss()
+                    } catch (ignored: Exception) {}
+
+                    if (success && audioFile != null && audioFile.exists()) {
+                        AlertDialog.Builder(this)
+                            .setTitle("Ekstrak Audio Berhasil! 🎉")
+                            .setIcon(R.drawable.ic_check_circle)
+                            .setMessage("Audio disimpan sebagai:\n${audioFile.name}\nUkuran: ${String.format(Locale.getDefault(), "%.1f MB", audioFile.length() / (1024.0 * 1024.0))}")
+                            .setPositiveButton("Putar Audio") { _, _ ->
+                                playAudioFile(audioFile)
+                            }
+                            .setNeutralButton("Bagikan") { _, _ ->
+                                shareAudioFile(audioFile)
+                            }
+                            .setNegativeButton("Tutup", null)
+                            .show()
+                    } else {
+                        Toast.makeText(this, "Tidak dapat mengekstrak audio atau rekaman ini tidak memiliki audio.", Toast.LENGTH_LONG).show()
+                    }
                 }
             }
         }.start()

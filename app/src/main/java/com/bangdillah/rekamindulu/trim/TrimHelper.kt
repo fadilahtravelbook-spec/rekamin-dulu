@@ -34,10 +34,11 @@ object TrimHelper {
         }
 
         val startUs = (startMs * 1000).coerceAtLeast(0L)
-        val endUs = (endMs * 1000).coerceAtLeast(startUs + 1000L)
+        val endUs = (endMs * 1000).coerceAtLeast(startUs + 500_000L)
 
         var extractor: MediaExtractor? = null
         var muxer: MediaMuxer? = null
+        var muxerStarted = false
 
         try {
             extractor = MediaExtractor()
@@ -92,13 +93,29 @@ object TrimHelper {
             }
 
             muxer.start()
+            muxerStarted = true
 
-            // Seek ke keyframe terdekat sebelum startUs
-            extractor.seekTo(startUs, MediaExtractor.SEEK_TO_CLOSEST_SYNC)
+            // Seek ke keyframe sync terdekat sebelum startUs
+            extractor.seekTo(startUs, MediaExtractor.SEEK_TO_PREVIOUS_SYNC)
 
-            val buffer = ByteBuffer.allocate(DEFAULT_BUFFER_SIZE)
+            // Hitung buffer size optimal dari KEY_MAX_INPUT_SIZE setiap track (min 2MB untuk 1080p/4K)
+            var maxInputSize = 2 * 1024 * 1024
+            for (i in 0 until trackCount) {
+                val format = extractor.getTrackFormat(i)
+                if (format.containsKey(MediaFormat.KEY_MAX_INPUT_SIZE)) {
+                    val size = format.getInteger(MediaFormat.KEY_MAX_INPUT_SIZE)
+                    if (size > maxInputSize) {
+                        maxInputSize = size
+                    }
+                }
+            }
+            val buffer = ByteBuffer.allocateDirect(maxInputSize)
             val bufferInfo = MediaCodec.BufferInfo()
             val totalDurationUs = (endUs - startUs).coerceAtLeast(1L)
+
+            val firstPtsMap = HashMap<Int, Long>()
+            val lastWrittenPtsMap = HashMap<Int, Long>()
+            var videoKeyFrameFound = (videoTrackIndex == -1)
 
             while (true) {
                 val trackIndex = extractor.sampleTrackIndex
@@ -115,22 +132,53 @@ object TrimHelper {
                     break
                 }
 
-                bufferInfo.presentationTimeUs = extractor.sampleTime
-                if (bufferInfo.presentationTimeUs > endUs) {
-                    // Selesai memotong sampai batas endUs
-                    if (trackIndex == videoTrackIndex) {
+                val sampleTime = extractor.sampleTime
+                val flags = extractor.sampleFlags
+
+                // Stop condition: frame beyond endUs
+                if (sampleTime > endUs) {
+                    if (trackIndex == videoTrackIndex || videoTrackIndex == -1) {
                         break
+                    }
+                    extractor.advance()
+                    continue
+                }
+
+                // Video track MUST start with a keyframe so decoders don't fail/show black screen
+                if (trackIndex == videoTrackIndex && !videoKeyFrameFound) {
+                    if ((flags and MediaCodec.BUFFER_FLAG_KEY_FRAME) != 0) {
+                        videoKeyFrameFound = true
+                    } else {
+                        extractor.advance()
+                        continue
                     }
                 }
 
-                bufferInfo.flags = extractor.sampleFlags
-                bufferInfo.offset = 0
+                // Don't start writing audio before the first video keyframe
+                if (!videoKeyFrameFound && videoTrackIndex != -1) {
+                    extractor.advance()
+                    continue
+                }
 
-                if (bufferInfo.presentationTimeUs >= startUs) {
+                if (bufferInfo.size > 0) {
+                    val firstPts = firstPtsMap.getOrPut(muxerTrackIndex) { sampleTime }
+                    val rebasedPts = (sampleTime - firstPts).coerceAtLeast(0L)
+                    val lastPts = lastWrittenPtsMap[muxerTrackIndex] ?: -1L
+                    val finalPts = if (rebasedPts > lastPts) rebasedPts else lastPts + 1000L
+                    val codecFlags = if ((flags and MediaExtractor.SAMPLE_FLAG_SYNC) != 0) {
+                        MediaCodec.BUFFER_FLAG_KEY_FRAME
+                    } else {
+                        0
+                    }
+
+                    bufferInfo.presentationTimeUs = finalPts
+                    bufferInfo.flags = codecFlags
+                    bufferInfo.offset = 0
+
                     muxer.writeSampleData(muxerTrackIndex, buffer, bufferInfo)
+                    lastWrittenPtsMap[muxerTrackIndex] = finalPts
 
-                    // Kirim progress update
-                    val currentProgressUs = (bufferInfo.presentationTimeUs - startUs).coerceAtLeast(0L)
+                    val currentProgressUs = (sampleTime - startUs).coerceAtLeast(0L)
                     val progressPercent = ((currentProgressUs * 100) / totalDurationUs).toInt().coerceIn(0, 100)
                     progressCallback?.invoke(progressPercent)
                 }
@@ -146,11 +194,17 @@ object TrimHelper {
             outputFile.delete()
             return Pair(false, "Gagal memotong video: ${e.localizedMessage ?: "Kesalahan I/O"}")
         } finally {
+            if (muxerStarted) {
+                try {
+                    muxer?.stop()
+                } catch (e: Exception) {
+                    Log.w(TAG, "Error stopping muxer", e)
+                }
+            }
             try {
-                muxer?.stop()
                 muxer?.release()
             } catch (e: Exception) {
-                Log.w(TAG, "Error closing muxer", e)
+                Log.w(TAG, "Error releasing muxer", e)
             }
             try {
                 extractor?.release()

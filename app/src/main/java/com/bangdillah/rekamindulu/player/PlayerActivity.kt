@@ -291,12 +291,14 @@ class PlayerActivity : AppCompatActivity() {
         }
 
         videoView?.setOnErrorListener { _, what, extra ->
-            AlertDialog.Builder(this)
-                .setTitle("Tidak Dapat Memutar Video")
-                .setMessage("Format file video tidak didukung atau file rekaman rusak (Error $what, $extra).")
-                .setPositiveButton("Kembali") { _, _ -> finish() }
-                .setCancelable(false)
-                .show()
+            if (!isFinishing && !isDestroyed) {
+                AlertDialog.Builder(this)
+                    .setTitle("Tidak Dapat Memutar Video")
+                    .setMessage("Format file video tidak didukung atau file rekaman rusak (Error $what, $extra).")
+                    .setPositiveButton("Kembali") { _, _ -> finish() }
+                    .setCancelable(false)
+                    .show()
+            }
             true
         }
     }

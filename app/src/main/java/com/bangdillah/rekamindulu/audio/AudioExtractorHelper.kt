@@ -70,27 +70,52 @@ object AudioExtractorHelper {
                 1000000L
             }
 
+            var muxerStarted = false
             muxer = MediaMuxer(outputFile.absolutePath, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
             val muxerTrackIndex = muxer.addTrack(audioFormat)
             muxer.start()
+            muxerStarted = true
 
-            val buffer = ByteBuffer.allocate(BUFFER_SIZE)
+            var maxInputSize = BUFFER_SIZE
+            if (audioFormat.containsKey(MediaFormat.KEY_MAX_INPUT_SIZE)) {
+                val size = audioFormat.getInteger(MediaFormat.KEY_MAX_INPUT_SIZE)
+                if (size > maxInputSize) {
+                    maxInputSize = size
+                }
+            }
+            val buffer = ByteBuffer.allocateDirect(maxInputSize)
             val bufferInfo = MediaCodec.BufferInfo()
+            var firstSampleTimeUs = -1L
+            var lastWrittenPts = -1L
 
             while (true) {
                 bufferInfo.size = extractor.readSampleData(buffer, 0)
                 if (bufferInfo.size < 0) {
                     break
                 }
-                bufferInfo.presentationTimeUs = extractor.sampleTime
-                bufferInfo.flags = extractor.sampleFlags
-                bufferInfo.offset = 0
+                if (bufferInfo.size > 0) {
+                    val rawSampleTime = extractor.sampleTime
+                    if (firstSampleTimeUs == -1L) {
+                        firstSampleTimeUs = rawSampleTime
+                    }
+                    val rebasedPts = (rawSampleTime - firstSampleTimeUs).coerceAtLeast(0L)
+                    val pts = if (rebasedPts > lastWrittenPts) rebasedPts else lastWrittenPts + 1000L
+                    val codecFlags = if ((extractor.sampleFlags and MediaExtractor.SAMPLE_FLAG_SYNC) != 0) {
+                        MediaCodec.BUFFER_FLAG_KEY_FRAME
+                    } else {
+                        0
+                    }
+                    bufferInfo.presentationTimeUs = pts
+                    bufferInfo.flags = codecFlags
+                    bufferInfo.offset = 0
 
-                muxer.writeSampleData(muxerTrackIndex, buffer, bufferInfo)
+                    muxer.writeSampleData(muxerTrackIndex, buffer, bufferInfo)
+                    lastWrittenPts = pts
 
-                if (durationUs > 0) {
-                    val progress = ((bufferInfo.presentationTimeUs * 100) / durationUs).toInt().coerceIn(0, 100)
-                    progressCallback?.invoke(progress)
+                    if (durationUs > 0) {
+                        val progress = ((bufferInfo.presentationTimeUs * 100) / durationUs).toInt().coerceIn(0, 100)
+                        progressCallback?.invoke(progress)
+                    }
                 }
 
                 extractor.advance()
@@ -116,11 +141,17 @@ object AudioExtractorHelper {
             }
             return Pair(false, null)
         } finally {
+            if (muxerStarted) {
+                try {
+                    muxer?.stop()
+                } catch (e: Exception) {
+                    Log.w(TAG, "Error stopping muxer", e)
+                }
+            }
             try {
-                muxer?.stop()
                 muxer?.release()
             } catch (e: Exception) {
-                Log.w(TAG, "Error stopping muxer", e)
+                Log.w(TAG, "Error releasing muxer", e)
             }
             try {
                 extractor?.release()

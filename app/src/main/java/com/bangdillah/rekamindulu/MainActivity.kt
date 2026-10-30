@@ -147,11 +147,13 @@ open class MainActivity : AppCompatActivity() {
                         ?: "Gagal memulai perekaman layar. Pastikan izin telah diberikan."
                     liveTimerHandler.removeCallbacks(liveTimerRunnable)
                     updateRecordingBanner()
-                    AlertDialog.Builder(this@MainActivity)
-                        .setTitle("⚠️ Perekaman Gagal")
-                        .setMessage(errorMsg)
-                        .setPositiveButton("Mengerti", null)
-                        .show()
+                    if (!isFinishing && !isDestroyed) {
+                        AlertDialog.Builder(this@MainActivity)
+                            .setTitle("⚠️ Perekaman Gagal")
+                            .setMessage(errorMsg)
+                            .setPositiveButton("Mengerti", null)
+                            .show()
+                    }
                 }
             }
         }
@@ -319,11 +321,12 @@ open class MainActivity : AppCompatActivity() {
             addAction(ScreenRecordingService.ACTION_RECORDING_STATUS_CHANGED)
             addAction(ScreenRecordingService.ACTION_RECORDING_ERROR)
         }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            registerReceiver(recordingStatusReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
-        } else {
-            registerReceiver(recordingStatusReceiver, filter)
-        }
+        ContextCompat.registerReceiver(
+            this,
+            recordingStatusReceiver,
+            filter,
+            ContextCompat.RECEIVER_NOT_EXPORTED
+        )
 
         if (ScreenRecordingService.isRecording) {
             liveTimerHandler.post(liveTimerRunnable)
@@ -744,16 +747,21 @@ open class MainActivity : AppCompatActivity() {
         Thread {
             val (success, audioFile) = com.bangdillah.rekamindulu.audio.AudioExtractorHelper.extractAudio(this, file)
             runOnUiThread {
-                progressDialog.dismiss()
-                if (success && audioFile != null && audioFile.exists()) {
-                    AlertDialog.Builder(this)
-                        .setTitle("Ekstrak Audio Berhasil! 🎉")
-                        .setIcon(R.drawable.ic_check_circle)
-                        .setMessage("Tersimpan sebagai:\n${audioFile.name}")
-                        .setPositiveButton("Bagus", null)
-                        .show()
-                } else {
-                    Toast.makeText(this, "Gagal mengekstrak audio dari video ini", Toast.LENGTH_SHORT).show()
+                if (!isFinishing && !isDestroyed) {
+                    try {
+                        progressDialog.dismiss()
+                    } catch (ignored: Exception) {}
+
+                    if (success && audioFile != null && audioFile.exists()) {
+                        AlertDialog.Builder(this)
+                            .setTitle("Ekstrak Audio Berhasil! 🎉")
+                            .setIcon(R.drawable.ic_check_circle)
+                            .setMessage("Tersimpan sebagai:\n${audioFile.name}")
+                            .setPositiveButton("Bagus", null)
+                            .show()
+                    } else {
+                        Toast.makeText(this, "Gagal mengekstrak audio dari video ini", Toast.LENGTH_SHORT).show()
+                    }
                 }
             }
         }.start()
@@ -1074,17 +1082,10 @@ open class MainActivity : AppCompatActivity() {
     }
 
     /**
-     * Menjalankan countdown sebelum memanggil MediaProjection sistem jika disetel di preferensi
+     * Memulai alur permintaan izin MediaProjection sistem
      */
     private fun initiateScreenCaptureFlow() {
-        val countdown = appPreferences.countdownDuration
-        if (countdown > 0) {
-            showCountdownHUD(countdown) {
-                requestScreenCapture()
-            }
-        } else {
-            requestScreenCapture()
-        }
+        requestScreenCapture()
     }
 
     /**
@@ -1151,9 +1152,21 @@ open class MainActivity : AppCompatActivity() {
     }
 
     /**
-     * Dipanggil saat pengguna menyetujui izin tangkap layar MediaProjection
+     * Dipanggil saat pengguna menyetujui izin tangkap layar MediaProjection.
+     * Countdown dijalankan di sini setelah izin diberikan agar pengguna memiliki waktu bersiap.
      */
     open fun onScreenCapturePermissionGranted(resultCode: Int, data: Intent) {
+        val countdown = appPreferences.countdownDuration
+        if (countdown > 0) {
+            showCountdownHUD(countdown) {
+                actuallyStartScreenRecordingService(resultCode, data)
+            }
+        } else {
+            actuallyStartScreenRecordingService(resultCode, data)
+        }
+    }
+
+    private fun actuallyStartScreenRecordingService(resultCode: Int, data: Intent) {
         val serviceIntent = Intent(this, ScreenRecordingService::class.java).apply {
             action = ScreenRecordingService.ACTION_START
             putExtra(ScreenRecordingService.EXTRA_RESULT_CODE, resultCode)
