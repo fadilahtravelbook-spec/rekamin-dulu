@@ -1,11 +1,15 @@
 package com.bangdillah.rekamindulu.permission
 
 import android.Manifest
+import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.provider.Settings
 import android.widget.Button
 import android.widget.Toast
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import com.bangdillah.rekamindulu.R
@@ -21,6 +25,8 @@ class PermissionDialogActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        supportActionBar?.hide()
+        window.setBackgroundDrawableResource(android.R.color.transparent)
         setContentView(R.layout.permission_dialog)
 
         appPreferences = AppPreferences(this)
@@ -51,6 +57,7 @@ class PermissionDialogActivity : AppCompatActivity() {
             requestPermissions(missingPermissions.toTypedArray(), REQUEST_CODE_PERMISSIONS)
         } else {
             Toast.makeText(this, "✓ Seluruh izin perekaman telah aktif!", Toast.LENGTH_SHORT).show()
+            setResult(RESULT_OK)
             finish()
         }
     }
@@ -63,10 +70,35 @@ class PermissionDialogActivity : AppCompatActivity() {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         if (requestCode == REQUEST_CODE_PERMISSIONS) {
             val audioIndex = permissions.indexOf(Manifest.permission.RECORD_AUDIO)
-            if (audioIndex != -1 && grantResults.getOrNull(audioIndex) == PackageManager.PERMISSION_GRANTED) {
+            val audioGranted = audioIndex != -1 && grantResults.getOrNull(audioIndex) == PackageManager.PERMISSION_GRANTED
+
+            if (audioGranted) {
                 Toast.makeText(this, "✓ Izin mikrofon berhasil diaktifkan", Toast.LENGTH_SHORT).show()
+                setResult(RESULT_OK)
+                finish()
+            } else {
+                val rationaleRequired = shouldShowRequestPermissionRationale(Manifest.permission.RECORD_AUDIO)
+                if (!rationaleRequired) {
+                    // Permanently denied (Don't ask again)
+                    AlertDialog.Builder(this)
+                        .setTitle("Izin Diperlukan")
+                        .setMessage("Izin mikrofon dibutuhkan untuk merekam suara game & bicara. Buka pengaturan aplikasi untuk mengaktifkannya?")
+                        .setPositiveButton("Buka Pengaturan") { _, _ ->
+                            val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                                data = Uri.fromParts("package", packageName, null)
+                            }
+                            startActivity(intent)
+                            finish()
+                        }
+                        .setNegativeButton("Nanti Saja") { _, _ ->
+                            finish()
+                        }
+                        .show()
+                } else {
+                    Toast.makeText(this, "Izin perekaman belum diaktifkan", Toast.LENGTH_SHORT).show()
+                    finish()
+                }
             }
-            finish()
         }
     }
 }

@@ -6,7 +6,6 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.os.Build
 import android.os.Bundle
-import android.os.Environment
 import android.os.Handler
 import android.os.Looper
 import android.text.Editable
@@ -14,6 +13,7 @@ import android.text.TextWatcher
 import android.view.View
 import android.widget.Button
 import android.widget.EditText
+import android.widget.ImageView
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
@@ -39,6 +39,9 @@ class LibraryActivity : AppCompatActivity() {
     private lateinit var adapter: LibraryAdapter
     private val allVideoFiles = mutableListOf<File>()
     private val displayedVideoFiles = mutableListOf<File>()
+
+    private var currentSortOrder = 0 // 0: Terbaru, 1: Terlama, 2: Nama A-Z, 3: Nama Z-A, 4: Terbesar, 5: Terkecil
+    private var currentFilterMode = 0 // 0: Semua, 1: Game, 2: Hari Ini, 3: > 1 Menit
 
     private val liveTimerHandler = Handler(Looper.getMainLooper())
     private val liveTimerRunnable = object : Runnable {
@@ -72,8 +75,6 @@ class LibraryActivity : AppCompatActivity() {
             }
         }
     }
-
-    private var currentSortOrder = 0 // 0: Terbaru, 1: Terlama, 2: Nama A-Z, 3: Nama Z-A, 4: Terbesar, 5: Terkecil
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -115,11 +116,13 @@ class LibraryActivity : AppCompatActivity() {
 
         setupHeaderButtons()
         setupSearchBar()
+        setupFilterChips()
         setupBottomNavigation()
     }
 
     override fun onResume() {
         super.onResume()
+        findViewById<BottomNavigationView>(R.id.bottom_navigation_library)?.selectedItemId = R.id.nav_library
         loadVideoFiles()
         updateRecordingIndicator()
 
@@ -177,7 +180,6 @@ class LibraryActivity : AppCompatActivity() {
             }
         }
 
-
         findViewById<Button>(R.id.btn_library_stop_rec)?.setOnClickListener {
             val stopIntent = Intent(this, ScreenRecordingService::class.java).apply {
                 action = ScreenRecordingService.ACTION_STOP
@@ -212,16 +214,68 @@ class LibraryActivity : AppCompatActivity() {
 
     private fun setupSearchBar() {
         val etSearch = findViewById<EditText>(R.id.et_search_library)
+        val btnClear = findViewById<ImageView>(R.id.btn_clear_search)
+
+        btnClear?.setOnClickListener {
+            etSearch?.setText("")
+        }
+
         etSearch?.addTextChangedListener(object : TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
             override fun onTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {
-                filterVideos(s?.toString() ?: "")
+                val query = s?.toString() ?: ""
+                btnClear?.visibility = if (query.isNotEmpty()) View.VISIBLE else View.GONE
+                filterVideos(query)
             }
             override fun afterTextChanged(s: Editable?) {}
         })
 
         findViewById<View>(R.id.btn_sort_library)?.setOnClickListener {
             showSortDialog()
+        }
+    }
+
+    private fun setupFilterChips() {
+        val chipAll = findViewById<TextView>(R.id.chip_filter_all)
+        val chipGame = findViewById<TextView>(R.id.chip_filter_game)
+        val chipRecent = findViewById<TextView>(R.id.chip_filter_recent)
+        val chipLong = findViewById<TextView>(R.id.chip_filter_long)
+
+        fun updateChipsUI() {
+            chipAll?.isSelected = (currentFilterMode == 0)
+            chipGame?.isSelected = (currentFilterMode == 1)
+            chipRecent?.isSelected = (currentFilterMode == 2)
+            chipLong?.isSelected = (currentFilterMode == 3)
+        }
+
+        updateChipsUI()
+
+        chipAll?.setOnClickListener {
+            currentFilterMode = 0
+            updateChipsUI()
+            val query = findViewById<EditText>(R.id.et_search_library)?.text?.toString() ?: ""
+            filterVideos(query)
+        }
+
+        chipGame?.setOnClickListener {
+            currentFilterMode = 1
+            updateChipsUI()
+            val query = findViewById<EditText>(R.id.et_search_library)?.text?.toString() ?: ""
+            filterVideos(query)
+        }
+
+        chipRecent?.setOnClickListener {
+            currentFilterMode = 2
+            updateChipsUI()
+            val query = findViewById<EditText>(R.id.et_search_library)?.text?.toString() ?: ""
+            filterVideos(query)
+        }
+
+        chipLong?.setOnClickListener {
+            currentFilterMode = 3
+            updateChipsUI()
+            val query = findViewById<EditText>(R.id.et_search_library)?.text?.toString() ?: ""
+            filterVideos(query)
         }
     }
 
@@ -244,7 +298,7 @@ class LibraryActivity : AppCompatActivity() {
                 val currentQuery = findViewById<EditText>(R.id.et_search_library)?.text?.toString() ?: ""
                 filterVideos(currentQuery)
                 val label = sortOptions[which].split(" (")[0]
-                Toast.makeText(this, "Diurutkan berdasarkan $label", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "Diurutkan: $label", Toast.LENGTH_SHORT).show()
             }
             .setNegativeButton("Tutup", null)
             .show()
@@ -264,28 +318,68 @@ class LibraryActivity : AppCompatActivity() {
     private fun filterVideos(query: String) {
         val trimmed = query.trim().lowercase(Locale.getDefault())
         displayedVideoFiles.clear()
-        if (trimmed.isEmpty()) {
-            displayedVideoFiles.addAll(allVideoFiles)
-        } else {
-            for (file in allVideoFiles) {
-                if (file.name.lowercase(Locale.getDefault()).contains(trimmed)) {
-                    displayedVideoFiles.add(file)
-                }
+
+        val now = System.currentTimeMillis()
+        val oneDayMs = 24 * 60 * 60 * 1000L
+
+        for (file in allVideoFiles) {
+            val matchesQuery = trimmed.isEmpty() || file.name.lowercase(Locale.getDefault()).contains(trimmed)
+            if (!matchesQuery) continue
+
+            val matchesFilter = when (currentFilterMode) {
+                1 -> file.name.contains("game", ignoreCase = true) || file.name.contains("rekam", ignoreCase = true)
+                2 -> (now - file.lastModified()) <= oneDayMs
+                3 -> file.length() >= (5 * 1024 * 1024)
+                else -> true
+            }
+
+            if (matchesFilter) {
+                displayedVideoFiles.add(file)
             }
         }
 
         val emptyState = findViewById<View>(R.id.empty_state)
         val recyclerView = findViewById<RecyclerView>(R.id.library_recycler_view)
+        val textEmptyTitle = findViewById<TextView>(R.id.text_empty_title)
+        val textEmptySubtitle = findViewById<TextView>(R.id.text_empty_subtitle)
+        val btnEmptyStart = findViewById<View>(R.id.btn_empty_start)
+        val btnEmptyDemo = findViewById<View>(R.id.btn_empty_demo)
 
         if (displayedVideoFiles.isEmpty()) {
             emptyState?.visibility = View.VISIBLE
             recyclerView?.visibility = View.GONE
+
+            if (allVideoFiles.isNotEmpty() && trimmed.isNotEmpty()) {
+                textEmptyTitle?.text = "Rekaman Tidak Ditemukan"
+                textEmptySubtitle?.text = "Tidak ada rekaman video dengan nama \"$trimmed\". Silakan periksa kembali ejaan pencarian Anda."
+                btnEmptyStart?.visibility = View.GONE
+                btnEmptyDemo?.visibility = View.GONE
+            } else {
+                textEmptyTitle?.text = "Belum Ada Hasil Rekaman"
+                textEmptySubtitle?.text = "Mulai rekam layar gameplay atau aplikasi Anda sekarang! Hasil video MP4 berkualitas tinggi akan otomatis tersimpan di sini."
+                btnEmptyStart?.visibility = View.VISIBLE
+                btnEmptyDemo?.visibility = View.VISIBLE
+            }
         } else {
             emptyState?.visibility = View.GONE
             recyclerView?.visibility = View.VISIBLE
         }
 
+        updateStatsSummary()
         adapter.notifyDataSetChanged()
+    }
+
+    private fun updateStatsSummary() {
+        val textSummary = findViewById<TextView>(R.id.text_library_stats_summary)
+        val totalCount = allVideoFiles.size
+        val totalBytes = allVideoFiles.sumOf { it.length() }
+        val totalMb = totalBytes / (1024.0 * 1024.0)
+
+        textSummary?.text = if (totalCount == 0) {
+            "Belum ada rekaman tersimpan"
+        } else {
+            String.format(Locale.getDefault(), "%d Video Tersimpan • %.1f MB Digunakan", totalCount, totalMb)
+        }
     }
 
     private fun setupBottomNavigation() {

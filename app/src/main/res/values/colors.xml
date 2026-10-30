@@ -42,4 +42,8 @@
     <color name="colorAccent">#FF9F43</color>
     <color name="colorAccentDark">#FFB74D</color>
     <color name="navInactive">#83889E</color>
+    <color name="colorBorder">#E6E8F0</color>
+    <color name="colorBorderDark">#2A2B3D</color>
+    <color name="colorAccentPurpleGlow">#336C5CE7</color>
+    <color name="colorAccentRedGlow">#33E53935</color>
 </resources>

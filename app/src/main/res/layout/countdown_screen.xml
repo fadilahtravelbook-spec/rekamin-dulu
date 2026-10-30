@@ -5,58 +5,89 @@
     android:layout_height="match_parent"
     android:background="@color/colorBackground">
 
-    <!-- Teks "Bersiap merekam..." -->
-    <TextView
-        android:id="@+id/countdown_text"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginBottom="16dp"
-        android:text="Bersiap merekam layar..."
-        android:textColor="@color/textTitle"
-        android:textSize="20sp"
-        android:textStyle="bold"
-        app:layout_constraintBottom_toTopOf="@id/countdown_number"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent" />
-
-    <!-- Angka countdown besar -->
-    <TextView
-        android:id="@+id/countdown_number"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:contentDescription="Countdown number"
-        android:text="3"
-        android:textColor="@color/colorPrimary"
-        android:textSize="140sp"
-        android:textStyle="bold"
+    <!-- Background Decorative Glow -->
+    <View
+        android:layout_width="260dp"
+        android:layout_height="260dp"
+        android:background="@drawable/bg_record_pulse"
+        android:alpha="0.25"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent" />
 
+    <!-- Center Card with Countdown -->
+    <com.google.android.material.card.MaterialCardView
+        android:id="@+id/card_countdown_box"
+        android:layout_width="220dp"
+        android:layout_height="220dp"
+        app:cardBackgroundColor="@color/colorSurface"
+        app:cardCornerRadius="110dp"
+        app:cardElevation="10dp"
+        app:strokeColor="@color/colorBorder"
+        app:strokeWidth="2dp"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:gravity="center"
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/countdown_number"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:contentDescription="Angka hitung mundur"
+                android:text="3"
+                android:textColor="@color/colorPrimary"
+                android:textSize="88sp"
+                android:textStyle="bold" />
+        </LinearLayout>
+    </com.google.android.material.card.MaterialCardView>
+
+    <!-- Teks "Bersiap merekam..." -->
+    <TextView
+        android:id="@+id/countdown_text"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="24dp"
+        android:text="Bersiap merekam layar..."
+        android:textColor="@color/textTitle"
+        android:textSize="20sp"
+        android:textStyle="bold"
+        app:layout_constraintBottom_toTopOf="@id/card_countdown_box"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent" />
+
     <!-- Indikator progres -->
     <ProgressBar
         android:id="@+id/countdown_progress"
         style="?android:attr/progressBarStyleHorizontal"
-        android:layout_width="200dp"
-        android:layout_height="12dp"
-        android:layout_marginTop="20dp"
+        android:layout_width="220dp"
+        android:layout_height="8dp"
+        android:layout_marginTop="28dp"
         android:max="3"
         android:progress="0"
         android:progressTint="@color/colorPrimary"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/countdown_number" />
+        app:layout_constraintTop_toBottomOf="@id/card_countdown_box" />
 
     <!-- Tombol Batalkan -->
-    <Button
+    <com.google.android.material.button.MaterialButton
         android:id="@+id/btn_cancel_countdown"
+        style="@style/Widget.Material3.Button.TonalButton"
         android:layout_width="wrap_content"
-        android:layout_height="44dp"
-        android:layout_marginTop="32dp"
+        android:layout_height="48dp"
+        android:layout_marginTop="24dp"
+        android:paddingHorizontal="24dp"
         android:text="Batalkan"
         android:textColor="@color/colorError"
-        app:backgroundTint="@color/colorSurface"
+        app:cornerRadius="24dp"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@id/countdown_progress" />

@@ -16,7 +16,6 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
-import androidx.appcompat.widget.SwitchCompat
 import com.bangdillah.rekamindulu.HomeActivity
 import com.bangdillah.rekamindulu.R
 import com.bangdillah.rekamindulu.library.LibraryActivity
@@ -25,6 +24,7 @@ import com.bangdillah.rekamindulu.utils.AppPreferences
 import com.bangdillah.rekamindulu.utils.SaveTransitionDialog
 import com.bangdillah.rekamindulu.utils.SpecAnalysisDialog
 import com.google.android.material.bottomnavigation.BottomNavigationView
+import com.google.android.material.materialswitch.MaterialSwitch
 import java.util.Locale
 
 class SettingsActivity : AppCompatActivity() {
@@ -43,13 +43,13 @@ class SettingsActivity : AppCompatActivity() {
     private var dividerPin: View? = null
     private var rowSettingPin: View? = null
 
-    private var toggleGaming: SwitchCompat? = null
-    private var toggleFloating: SwitchCompat? = null
-    private var toggleVibrate: SwitchCompat? = null
-    private var toggleStopScreenOff: SwitchCompat? = null
-    private var toggleShowFps: SwitchCompat? = null
-    private var toggleStorageWarning: SwitchCompat? = null
-    private var toggleAppLock: SwitchCompat? = null
+    private var toggleGaming: MaterialSwitch? = null
+    private var toggleFloating: MaterialSwitch? = null
+    private var toggleVibrate: MaterialSwitch? = null
+    private var toggleStopScreenOff: MaterialSwitch? = null
+    private var toggleShowFps: MaterialSwitch? = null
+    private var toggleStorageWarning: MaterialSwitch? = null
+    private var toggleAppLock: MaterialSwitch? = null
 
     private val liveTimerHandler = Handler(Looper.getMainLooper())
     private val liveTimerRunnable = object : Runnable {
@@ -150,11 +150,24 @@ class SettingsActivity : AppCompatActivity() {
     }
 
     private fun setupListeners() {
-        // Gaming mode toggle
+        // Gaming mode toggle with automatic FPS & Bitrate sync
         toggleGaming?.setOnCheckedChangeListener { _, isChecked ->
             appPreferences.isGamingMode = isChecked
             findViewById<View>(R.id.gaming_mode_tooltip)?.visibility =
                 if (isChecked) View.VISIBLE else View.GONE
+
+            if (isChecked) {
+                // Boost parameters for gaming
+                appPreferences.fps = 60
+                appPreferences.bitrateMbps = 12
+                updateUIValues(skipGamingSwitch = true)
+                Toast.makeText(this, "⚡ Mode Gaming Pro Aktif: 60 FPS & 12 Mbps", Toast.LENGTH_SHORT).show()
+            } else {
+                appPreferences.fps = 30
+                appPreferences.bitrateMbps = 8
+                updateUIValues(skipGamingSwitch = true)
+                Toast.makeText(this, "Mode Standar: 30 FPS & 8 Mbps", Toast.LENGTH_SHORT).show()
+            }
         }
 
         // Floating overlay toggle
@@ -211,11 +224,11 @@ class SettingsActivity : AppCompatActivity() {
                     }
                 } else {
                     appPreferences.isAppLockEnabled = true
-                    updateUIValues()
+                    updateUIValues(skipAppLockSwitch = true)
                 }
             } else {
                 appPreferences.isAppLockEnabled = false
-                updateUIValues()
+                updateUIValues(skipAppLockSwitch = true)
             }
         }
 
@@ -317,56 +330,63 @@ class SettingsActivity : AppCompatActivity() {
         }
     }
 
-    private fun updateUIValues() {
+    private fun updateUIValues(skipGamingSwitch: Boolean = false, skipAppLockSwitch: Boolean = false) {
         textResolutionVal?.text = when (appPreferences.resolution) {
-            "4K" -> "4K (Ultra HD 2160p)"
-            "1080p" -> "1080p (Full HD)"
-            "720p" -> "720p (HD Standar)"
-            else -> "480p (SD Ringan)"
+            "4K" -> "4K UHD"
+            "1080p" -> "1080p FHD"
+            "720p" -> "720p HD"
+            else -> "480p SD"
         }
 
         textFpsVal?.text = "${appPreferences.fps} FPS"
         textBitrateVal?.text = "${appPreferences.bitrateMbps} Mbps"
 
         textCodecVal?.text = if (appPreferences.videoEncoder == "H265") {
-            "H.265 (HEVC - Hemat Ukuran 40%)"
+            "H.265 (HEVC)"
         } else {
-            "H.264 (AVC - Kompatibel Tinggi)"
+            "H.264 (AVC)"
         }
 
         textAudioVal?.text = when (appPreferences.audioSource) {
-            "BOTH" -> "Mikrofon & Audio Game"
-            "MIC" -> "Hanya Mikrofon"
-            "INTERNAL" -> "Hanya Audio Game"
-            else -> "Tanpa Suara (Mute)"
+            "BOTH" -> "Mic + Game"
+            "MIC" -> "Hanya Mic"
+            "INTERNAL" -> "Hanya Game"
+            else -> "Mute (Hening)"
         }
 
         textMicTypeVal?.text = when (appPreferences.micType) {
-            "camcorder" -> "Kamera / Camcorder"
-            "voice_comm" -> "Headset / Bluetooth (Voice)"
-            "unprocessed" -> "Suara Murni (Unprocessed)"
-            else -> "Default (Bawaan HP)"
+            "camcorder" -> "Camcorder"
+            "voice_comm" -> "Headset Voice"
+            "unprocessed" -> "Suara Murni"
+            else -> "Default HP"
         }
 
         textCountdownVal?.text = if (appPreferences.countdownDuration == 0) {
-            "Tanpa Hitung Mundur (Langsung)"
+            "Langsung"
         } else {
             "${appPreferences.countdownDuration} Detik"
         }
 
         textThemeVal?.text = when (appPreferences.themeMode) {
-            "LIGHT" -> "Terang (Light Mode)"
-            "DARK" -> "Gelap (Dark Mode)"
-            else -> "Ikuti Tema Sistem"
+            "LIGHT" -> "Terang"
+            "DARK" -> "Gelap"
+            else -> "Ikuti Sistem"
         }
 
         val hasAppLock = appPreferences.isAppLockEnabled
-        toggleAppLock?.isChecked = hasAppLock
+        if (!skipAppLockSwitch) {
+            toggleAppLock?.isChecked = hasAppLock
+        }
         dividerPin?.visibility = if (hasAppLock) View.VISIBLE else View.GONE
         rowSettingPin?.visibility = if (hasAppLock) View.VISIBLE else View.GONE
-        textPinVal?.text = if (appPreferences.appLockPin.isNotEmpty()) "•••• (Tersetel)" else "Belum Dibuat"
+        textPinVal?.text = if (appPreferences.appLockPin.isNotEmpty()) "••••" else "Belum Dibuat"
 
-        toggleGaming?.isChecked = appPreferences.isGamingMode
+        if (!skipGamingSwitch) {
+            toggleGaming?.isChecked = appPreferences.isGamingMode
+        }
+        findViewById<View>(R.id.gaming_mode_tooltip)?.visibility =
+            if (appPreferences.isGamingMode) View.VISIBLE else View.GONE
+
         toggleFloating?.isChecked = appPreferences.showFloatingOverlay
         toggleVibrate?.isChecked = appPreferences.vibrateOnStart
         toggleStopScreenOff?.isChecked = appPreferences.stopOnScreenOff
@@ -384,7 +404,12 @@ class SettingsActivity : AppCompatActivity() {
     }
 
     private fun showResolutionDialog() {
-        val options = arrayOf("1080p (Full HD - Disarankan)", "720p (HD Hemat Memori)", "4K (Ultra HD)", "480p (SD Hemat Daya)")
+        val options = arrayOf(
+            "1080p Full HD (1920×1080 • Standar YouTube & Game)",
+            "720p HD (1280×720 • Ringan & Hemat Memori)",
+            "4K Ultra HD (2160p • Kualitas Tertinggi)",
+            "480p SD (854×480 • Hemat Kuota & Baterai)"
+        )
         val values = arrayOf("1080p", "720p", "4K", "480p")
         val currentIndex = values.indexOf(appPreferences.resolution).coerceAtLeast(0)
 
@@ -394,45 +419,65 @@ class SettingsActivity : AppCompatActivity() {
                 appPreferences.resolution = values[which]
                 updateUIValues()
                 dialog.dismiss()
+                Toast.makeText(this, "Resolusi disetel ke ${values[which]}", Toast.LENGTH_SHORT).show()
             }
             .setNegativeButton("Batal", null)
             .show()
     }
 
     private fun showFpsDialog() {
-        val options = arrayOf("60 FPS (Sangat Mulus - Standar)", "30 FPS (Standar Normal)", "90 FPS (Layar Refresh Tinggi)", "120 FPS (Mode E-Sports)")
+        val options = arrayOf(
+            "60 FPS (Sangat Mulus • Standar Gameplay)",
+            "30 FPS (Standar Normal • Rekaman Tutorial)",
+            "90 FPS (Layar Refresh Tinggi • HP Flagship)",
+            "120 FPS (Mode Kompetitif E-Sports)"
+        )
         val values = arrayOf(60, 30, 90, 120)
         val currentIndex = values.indexOf(appPreferences.fps).coerceAtLeast(0)
 
         AlertDialog.Builder(this)
             .setTitle("Pilih Frame Rate (FPS)")
             .setSingleChoiceItems(options, currentIndex) { dialog, which ->
-                appPreferences.fps = values[which]
+                val selectedFps = values[which]
+                appPreferences.fps = selectedFps
+                // Synchronize gaming mode flag
+                appPreferences.isGamingMode = selectedFps >= 60
                 updateUIValues()
                 dialog.dismiss()
+                Toast.makeText(this, "Frame rate disetel ke $selectedFps FPS", Toast.LENGTH_SHORT).show()
             }
             .setNegativeButton("Batal", null)
             .show()
     }
 
     private fun showBitrateDialog() {
-        val options = arrayOf("12 Mbps (Tinggi & Jernih)", "16 Mbps (Maksimal High-Def)", "8 Mbps (Seimbang)", "4 Mbps (Hemat Ruang)")
+        val options = arrayOf(
+            "12 Mbps (High-Definition • Jernih & Tajam)",
+            "16 Mbps (Maksimal High-Def • Kompresi Rendah)",
+            "8 Mbps (Seimbang • Standar Direkomendasikan)",
+            "4 Mbps (Hemat Ruang • Ukuran File Ringan)"
+        )
         val values = arrayOf(12, 16, 8, 4)
         val currentIndex = values.indexOf(appPreferences.bitrateMbps).coerceAtLeast(0)
 
         AlertDialog.Builder(this)
             .setTitle("Pilih Bitrate Video")
             .setSingleChoiceItems(options, currentIndex) { dialog, which ->
-                appPreferences.bitrateMbps = values[which]
+                val selectedBitrate = values[which]
+                appPreferences.bitrateMbps = selectedBitrate
                 updateUIValues()
                 dialog.dismiss()
+                Toast.makeText(this, "Bitrate disetel ke $selectedBitrate Mbps", Toast.LENGTH_SHORT).show()
             }
             .setNegativeButton("Batal", null)
             .show()
     }
 
     private fun showCodecDialog() {
-        val options = arrayOf("H.264 / AVC (Kompatibel Semua Pemutar Video)", "H.265 / HEVC (Ukuran File 40% Lebih Kecil)")
+        val options = arrayOf(
+            "H.264 / AVC (Kompatibel Semua Pemutar & Media Sosial)",
+            "H.265 / HEVC (Kompresi Efisien • Hemat Ukuran 40%)"
+        )
         val values = arrayOf("H264", "H265")
         val currentIndex = values.indexOf(appPreferences.videoEncoder).coerceAtLeast(0)
 
@@ -442,13 +487,19 @@ class SettingsActivity : AppCompatActivity() {
                 appPreferences.videoEncoder = values[which]
                 updateUIValues()
                 dialog.dismiss()
+                Toast.makeText(this, "Encoder disetel ke ${values[which]}", Toast.LENGTH_SHORT).show()
             }
             .setNegativeButton("Batal", null)
             .show()
     }
 
     private fun showAudioSourceDialog() {
-        val options = arrayOf("Mikrofon + Audio Internal Game", "Hanya Suara Mikrofon", "Hanya Audio Internal Game", "Tanpa Audio (Mute)")
+        val options = arrayOf(
+            "Mikrofon + Audio Game (Lengkap Suara & Bicara)",
+            "Hanya Suara Mikrofon (Komentar & Vokal)",
+            "Hanya Audio Internal Game (Suara Game Bersih)",
+            "Tanpa Audio / Mute (Hening)"
+        )
         val values = arrayOf("BOTH", "MIC", "INTERNAL", "MUTE")
         val currentIndex = values.indexOf(appPreferences.audioSource).coerceAtLeast(0)
 
@@ -458,6 +509,7 @@ class SettingsActivity : AppCompatActivity() {
                 appPreferences.audioSource = values[which]
                 updateUIValues()
                 dialog.dismiss()
+                Toast.makeText(this, "Sumber audio disetel ke ${values[which]}", Toast.LENGTH_SHORT).show()
             }
             .setNegativeButton("Batal", null)
             .show()
@@ -466,9 +518,9 @@ class SettingsActivity : AppCompatActivity() {
     private fun showMicTypeDialog() {
         val options = arrayOf(
             "Default (Mikrofon Bawaan Ponsel)",
-            "Headset / Bluetooth (Mode Percakapan)",
-            "Kamera / Camcorder (Audio Eksternal)",
-            "Suara Murni (Unprocessed Audio)"
+            "Headset / Bluetooth (Mode Suara Percakapan)",
+            "Kamera / Camcorder (Audio Eksternal Jernih)",
+            "Suara Murni (Unprocessed Audio Asli)"
         )
         val values = arrayOf("default", "voice_comm", "camcorder", "unprocessed")
         val currentIndex = values.indexOf(appPreferences.micType).coerceAtLeast(0)
@@ -486,7 +538,11 @@ class SettingsActivity : AppCompatActivity() {
     }
 
     private fun showThemeDialog() {
-        val options = arrayOf("Ikuti Sistem (Otomatis)", "Tema Terang (Light)", "Tema Gelap (Dark)")
+        val options = arrayOf(
+            "Ikuti Tema Sistem Ponsel",
+            "Tema Terang (Light Mode)",
+            "Tema Gelap (Dark Mode)"
+        )
         val values = arrayOf("SYSTEM", "LIGHT", "DARK")
         val currentIndex = values.indexOf(appPreferences.themeMode).coerceAtLeast(0)
 
@@ -534,7 +590,12 @@ class SettingsActivity : AppCompatActivity() {
     }
 
     private fun showCountdownDialog() {
-        val options = arrayOf("3 Detik (Rekomendasi)", "5 Detik", "10 Detik", "Tanpa Countdown (Mulai Seketika)")
+        val options = arrayOf(
+            "3 Detik (Pilihan Standar & Nyaman)",
+            "5 Detik (Cukup Waktu Siap-siap)",
+            "10 Detik (Waktu Persiapan Panjang)",
+            "Tanpa Countdown (Mulai Seketika)"
+        )
         val values = arrayOf(3, 5, 10, 0)
         val currentIndex = values.indexOf(appPreferences.countdownDuration).coerceAtLeast(0)
 

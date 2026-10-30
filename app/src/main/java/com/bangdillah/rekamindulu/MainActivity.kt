@@ -176,7 +176,7 @@ open class MainActivity : AppCompatActivity() {
     }
 
     /**
-     * Inisialisasi preferensi audio awal (Mikrofon dan Suara Game)
+     * Inisialisasi preferensi audio awal (Mikrofon dan Suara Game) dan facecam
      */
     private fun initAudioSettings() {
         when (appPreferences.audioSource) {
@@ -201,6 +201,7 @@ open class MainActivity : AppCompatActivity() {
                 isGameAudioOn = true
             }
         }
+        facecamStateIndex = facecamStates.indexOf(appPreferences.facecamMode).coerceAtLeast(0)
         updateAudioToggleViews()
     }
 
@@ -208,6 +209,20 @@ open class MainActivity : AppCompatActivity() {
         val toggleMic = findViewById<Button>(R.id.toggle_mic)
         val toggleGameAudio = findViewById<Button>(R.id.toggle_game_audio)
         val toggleFacecam = findViewById<Button>(R.id.toggle_facecam)
+
+        val cardMic = findViewById<com.google.android.material.card.MaterialCardView>(R.id.card_mic_toggle)
+        val cardGame = findViewById<com.google.android.material.card.MaterialCardView>(R.id.card_game_audio_toggle)
+        val cardFacecam = findViewById<com.google.android.material.card.MaterialCardView>(R.id.card_facecam_toggle)
+
+        cardMic?.strokeColor = ContextCompat.getColor(this, if (isMicOn) R.color.colorPrimary else R.color.colorBorder)
+        cardMic?.strokeWidth = if (isMicOn) 3 else 1
+
+        cardGame?.strokeColor = ContextCompat.getColor(this, if (isGameAudioOn) R.color.colorPrimary else R.color.colorBorder)
+        cardGame?.strokeWidth = if (isGameAudioOn) 3 else 1
+
+        val isFacecamActive = facecamStates[facecamStateIndex] != "OFF"
+        cardFacecam?.strokeColor = ContextCompat.getColor(this, if (isFacecamActive) R.color.colorPrimary else R.color.colorBorder)
+        cardFacecam?.strokeWidth = if (isFacecamActive) 3 else 1
 
         toggleMic?.apply {
             text = if (isMicOn) "✓ AKTIF" else "NONAKTIF"
@@ -280,6 +295,7 @@ open class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         findViewById<BottomNavigationView>(R.id.bottom_navigation)?.selectedItemId = R.id.nav_home
+        initAudioSettings()
         updateHardwareMetrics()
         updateResolutionBadge()
         updateLibraryStats()
@@ -339,33 +355,45 @@ open class MainActivity : AppCompatActivity() {
             showQualityPickerDialog()
         }
 
-        // Toggle Mic Audio Recording
-        val toggleMic = findViewById<Button>(R.id.toggle_mic)
-        toggleMic?.setOnClickListener {
+        // Tap central glowing disc to start/stop
+        findViewById<View>(R.id.img_start_stop_icon)?.setOnClickListener {
+            if (ScreenRecordingService.isRecording) {
+                stopScreenCapture()
+            } else {
+                startScreenCapture()
+            }
+        }
+
+        // Toggle Mic Audio Recording (tap button or whole card)
+        val toggleMicAction = {
             isMicOn = !isMicOn
             updateAudioToggleViews()
             syncAudioPreferences()
             showSnackbar(if (isMicOn) "🎤 Mikrofon diaktifkan" else "🔇 Mikrofon dinonaktifkan")
         }
+        findViewById<Button>(R.id.toggle_mic)?.setOnClickListener { toggleMicAction() }
+        findViewById<View>(R.id.card_mic_toggle)?.setOnClickListener { toggleMicAction() }
 
-        // Toggle Internal Game Audio Recording
-        val toggleGameAudio = findViewById<Button>(R.id.toggle_game_audio)
-        toggleGameAudio?.setOnClickListener {
+        // Toggle Internal Game Audio Recording (tap button or whole card)
+        val toggleGameAudioAction = {
             isGameAudioOn = !isGameAudioOn
             updateAudioToggleViews()
             syncAudioPreferences()
-            showSnackbar(if (isGameAudioOn) "🎮 Audio internal game diaktifkan" else "Audio internal game dinonaktifkan")
+            showSnackbar(if (isGameAudioOn) "🎮 Audio internal game diaktifkan" else "🔇 Audio game dinonaktifkan")
         }
+        findViewById<Button>(R.id.toggle_game_audio)?.setOnClickListener { toggleGameAudioAction() }
+        findViewById<View>(R.id.card_game_audio_toggle)?.setOnClickListener { toggleGameAudioAction() }
 
-        // Toggle Facecam
-        val toggleFacecam = findViewById<Button>(R.id.toggle_facecam)
-        toggleFacecam?.setOnClickListener {
+        // Toggle Facecam (tap button or whole card)
+        val toggleFacecamAction = {
             facecamStateIndex = (facecamStateIndex + 1) % facecamStates.size
             val stateStr = facecamStates[facecamStateIndex]
             appPreferences.facecamMode = stateStr
             updateAudioToggleViews()
             showSnackbar("Mode Kamera Wajah: $stateStr")
         }
+        findViewById<Button>(R.id.toggle_facecam)?.setOnClickListener { toggleFacecamAction() }
+        findViewById<View>(R.id.card_facecam_toggle)?.setOnClickListener { toggleFacecamAction() }
 
 
         // Pause / Resume button on active banner
@@ -469,6 +497,7 @@ open class MainActivity : AppCompatActivity() {
                         appPreferences.resolution = "1080p"
                         appPreferences.fps = 30
                         appPreferences.bitrateMbps = 8
+                        appPreferences.isGamingMode = false
                         updateResolutionBadge()
                         showSnackbar("Preset 1080p 30FPS diterapkan")
                     }
@@ -476,6 +505,7 @@ open class MainActivity : AppCompatActivity() {
                         appPreferences.resolution = "720p"
                         appPreferences.fps = 30
                         appPreferences.bitrateMbps = 5
+                        appPreferences.isGamingMode = false
                         updateResolutionBadge()
                         showSnackbar("Preset 720p 30FPS diterapkan")
                     }
@@ -483,13 +513,15 @@ open class MainActivity : AppCompatActivity() {
                         appPreferences.resolution = "1080p"
                         appPreferences.fps = 60
                         appPreferences.bitrateMbps = 12
+                        appPreferences.isGamingMode = true
                         updateResolutionBadge()
-                        showSnackbar("Preset 1080p 60FPS diterapkan")
+                        showSnackbar("Preset 1080p 60FPS diterapkan (Mode Gaming Pro)")
                     }
                     3 -> {
                         appPreferences.resolution = "4K"
                         appPreferences.fps = 30
                         appPreferences.bitrateMbps = 20
+                        appPreferences.isGamingMode = false
                         updateResolutionBadge()
                         showSnackbar("Preset 4K Ultra HD diterapkan")
                     }

@@ -1,0 +1,22 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="48dp"
+    android:height="48dp"
+    android:viewportWidth="48"
+    android:viewportHeight="48">
+    <!-- Outer subtle glow circle -->
+    <path
+        android:fillColor="#33E53935"
+        android:pathData="M24,24m-22,0a22,22 0,1 1,44 0a22,22 0,1 1,-44 0"/>
+    <!-- Middle circle -->
+    <path
+        android:fillColor="#80E53935"
+        android:pathData="M24,24m-16,0a16,16 0,1 1,32 0a16,16 0,1 1,-32 0"/>
+    <!-- Core solid bright red recording dot -->
+    <path
+        android:fillColor="#E53935"
+        android:pathData="M24,24m-11,0a11,11 0,1 1,22 0a11,11 0,1 1,-22 0"/>
+    <!-- Glossy reflection highlight -->
+    <path
+        android:fillColor="#40FFFFFF"
+        android:pathData="M24,15 C28.97,15 33,19.03 33,24 C33,24.5 32.96,24.99 32.88,25.47 C32.18,21.75 28.94,18.9 25,18.9 C20.35,18.9 16.53,22.42 16.08,26.93 C15.39,26.06 15,25.07 15,24 C15,19.03 19.03,15 24,15 Z"/>
+</vector>

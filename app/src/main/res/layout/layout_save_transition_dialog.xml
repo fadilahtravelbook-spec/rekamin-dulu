@@ -3,17 +3,21 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:background="@color/colorSurface"
+    android:background="@drawable/ic_play_circle_bg"
+    android:backgroundTint="@color/colorSurface"
     android:orientation="vertical"
-    android:padding="20dp">
+    android:paddingHorizontal="20dp"
+    android:paddingTop="12dp"
+    android:paddingBottom="24dp">
 
     <!-- Bottom sheet drag handle indicator -->
     <View
-        android:layout_width="40dp"
-        android:layout_height="4dp"
+        android:layout_width="44dp"
+        android:layout_height="5dp"
         android:layout_gravity="center_horizontal"
         android:layout_marginBottom="16dp"
-        android:background="@color/colorSurfaceVariant" />
+        android:background="@drawable/bg_chip_pill"
+        android:backgroundTint="@color/colorBorder" />
 
     <!-- SUCCESS HEADER -->
     <LinearLayout
@@ -22,15 +26,25 @@
         android:gravity="center_vertical"
         android:orientation="horizontal">
 
-        <ImageView
-            android:layout_width="36dp"
-            android:layout_height="36dp"
-            android:src="@drawable/ic_check_circle" />
+        <FrameLayout
+            android:layout_width="44dp"
+            android:layout_height="44dp"
+            android:background="@drawable/bg_chip_pill"
+            android:backgroundTint="@color/colorSuccessContainer">
+
+            <ImageView
+                android:layout_width="26dp"
+                android:layout_height="26dp"
+                android:layout_gravity="center"
+                android:contentDescription="Tersimpan"
+                android:src="@drawable/ic_check_circle"
+                app:tint="@color/colorSuccess" />
+        </FrameLayout>
 
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginStart="12dp"
+            android:layout_marginStart="14dp"
             android:orientation="vertical">
 
             <TextView
@@ -38,14 +52,14 @@
                 android:layout_height="wrap_content"
                 android:text="Rekaman Berhasil Disimpan"
                 android:textColor="@color/textTitle"
-                android:textSize="17sp"
+                android:textSize="18sp"
                 android:textStyle="bold" />
 
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="2dp"
-                android:text="Galeri › Movies › RekaminDulu"
+                android:text="Tersimpan ke Galeri Ponsel › Movies › RekaminDulu"
                 android:textColor="@color/colorSuccess"
                 android:textSize="12sp"
                 android:textStyle="bold" />
@@ -58,7 +72,7 @@
         android:layout_height="wrap_content"
         android:layout_marginTop="16dp"
         app:cardBackgroundColor="@color/colorBackground"
-        app:cardCornerRadius="14dp"
+        app:cardCornerRadius="18dp"
         app:cardElevation="2dp">
 
         <LinearLayout
@@ -69,23 +83,32 @@
 
             <RelativeLayout
                 android:layout_width="match_parent"
-                android:layout_height="160dp">
+                android:layout_height="170dp">
 
                 <ImageView
                     android:id="@+id/img_save_dialog_thumbnail"
                     android:layout_width="match_parent"
                     android:layout_height="match_parent"
-                    android:background="#1E1E2E"
+                    android:background="#12121E"
                     android:scaleType="centerCrop"
                     android:contentDescription="Thumbnail Rekaman" />
 
                 <!-- Play Overlay Icon -->
-                <ImageView
-                    android:layout_width="48dp"
-                    android:layout_height="48dp"
+                <FrameLayout
+                    android:layout_width="56dp"
+                    android:layout_height="56dp"
                     android:layout_centerInParent="true"
-                    android:src="@drawable/ic_play_circle_bg"
-                    android:contentDescription="Play Icon" />
+                    android:background="@drawable/ic_play_circle_bg"
+                    android:backgroundTint="#99000000">
+
+                    <ImageView
+                        android:layout_width="32dp"
+                        android:layout_height="32dp"
+                        android:layout_gravity="center"
+                        android:contentDescription="Play Icon"
+                        android:src="@drawable/ic_play_arrow"
+                        app:tint="#FFFFFF" />
+                </FrameLayout>
 
                 <!-- Duration Overlay Badge -->
                 <TextView
@@ -94,10 +117,11 @@
                     android:layout_height="wrap_content"
                     android:layout_alignParentEnd="true"
                     android:layout_alignParentBottom="true"
-                    android:layout_margin="8dp"
-                    android:background="#CC000000"
-                    android:paddingHorizontal="6dp"
-                    android:paddingVertical="3dp"
+                    android:layout_margin="10dp"
+                    android:background="@drawable/bg_chip_pill"
+                    android:backgroundTint="#CC000000"
+                    android:paddingHorizontal="8dp"
+                    android:paddingVertical="4dp"
                     android:text="00:00"
                     android:textColor="#FFFFFF"
                     android:textSize="11sp"
@@ -138,13 +162,17 @@
         <Button
             android:id="@+id/btn_save_dialog_play"
             android:layout_width="match_parent"
-            android:layout_height="48dp"
-            android:text="▶  Putar Video Sekarang"
+            android:layout_height="52dp"
+            android:text="Putar Video Sekarang"
             android:textColor="@color/colorOnPrimary"
             android:textSize="14sp"
             android:textStyle="bold"
             app:backgroundTint="@color/colorPrimary"
-            app:cornerRadius="12dp" />
+            app:cornerRadius="16dp"
+            app:icon="@drawable/ic_play_arrow"
+            app:iconGravity="textStart"
+            app:iconPadding="8dp"
+            app:iconTint="@color/colorOnPrimary" />
 
         <LinearLayout
             android:layout_width="match_parent"
@@ -154,40 +182,43 @@
 
             <Button
                 android:id="@+id/btn_save_dialog_trim"
+                style="@style/Widget.Material3.Button.TonalButton"
                 android:layout_width="0dp"
-                android:layout_height="44dp"
+                android:layout_height="48dp"
                 android:layout_marginEnd="6dp"
                 android:layout_weight="1"
-                android:text="✂  Potong Video"
+                android:text="✂  Potong"
                 android:textColor="@color/textTitle"
                 android:textSize="13sp"
-                app:backgroundTint="@color/colorSurfaceVariant"
-                app:cornerRadius="12dp" />
+                android:textStyle="bold"
+                app:cornerRadius="14dp" />
 
             <Button
                 android:id="@+id/btn_save_dialog_share"
+                style="@style/Widget.Material3.Button.TonalButton"
                 android:layout_width="0dp"
-                android:layout_height="44dp"
+                android:layout_height="48dp"
                 android:layout_marginStart="6dp"
                 android:layout_weight="1"
                 android:text="📤  Bagikan"
                 android:textColor="@color/textTitle"
                 android:textSize="13sp"
-                app:backgroundTint="@color/colorSurfaceVariant"
-                app:cornerRadius="12dp" />
+                android:textStyle="bold"
+                app:cornerRadius="14dp" />
         </LinearLayout>
 
         <!-- View in Library / Done -->
         <Button
             android:id="@+id/btn_save_dialog_library"
+            style="@style/Widget.Material3.Button.TextButton"
             android:layout_width="match_parent"
-            android:layout_height="44dp"
-            android:layout_marginTop="10dp"
+            android:layout_height="46dp"
+            android:layout_marginTop="8dp"
             android:text="Buka di Galeri Rekaman"
             android:textColor="@color/colorPrimary"
             android:textSize="13sp"
-            app:backgroundTint="#156C5CE7"
-            app:cornerRadius="12dp" />
+            android:textStyle="bold"
+            app:cornerRadius="14dp" />
     </LinearLayout>
 
 </LinearLayout>

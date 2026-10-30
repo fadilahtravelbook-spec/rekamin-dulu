@@ -1,0 +1,33 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="96dp"
+    android:height="96dp"
+    android:viewportWidth="96"
+    android:viewportHeight="96">
+    <!-- Background Circle -->
+    <path
+        android:fillColor="#ECE8FD"
+        android:pathData="M48,8A40,40 0 1,0 88,48A40,40 0 0,0 48,8Z"/>
+    <!-- Film Slate / Clapper base -->
+    <path
+        android:fillColor="#6C5CE7"
+        android:pathData="M24,36h48a4,4 0 0,1 4,4v28a4,4 0 0,1 -4,4H24a4,4 0 0,1 -4,-4V40a4,4 0 0,1 4,-4Z"/>
+    <!-- Top Clapper Bar with stripes -->
+    <path
+        android:fillColor="#4435B8"
+        android:pathData="M22,26h52a3,3 0 0,1 3,3v6H19v-6a3,3 0 0,1 3,-3Z"/>
+    <!-- Diagonal clapper stripes -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M30,26l-6,9h5l6,-9zM42,26l-6,9h5l6,-9zM54,26l-6,9h5l6,-9zM66,26l-6,9h5l6,-9z"/>
+    <!-- Play Triangle in Center -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M42,46l18,10 -18,10z"/>
+    <!-- Decorative Sparkles -->
+    <path
+        android:fillColor="#FF9F43"
+        android:pathData="M74,18l2,5 5,2 -5,2 -2,5 -2,-5 -5,-2 5,-2z"/>
+    <path
+        android:fillColor="#00B894"
+        android:pathData="M18,66l1.5,3.5 3.5,1.5 -3.5,1.5 -1.5,3.5 -1.5,-3.5 -3.5,-1.5 3.5,-1.5z"/>
+</vector>

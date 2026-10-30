@@ -100,7 +100,6 @@
                     android:textColor="@color/colorOnPrimary"
                     android:textSize="12sp"
                     android:textStyle="bold" />
-                    android:textStyle="bold" />
 
                 <ProgressBar
                     android:id="@+id/progress_dialog_score"
@@ -127,13 +126,14 @@
                 <Button
                     android:id="@+id/btn_apply_recommendation"
                     android:layout_width="match_parent"
-                    android:layout_height="44dp"
-                    android:layout_marginTop="12dp"
+                    android:layout_height="48dp"
+                    android:layout_marginTop="14dp"
                     android:text="TERAPKAN PRESET REKOMENDASI INI"
                     android:textColor="@color/colorOnPrimary"
                     android:textSize="12sp"
                     android:textStyle="bold"
-                    app:backgroundTint="@color/colorPrimary" />
+                    app:backgroundTint="@color/colorPrimary"
+                    app:cornerRadius="14dp" />
             </LinearLayout>
         </androidx.cardview.widget.CardView>
 
@@ -366,12 +366,13 @@
 
         <Button
             android:id="@+id/btn_dismiss_dialog"
+            style="@style/Widget.Material3.Button.TonalButton"
             android:layout_width="match_parent"
             android:layout_height="48dp"
             android:text="TUTUP LAPORAN DIAGNOSTIK"
-            android:textColor="@color/colorOnPrimary"
+            android:textColor="@color/textTitle"
             android:textStyle="bold"
-            app:backgroundTint="@color/textCaption" />
+            app:cornerRadius="14dp" />
 
     </LinearLayout>
 </ScrollView>

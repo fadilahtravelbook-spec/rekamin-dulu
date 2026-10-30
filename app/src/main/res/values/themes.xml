@@ -43,7 +43,13 @@
         <item name="android:navigationBarColor">@color/colorSurfaceDark</item>
     </style>
 
-    <style name="Theme.RekaminDulu.Dialog" parent="Theme.Material3.DayNight.Dialog">
+    <style name="Theme.RekaminDulu.Dialog" parent="Theme.Material3.DayNight.NoActionBar">
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:windowIsFloating">true</item>
+        <item name="android:windowCloseOnTouchOutside">true</item>
+        <item name="android:backgroundDimEnabled">true</item>
+        <item name="android:backgroundDimAmount">0.65</item>
         <item name="colorPrimary">@color/colorPrimary</item>
         <item name="colorSurface">@color/colorSurface</item>
     </style>
@@ -64,14 +70,30 @@
         <item name="itemIconTint">@color/bottom_nav_selector</item>
         <item name="itemTextColor">@color/bottom_nav_selector</item>
         <item name="itemActiveIndicatorStyle">@style/Widget.App.BottomNav.ActiveIndicator</item>
-        <item name="elevation">8dp</item>
-        <item name="backgroundTint">@color/colorSurface</item>
+        <item name="itemPaddingTop">8dp</item>
+        <item name="itemPaddingBottom">10dp</item>
+        <item name="labelVisibilityMode">labeled</item>
+        <item name="itemTextAppearanceActive">@style/TextAppearance.App.BottomNav.Active</item>
+        <item name="itemTextAppearanceInactive">@style/TextAppearance.App.BottomNav.Inactive</item>
+        <item name="android:background">@drawable/bg_bottom_nav_bar</item>
+        <item name="elevation">12dp</item>
     </style>
 
     <style name="Widget.App.BottomNav.ActiveIndicator" parent="Widget.Material3.BottomNavigationView.ActiveIndicator">
         <item name="android:color">@color/colorPrimaryContainer</item>
-        <item name="android:width">60dp</item>
+        <item name="android:width">56dp</item>
         <item name="android:height">32dp</item>
+    </style>
+
+    <style name="TextAppearance.App.BottomNav.Active" parent="TextAppearance.Material3.LabelMedium">
+        <item name="android:textSize">11sp</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:textColor">@color/colorPrimary</item>
+    </style>
+
+    <style name="TextAppearance.App.BottomNav.Inactive" parent="TextAppearance.Material3.LabelMedium">
+        <item name="android:textSize">11sp</item>
+        <item name="android:textColor">#71768E</item>
     </style>
 
 </resources>

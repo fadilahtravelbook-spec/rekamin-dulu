@@ -12,7 +12,9 @@
         android:id="@+id/home_scroll_view"
         android:layout_width="match_parent"
         android:layout_height="0dp"
+        android:clipToPadding="false"
         android:fillViewport="true"
+        android:overScrollMode="never"
         android:scrollbars="none"
         app:layout_constraintBottom_toTopOf="@id/bottom_navigation"
         app:layout_constraintTop_toTopOf="parent">
@@ -21,9 +23,11 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
-            android:padding="16dp">
+            android:paddingHorizontal="18dp"
+            android:paddingTop="16dp"
+            android:paddingBottom="96dp">
 
-            <!-- HEADER BAR -->
+            <!-- TOP STUDIO HEADER -->
             <RelativeLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -37,16 +41,28 @@
                     android:gravity="center_vertical"
                     android:orientation="horizontal">
 
-                    <ImageView
-                        android:layout_width="38dp"
-                        android:layout_height="38dp"
-                        android:contentDescription="Logo Rekamin Dulu"
-                        android:src="@mipmap/ic_launcher" />
+                    <!-- App Logo with soft border -->
+                    <com.google.android.material.card.MaterialCardView
+                        android:layout_width="44dp"
+                        android:layout_height="44dp"
+                        app:cardBackgroundColor="@color/colorSurface"
+                        app:cardCornerRadius="14dp"
+                        app:cardElevation="2dp"
+                        app:strokeColor="@color/colorBorder"
+                        app:strokeWidth="1dp">
+
+                        <ImageView
+                            android:layout_width="34dp"
+                            android:layout_height="34dp"
+                            android:layout_gravity="center"
+                            android:contentDescription="Logo Rekamin Dulu"
+                            android:src="@mipmap/ic_launcher" />
+                    </com.google.android.material.card.MaterialCardView>
 
                     <LinearLayout
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:layout_marginStart="10dp"
+                        android:layout_marginStart="12dp"
                         android:orientation="vertical">
 
                         <LinearLayout
@@ -67,11 +83,11 @@
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
                                 android:layout_marginStart="8dp"
-                                android:background="@drawable/ic_play_circle_bg"
+                                android:background="@drawable/bg_chip_pill"
                                 android:backgroundTint="@color/colorPrimary"
                                 android:paddingHorizontal="8dp"
-                                android:paddingVertical="3dp"
-                                android:text="PRO"
+                                android:paddingVertical="2dp"
+                                android:text="STUDIO"
                                 android:textColor="@color/colorOnPrimary"
                                 android:textSize="10sp"
                                 android:textStyle="bold" />
@@ -81,6 +97,7 @@
                             android:id="@+id/text_home_header_status"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
+                            android:layout_marginTop="2dp"
                             android:text="● Siap Merekam • Status Optimal"
                             android:textColor="@color/colorSuccess"
                             android:textSize="11sp"
@@ -95,35 +112,60 @@
                     android:layout_centerVertical="true"
                     android:orientation="horizontal">
 
-                    <ImageView
-                        android:id="@+id/ic_about"
-                        android:layout_width="48dp"
-                        android:layout_height="48dp"
-                        android:background="?attr/selectableItemBackgroundBorderless"
-                        android:contentDescription="Tentang"
-                        android:padding="12dp"
-                        android:src="@drawable/ic_info" />
+                    <!-- About Action -->
+                    <com.google.android.material.card.MaterialCardView
+                        android:layout_width="40dp"
+                        android:layout_height="40dp"
+                        android:layout_marginEnd="8dp"
+                        app:cardBackgroundColor="@color/colorSurface"
+                        app:cardCornerRadius="20dp"
+                        app:cardElevation="1dp"
+                        app:strokeColor="@color/colorBorder"
+                        app:strokeWidth="1dp">
 
-                    <ImageView
-                        android:id="@+id/ic_settings"
-                        android:layout_width="48dp"
-                        android:layout_height="48dp"
-                        android:background="?attr/selectableItemBackgroundBorderless"
-                        android:contentDescription="Settings"
-                        android:padding="12dp"
-                        android:src="@drawable/ic_settings" />
+                        <ImageView
+                            android:id="@+id/ic_about"
+                            android:layout_width="match_parent"
+                            android:layout_height="match_parent"
+                            android:background="?attr/selectableItemBackgroundBorderless"
+                            android:contentDescription="Tentang"
+                            android:padding="10dp"
+                            android:src="@drawable/ic_info"
+                            app:tint="@color/textTitle" />
+                    </com.google.android.material.card.MaterialCardView>
+
+                    <!-- Settings Action -->
+                    <com.google.android.material.card.MaterialCardView
+                        android:layout_width="40dp"
+                        android:layout_height="40dp"
+                        app:cardBackgroundColor="@color/colorSurface"
+                        app:cardCornerRadius="20dp"
+                        app:cardElevation="1dp"
+                        app:strokeColor="@color/colorBorder"
+                        app:strokeWidth="1dp">
+
+                        <ImageView
+                            android:id="@+id/ic_settings"
+                            android:layout_width="match_parent"
+                            android:layout_height="match_parent"
+                            android:background="?attr/selectableItemBackgroundBorderless"
+                            android:contentDescription="Settings"
+                            android:padding="10dp"
+                            android:src="@drawable/ic_settings"
+                            app:tint="@color/textTitle" />
+                    </com.google.android.material.card.MaterialCardView>
                 </LinearLayout>
             </RelativeLayout>
 
-            <!-- ACTIVE RECORDING LIVE BANNER -->
-            <androidx.cardview.widget.CardView
+            <!-- ACTIVE RECORDING TOP ALERT BANNER (IF RECORDING) -->
+            <com.google.android.material.card.MaterialCardView
                 android:id="@+id/card_active_recording_banner"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginBottom="16dp"
                 android:visibility="gone"
                 app:cardBackgroundColor="@color/colorError"
-                app:cardCornerRadius="16dp"
+                app:cardCornerRadius="18dp"
                 app:cardElevation="6dp">
 
                 <LinearLayout
@@ -134,10 +176,10 @@
                     android:padding="14dp">
 
                     <ImageView
-                        android:layout_width="32dp"
-                        android:layout_height="32dp"
+                        android:layout_width="28dp"
+                        android:layout_height="28dp"
                         android:contentDescription="Perekaman Layar Aktif"
-                        android:src="@drawable/ic_record" />
+                        android:src="@drawable/ic_record_beacon" />
 
                     <LinearLayout
                         android:layout_width="0dp"
@@ -149,7 +191,7 @@
                         <TextView
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="Perekaman Layar Aktif"
+                            android:text="Perekaman Layar Berjalan"
                             android:textColor="#FFFFFF"
                             android:textSize="14sp"
                             android:textStyle="bold" />
@@ -158,8 +200,9 @@
                             android:id="@+id/text_live_recording_timer"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
+                            android:layout_marginTop="2dp"
                             android:text="Durasi: 00:00 • Status Merekam"
-                            android:textColor="#FFFFFF"
+                            android:textColor="#E0E0E0"
                             android:textSize="12sp" />
                     </LinearLayout>
 
@@ -167,34 +210,42 @@
                         android:id="@+id/btn_home_pause_recording"
                         android:layout_width="wrap_content"
                         android:layout_height="36dp"
-                        android:layout_marginEnd="8dp"
+                        android:layout_marginEnd="6dp"
+                        android:minWidth="0dp"
+                        android:paddingHorizontal="12dp"
                         android:text="Jeda"
                         android:textColor="#FFFFFF"
                         android:textSize="12sp"
                         android:textStyle="bold"
-                        app:backgroundTint="#40FFFFFF" />
+                        app:backgroundTint="#40FFFFFF"
+                        app:cornerRadius="18dp" />
 
                     <Button
                         android:id="@+id/btn_home_stop_recording"
                         android:layout_width="wrap_content"
                         android:layout_height="36dp"
+                        android:minWidth="0dp"
+                        android:paddingHorizontal="14dp"
                         android:text="Stop"
                         android:textColor="@color/colorError"
                         android:textSize="12sp"
                         android:textStyle="bold"
-                        app:backgroundTint="#FFFFFF" />
+                        app:backgroundTint="#FFFFFF"
+                        app:cornerRadius="18dp" />
                 </LinearLayout>
-            </androidx.cardview.widget.CardView>
+            </com.google.android.material.card.MaterialCardView>
 
-            <!-- PRIMARY START / STOP BUTTON HERO ACTION -->
-            <androidx.cardview.widget.CardView
+            <!-- PRIMARY STUDIO RECORDING HUB (HERO DECK) -->
+            <com.google.android.material.card.MaterialCardView
                 android:id="@+id/card_start_record"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginBottom="16dp"
                 app:cardBackgroundColor="@color/colorSurface"
-                app:cardCornerRadius="20dp"
-                app:cardElevation="4dp">
+                app:cardCornerRadius="24dp"
+                app:cardElevation="3dp"
+                app:strokeColor="@color/colorBorder"
+                app:strokeWidth="1.2dp">
 
                 <FrameLayout
                     android:layout_width="match_parent"
@@ -207,18 +258,65 @@
                         android:layout_height="wrap_content"
                         android:gravity="center"
                         android:orientation="vertical"
-                        android:padding="20dp"
+                        android:paddingHorizontal="20dp"
+                        android:paddingVertical="22dp"
                         android:visibility="visible">
 
-                        <ImageView
-                            android:id="@+id/img_start_stop_icon"
-                            android:layout_width="56dp"
-                            android:layout_height="56dp"
-                            android:layout_marginBottom="12dp"
-                            android:contentDescription="Ikon Tombol Perekam"
-                            android:src="@drawable/ic_record" />
+                        <!-- Top Studio Tag -->
+                        <LinearLayout
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginBottom="18dp"
+                            android:background="@drawable/bg_chip_pill"
+                            android:backgroundTint="@color/colorPrimaryContainer"
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal"
+                            android:paddingHorizontal="12dp"
+                            android:paddingVertical="4dp">
 
-                        <Button
+                            <View
+                                android:layout_width="8dp"
+                                android:layout_height="8dp"
+                                android:background="@drawable/ic_play_circle_bg"
+                                android:backgroundTint="@color/colorSuccess" />
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginStart="6dp"
+                                android:text="STUDIO PEREKAM • FULL HD"
+                                android:textColor="@color/colorPrimary"
+                                android:textSize="11sp"
+                                android:textStyle="bold" />
+                        </LinearLayout>
+
+                        <!-- Glowing Tactile Recording Disc -->
+                        <FrameLayout
+                            android:layout_width="92dp"
+                            android:layout_height="92dp"
+                            android:layout_marginBottom="18dp"
+                            android:background="@drawable/ic_play_circle_bg"
+                            android:backgroundTint="#126C5CE7">
+
+                            <FrameLayout
+                                android:layout_width="76dp"
+                                android:layout_height="76dp"
+                                android:layout_gravity="center"
+                                android:background="@drawable/ic_play_circle_bg"
+                                android:backgroundTint="#206C5CE7">
+
+                                <ImageView
+                                    android:id="@+id/img_start_stop_icon"
+                                    android:layout_width="52dp"
+                                    android:layout_height="52dp"
+                                    android:layout_gravity="center"
+                                    android:contentDescription="Ikon Tombol Perekam"
+                                    android:src="@drawable/ic_record_beacon" />
+                            </FrameLayout>
+                        </FrameLayout>
+
+                        <!-- Large Start Recording Button -->
+                        <com.google.android.material.button.MaterialButton
                             android:id="@+id/btn_start_stop"
                             android:layout_width="match_parent"
                             android:layout_height="54dp"
@@ -227,16 +325,30 @@
                             android:textColor="@color/colorOnPrimary"
                             android:textSize="16sp"
                             android:textStyle="bold"
-                            app:cornerRadius="27dp" />
+                            app:cornerRadius="27dp"
+                            app:elevation="3dp"
+                            app:icon="@drawable/ic_record"
+                            app:iconGravity="textStart"
+                            app:iconPadding="10dp"
+                            app:iconTint="@color/colorOnPrimary" />
 
                         <TextView
                             android:id="@+id/text_start_record_label"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:layout_marginTop="8dp"
+                            android:layout_marginTop="10dp"
                             android:text="Tekan tombol untuk mulai merekam layar &amp; audio"
                             android:textColor="@color/textCaption"
                             android:textSize="12sp" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="4dp"
+                            android:text="✓ Tanpa Watermark • ✓ Bebas Batas Durasi • ✓ 60 FPS"
+                            android:textColor="@color/colorPrimary"
+                            android:textSize="11sp"
+                            android:textStyle="bold" />
                     </LinearLayout>
 
                     <!-- ACTIVE RECORDING STUDIO HUD -->
@@ -246,26 +358,26 @@
                         android:layout_height="wrap_content"
                         android:gravity="center"
                         android:orientation="vertical"
-                        android:padding="20dp"
+                        android:paddingHorizontal="20dp"
+                        android:paddingVertical="26dp"
                         android:visibility="gone">
 
-                        <!-- LIVE BADGE -->
+                        <!-- LIVE BADGE WITH RED BEACON -->
                         <LinearLayout
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:background="@drawable/ic_play_circle_bg"
-                            android:backgroundTint="#26E74C3C"
+                            android:background="@drawable/bg_chip_pill"
+                            android:backgroundTint="#1AE53935"
                             android:gravity="center_vertical"
                             android:orientation="horizontal"
-                            android:paddingHorizontal="14dp"
+                            android:paddingHorizontal="16dp"
                             android:paddingVertical="6dp">
 
                             <ImageView
-                                android:layout_width="12dp"
-                                android:layout_height="12dp"
+                                android:layout_width="14dp"
+                                android:layout_height="14dp"
                                 android:contentDescription="Live Dot"
-                                android:src="@drawable/ic_record"
-                                app:tint="@color/colorError" />
+                                android:src="@drawable/ic_record_beacon" />
 
                             <TextView
                                 android:id="@+id/text_hero_live_badge"
@@ -283,11 +395,10 @@
                             android:id="@+id/text_hero_live_timer"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:layout_marginTop="10dp"
-                            android:fontFamily="sans-serif-black"
+                            android:layout_marginTop="12dp"
                             android:text="00:00"
                             android:textColor="@color/textTitle"
-                            android:textSize="42sp"
+                            android:textSize="48sp"
                             android:textStyle="bold" />
 
                         <!-- FORMAT & AUDIO INFO -->
@@ -304,11 +415,11 @@
                         <LinearLayout
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:layout_marginTop="18dp"
+                            android:layout_marginTop="20dp"
                             android:orientation="horizontal">
 
                             <!-- PAUSE / RESUME BUTTON -->
-                            <Button
+                            <com.google.android.material.button.MaterialButton
                                 android:id="@+id/btn_hero_pause_recording"
                                 style="@style/Widget.Material3.Button.TonalButton"
                                 android:layout_width="0dp"
@@ -321,12 +432,12 @@
                                 app:cornerRadius="26dp" />
 
                             <!-- STOP & SAVE BUTTON -->
-                            <Button
+                            <com.google.android.material.button.MaterialButton
                                 android:id="@+id/btn_hero_stop_recording"
                                 android:layout_width="0dp"
                                 android:layout_height="52dp"
                                 android:layout_marginStart="6dp"
-                                android:layout_weight="1.4"
+                                android:layout_weight="1.3"
                                 android:backgroundTint="@color/colorError"
                                 android:text="⏹️ Hentikan &amp; Simpan"
                                 android:textColor="#FFFFFF"
@@ -338,13 +449,23 @@
                         <TextView
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:layout_marginTop="10dp"
+                            android:layout_marginTop="12dp"
                             android:text="Video otomatis disimpan ke Galeri saat dihentikan"
                             android:textColor="@color/textCaption"
                             android:textSize="11sp" />
                     </LinearLayout>
                 </FrameLayout>
-            </androidx.cardview.widget.CardView>
+            </com.google.android.material.card.MaterialCardView>
+
+            <!-- SECTION HEADER: KANAL AUDIO -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="8dp"
+                android:text="Kanal Audio &amp; Kamera Wajah"
+                android:textColor="@color/textTitle"
+                android:textSize="14sp"
+                android:textStyle="bold" />
 
             <!-- QUICK TOGGLE CONTROLS (MIC, GAME AUDIO, FACECAM) -->
             <LinearLayout
@@ -354,14 +475,20 @@
                 android:orientation="horizontal">
 
                 <!-- Toggle Mic Audio -->
-                <androidx.cardview.widget.CardView
+                <com.google.android.material.card.MaterialCardView
+                    android:id="@+id/card_mic_toggle"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
-                    android:layout_marginEnd="4dp"
+                    android:layout_marginEnd="5dp"
                     android:layout_weight="1"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:foreground="?attr/selectableItemBackground"
                     app:cardBackgroundColor="@color/colorSurface"
-                    app:cardCornerRadius="14dp"
-                    app:cardElevation="2dp">
+                    app:cardCornerRadius="16dp"
+                    app:cardElevation="1dp"
+                    app:strokeColor="@color/colorBorder"
+                    app:strokeWidth="1dp">
 
                     <LinearLayout
                         android:layout_width="match_parent"
@@ -370,42 +497,59 @@
                         android:orientation="vertical"
                         android:padding="12dp">
 
-                        <ImageView
-                            android:layout_width="24dp"
-                            android:layout_height="24dp"
-                            android:contentDescription="Mikrofon"
-                            android:src="@drawable/ic_mic" />
+                        <FrameLayout
+                            android:layout_width="38dp"
+                            android:layout_height="38dp"
+                            android:background="@drawable/bg_chip_pill"
+                            android:backgroundTint="@color/colorPrimaryContainer">
+
+                            <ImageView
+                                android:layout_width="20dp"
+                                android:layout_height="20dp"
+                                android:layout_gravity="center"
+                                android:contentDescription="Mikrofon"
+                                android:src="@drawable/ic_mic"
+                                app:tint="@color/colorPrimary" />
+                        </FrameLayout>
 
                         <TextView
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:layout_marginTop="4dp"
+                            android:layout_marginTop="6dp"
                             android:text="Mikrofon"
-                            android:textColor="@color/textCaption"
-                            android:textSize="11sp" />
+                            android:textColor="@color/textTitle"
+                            android:textSize="12sp"
+                            android:textStyle="bold" />
 
                         <Button
                             android:id="@+id/toggle_mic"
                             style="@style/Widget.Material3.Button.TonalButton"
                             android:layout_width="match_parent"
-                            android:layout_height="42dp"
+                            android:layout_height="36dp"
                             android:layout_marginTop="8dp"
-                            android:text="ON"
+                            android:paddingHorizontal="4dp"
+                            android:text="✓ AKTIF"
                             android:textSize="11sp"
                             android:textStyle="bold"
-                            app:cornerRadius="21dp" />
+                            app:cornerRadius="18dp" />
                     </LinearLayout>
-                </androidx.cardview.widget.CardView>
+                </com.google.android.material.card.MaterialCardView>
 
                 <!-- Toggle Game Audio -->
-                <androidx.cardview.widget.CardView
+                <com.google.android.material.card.MaterialCardView
+                    android:id="@+id/card_game_audio_toggle"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_marginHorizontal="4dp"
                     android:layout_weight="1"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:foreground="?attr/selectableItemBackground"
                     app:cardBackgroundColor="@color/colorSurface"
-                    app:cardCornerRadius="14dp"
-                    app:cardElevation="2dp">
+                    app:cardCornerRadius="16dp"
+                    app:cardElevation="1dp"
+                    app:strokeColor="@color/colorBorder"
+                    app:strokeWidth="1dp">
 
                     <LinearLayout
                         android:layout_width="match_parent"
@@ -414,42 +558,59 @@
                         android:orientation="vertical"
                         android:padding="12dp">
 
-                        <ImageView
-                            android:layout_width="24dp"
-                            android:layout_height="24dp"
-                            android:contentDescription="Audio Game"
-                            android:src="@drawable/ic_game" />
+                        <FrameLayout
+                            android:layout_width="38dp"
+                            android:layout_height="38dp"
+                            android:background="@drawable/bg_chip_pill"
+                            android:backgroundTint="@color/colorPrimaryContainer">
+
+                            <ImageView
+                                android:layout_width="20dp"
+                                android:layout_height="20dp"
+                                android:layout_gravity="center"
+                                android:contentDescription="Audio Game"
+                                android:src="@drawable/ic_game"
+                                app:tint="@color/colorPrimary" />
+                        </FrameLayout>
 
                         <TextView
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:layout_marginTop="4dp"
+                            android:layout_marginTop="6dp"
                             android:text="Audio Game"
-                            android:textColor="@color/textCaption"
-                            android:textSize="11sp" />
+                            android:textColor="@color/textTitle"
+                            android:textSize="12sp"
+                            android:textStyle="bold" />
 
                         <Button
                             android:id="@+id/toggle_game_audio"
                             style="@style/Widget.Material3.Button.TonalButton"
                             android:layout_width="match_parent"
-                            android:layout_height="42dp"
+                            android:layout_height="36dp"
                             android:layout_marginTop="8dp"
-                            android:text="ON"
+                            android:paddingHorizontal="4dp"
+                            android:text="✓ AKTIF"
                             android:textSize="11sp"
                             android:textStyle="bold"
-                            app:cornerRadius="21dp" />
+                            app:cornerRadius="18dp" />
                     </LinearLayout>
-                </androidx.cardview.widget.CardView>
+                </com.google.android.material.card.MaterialCardView>
 
                 <!-- Toggle Facecam -->
-                <androidx.cardview.widget.CardView
+                <com.google.android.material.card.MaterialCardView
+                    android:id="@+id/card_facecam_toggle"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
-                    android:layout_marginStart="4dp"
+                    android:layout_marginStart="5dp"
                     android:layout_weight="1"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:foreground="?attr/selectableItemBackground"
                     app:cardBackgroundColor="@color/colorSurface"
-                    app:cardCornerRadius="14dp"
-                    app:cardElevation="2dp">
+                    app:cardCornerRadius="16dp"
+                    app:cardElevation="1dp"
+                    app:strokeColor="@color/colorBorder"
+                    app:strokeWidth="1dp">
 
                     <LinearLayout
                         android:layout_width="match_parent"
@@ -458,60 +619,86 @@
                         android:orientation="vertical"
                         android:padding="12dp">
 
-                        <ImageView
-                            android:layout_width="24dp"
-                            android:layout_height="24dp"
-                            android:contentDescription="Kamera Wajah"
-                            android:src="@drawable/ic_camera" />
+                        <FrameLayout
+                            android:layout_width="38dp"
+                            android:layout_height="38dp"
+                            android:background="@drawable/bg_chip_pill"
+                            android:backgroundTint="@color/colorSurfaceVariant">
+
+                            <ImageView
+                                android:layout_width="20dp"
+                                android:layout_height="20dp"
+                                android:layout_gravity="center"
+                                android:contentDescription="Kamera Wajah"
+                                android:src="@drawable/ic_camera"
+                                app:tint="@color/textCaption" />
+                        </FrameLayout>
 
                         <TextView
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:layout_marginTop="4dp"
+                            android:layout_marginTop="6dp"
                             android:text="Facecam"
-                            android:textColor="@color/textCaption"
-                            android:textSize="11sp" />
+                            android:textColor="@color/textTitle"
+                            android:textSize="12sp"
+                            android:textStyle="bold" />
 
                         <Button
                             android:id="@+id/toggle_facecam"
                             style="@style/Widget.Material3.Button.TonalButton"
                             android:layout_width="match_parent"
-                            android:layout_height="42dp"
+                            android:layout_height="36dp"
                             android:layout_marginTop="8dp"
+                            android:paddingHorizontal="4dp"
                             android:text="OFF"
                             android:textSize="11sp"
                             android:textStyle="bold"
-                            app:cornerRadius="21dp" />
+                            app:cornerRadius="18dp" />
                     </LinearLayout>
-                </androidx.cardview.widget.CardView>
+                </com.google.android.material.card.MaterialCardView>
             </LinearLayout>
 
-            <!-- RESOLUTION & QUALITY BADGE SELECTOR -->
-            <androidx.cardview.widget.CardView
+            <!-- RESOLUTION & QUALITY SELECTOR BADGE -->
+            <com.google.android.material.card.MaterialCardView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginBottom="16dp"
+                android:layout_marginBottom="14dp"
+                android:clickable="true"
+                android:focusable="true"
+                android:foreground="?attr/selectableItemBackground"
                 app:cardBackgroundColor="@color/colorSurface"
-                app:cardCornerRadius="14dp"
-                app:cardElevation="2dp">
+                app:cardCornerRadius="16dp"
+                app:cardElevation="1dp"
+                app:strokeColor="@color/colorBorder"
+                app:strokeWidth="1dp">
 
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:gravity="center_vertical"
                     android:orientation="horizontal"
-                    android:padding="14dp">
+                    android:paddingHorizontal="16dp"
+                    android:paddingVertical="14dp">
 
-                    <ImageView
-                        android:layout_width="28dp"
-                        android:layout_height="28dp"
-                        android:contentDescription="Resolusi"
-                        android:src="@drawable/ic_video" />
+                    <FrameLayout
+                        android:layout_width="40dp"
+                        android:layout_height="40dp"
+                        android:background="@drawable/bg_chip_pill"
+                        android:backgroundTint="@color/colorPrimaryContainer">
+
+                        <ImageView
+                            android:layout_width="22dp"
+                            android:layout_height="22dp"
+                            android:layout_gravity="center"
+                            android:contentDescription="Resolusi"
+                            android:src="@drawable/ic_video"
+                            app:tint="@color/colorPrimary" />
+                    </FrameLayout>
 
                     <LinearLayout
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
-                        android:layout_marginStart="12dp"
+                        android:layout_marginStart="14dp"
                         android:layout_weight="1"
                         android:orientation="vertical">
 
@@ -538,39 +725,53 @@
                         android:layout_width="20dp"
                         android:layout_height="20dp"
                         android:contentDescription="Ubah Kualitas"
-                        android:src="@drawable/ic_next" />
+                        android:src="@drawable/ic_next"
+                        app:tint="@color/textCaption" />
                 </LinearLayout>
-            </androidx.cardview.widget.CardView>
+            </com.google.android.material.card.MaterialCardView>
 
-            <!-- GUIDE & EXAMPLE CARD (TATA CARA & CONTOH PENGGUNAAN) -->
-            <androidx.cardview.widget.CardView
+            <!-- GUIDE & TUTORIAL QUICK ACCESS CARD -->
+            <com.google.android.material.card.MaterialCardView
                 android:id="@+id/card_guide_tutorial"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginBottom="16dp"
+                android:clickable="true"
+                android:focusable="true"
                 android:foreground="?attr/selectableItemBackground"
                 app:cardBackgroundColor="@color/colorSurface"
-                app:cardCornerRadius="14dp"
-                app:cardElevation="2dp">
+                app:cardCornerRadius="16dp"
+                app:cardElevation="1dp"
+                app:strokeColor="@color/colorBorder"
+                app:strokeWidth="1dp">
 
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:gravity="center_vertical"
                     android:orientation="horizontal"
-                    android:padding="14dp">
+                    android:paddingHorizontal="16dp"
+                    android:paddingVertical="14dp">
 
-                    <ImageView
-                        android:layout_width="28dp"
-                        android:layout_height="28dp"
-                        android:contentDescription="Ikon Panduan"
-                        android:src="@drawable/ic_check_circle"
-                        app:tint="@color/colorPrimary" />
+                    <FrameLayout
+                        android:layout_width="40dp"
+                        android:layout_height="40dp"
+                        android:background="@drawable/bg_chip_pill"
+                        android:backgroundTint="@color/colorSuccessContainer">
+
+                        <ImageView
+                            android:layout_width="22dp"
+                            android:layout_height="22dp"
+                            android:layout_gravity="center"
+                            android:contentDescription="Ikon Panduan"
+                            android:src="@drawable/ic_check_circle"
+                            app:tint="@color/colorSuccess" />
+                    </FrameLayout>
 
                     <LinearLayout
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
-                        android:layout_marginStart="12dp"
+                        android:layout_marginStart="14dp"
                         android:layout_weight="1"
                         android:orientation="vertical">
 
@@ -585,186 +786,167 @@
                         <TextView
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="Panduan sebelum merekam &amp; tips gameplay"
+                            android:text="Panduan merekam game &amp; tips gameplay tanpa lag"
                             android:textColor="@color/textCaption"
                             android:textSize="11sp" />
                     </LinearLayout>
 
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="Buka"
-                        android:textColor="@color/colorPrimary"
-                        android:textSize="12sp"
-                        android:textStyle="bold" />
-
                     <ImageView
                         android:layout_width="18dp"
                         android:layout_height="18dp"
-                        android:layout_marginStart="4dp"
                         android:contentDescription="Buka Panduan"
-                        android:src="@drawable/ic_next" />
+                        android:src="@drawable/ic_next"
+                        app:tint="@color/textCaption" />
                 </LinearLayout>
-            </androidx.cardview.widget.CardView>
+            </com.google.android.material.card.MaterialCardView>
 
-            <!-- HARDWARE STATUS METRICS WIDGETS -->
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginBottom="16dp"
-                android:orientation="horizontal">
-
-                <androidx.cardview.widget.CardView
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_marginEnd="4dp"
-                    android:layout_weight="1"
-                    app:cardBackgroundColor="@color/colorSurface"
-                    app:cardCornerRadius="12dp"
-                    app:cardElevation="2dp">
-
-                    <LinearLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:gravity="center_vertical"
-                        android:orientation="horizontal"
-                        android:padding="10dp">
-
-                        <ImageView
-                            android:layout_width="22dp"
-                            android:layout_height="22dp"
-                            android:contentDescription="Memori"
-                            android:src="@drawable/ic_storage" />
-
-                        <LinearLayout
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:layout_marginStart="8dp"
-                            android:orientation="vertical">
-
-                            <TextView
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:text="Memori"
-                                android:textColor="@color/textCaption"
-                                android:textSize="10sp" />
-
-                            <TextView
-                                android:id="@+id/text_storage_val"
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:text="-- GB"
-                                android:textColor="@color/textTitle"
-                                android:textSize="12sp"
-                                android:textStyle="bold" />
-                        </LinearLayout>
-                    </LinearLayout>
-                </androidx.cardview.widget.CardView>
-
-                <androidx.cardview.widget.CardView
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_marginHorizontal="4dp"
-                    android:layout_weight="1"
-                    app:cardBackgroundColor="@color/colorSurface"
-                    app:cardCornerRadius="12dp"
-                    app:cardElevation="2dp">
-
-                    <LinearLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:gravity="center_vertical"
-                        android:orientation="horizontal"
-                        android:padding="10dp">
-
-                        <ImageView
-                            android:layout_width="22dp"
-                            android:layout_height="22dp"
-                            android:contentDescription="Baterai"
-                            android:src="@drawable/ic_battery" />
-
-                        <LinearLayout
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:layout_marginStart="8dp"
-                            android:orientation="vertical">
-
-                            <TextView
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:text="Baterai"
-                                android:textColor="@color/textCaption"
-                                android:textSize="10sp" />
-
-                            <TextView
-                                android:id="@+id/text_battery_val"
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:text="--%"
-                                android:textColor="@color/colorSuccess"
-                                android:textSize="12sp"
-                                android:textStyle="bold" />
-                        </LinearLayout>
-                    </LinearLayout>
-                </androidx.cardview.widget.CardView>
-
-                <androidx.cardview.widget.CardView
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_marginStart="4dp"
-                    android:layout_weight="1"
-                    app:cardBackgroundColor="@color/colorSurface"
-                    app:cardCornerRadius="12dp"
-                    app:cardElevation="2dp">
-
-                    <LinearLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:gravity="center_vertical"
-                        android:orientation="horizontal"
-                        android:padding="10dp">
-
-                        <ImageView
-                            android:layout_width="22dp"
-                            android:layout_height="22dp"
-                            android:contentDescription="RAM"
-                            android:src="@drawable/ic_ram" />
-
-                        <LinearLayout
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:layout_marginStart="8dp"
-                            android:orientation="vertical">
-
-                            <TextView
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:text="RAM"
-                                android:textColor="@color/textCaption"
-                                android:textSize="10sp" />
-
-                            <TextView
-                                android:id="@+id/text_ram_val"
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:text="-- GB"
-                                android:textColor="@color/textTitle"
-                                android:textSize="12sp"
-                                android:textStyle="bold" />
-                        </LinearLayout>
-                    </LinearLayout>
-                </androidx.cardview.widget.CardView>
-            </LinearLayout>
-
-            <!-- DEVICE SPECS & DIAGNOSTICS CARD -->
-            <androidx.cardview.widget.CardView
-                android:id="@+id/card_device_info"
+            <!-- HARDWARE STATUS METRICS GAUGES -->
+            <com.google.android.material.card.MaterialCardView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginBottom="16dp"
                 app:cardBackgroundColor="@color/colorSurface"
                 app:cardCornerRadius="16dp"
-                app:cardElevation="2dp">
+                app:cardElevation="1dp"
+                app:strokeColor="@color/colorBorder"
+                app:strokeWidth="1dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:baselineAligned="false"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:padding="12dp">
+
+                    <!-- Storage Gauge -->
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:gravity="center"
+                        android:orientation="vertical"
+                        android:paddingHorizontal="4dp">
+
+                        <ImageView
+                            android:layout_width="22dp"
+                            android:layout_height="22dp"
+                            android:contentDescription="Memori"
+                            android:src="@drawable/ic_storage"
+                            app:tint="@color/colorPrimary" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="4dp"
+                            android:text="Memori"
+                            android:textColor="@color/textCaption"
+                            android:textSize="11sp" />
+
+                        <TextView
+                            android:id="@+id/text_storage_val"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="2dp"
+                            android:text="-- GB"
+                            android:textColor="@color/textTitle"
+                            android:textSize="12sp"
+                            android:textStyle="bold" />
+                    </LinearLayout>
+
+                    <View
+                        android:layout_width="1dp"
+                        android:layout_height="36dp"
+                        android:background="@color/colorBorder" />
+
+                    <!-- Battery Gauge -->
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:gravity="center"
+                        android:orientation="vertical"
+                        android:paddingHorizontal="4dp">
+
+                        <ImageView
+                            android:layout_width="22dp"
+                            android:layout_height="22dp"
+                            android:contentDescription="Baterai"
+                            android:src="@drawable/ic_battery"
+                            app:tint="@color/colorSuccess" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="4dp"
+                            android:text="Baterai"
+                            android:textColor="@color/textCaption"
+                            android:textSize="11sp" />
+
+                        <TextView
+                            android:id="@+id/text_battery_val"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="2dp"
+                            android:text="--%"
+                            android:textColor="@color/colorSuccess"
+                            android:textSize="12sp"
+                            android:textStyle="bold" />
+                    </LinearLayout>
+
+                    <View
+                        android:layout_width="1dp"
+                        android:layout_height="36dp"
+                        android:background="@color/colorBorder" />
+
+                    <!-- RAM Gauge -->
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:gravity="center"
+                        android:orientation="vertical"
+                        android:paddingHorizontal="4dp">
+
+                        <ImageView
+                            android:layout_width="22dp"
+                            android:layout_height="22dp"
+                            android:contentDescription="RAM"
+                            android:src="@drawable/ic_ram"
+                            app:tint="@color/colorAccent" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="4dp"
+                            android:text="RAM"
+                            android:textColor="@color/textCaption"
+                            android:textSize="11sp" />
+
+                        <TextView
+                            android:id="@+id/text_ram_val"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="2dp"
+                            android:text="-- GB"
+                            android:textColor="@color/textTitle"
+                            android:textSize="12sp"
+                            android:textStyle="bold" />
+                    </LinearLayout>
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <!-- DEVICE SPECS CARD -->
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/card_device_info"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="16dp"
+                app:cardBackgroundColor="@color/colorSurface"
+                app:cardCornerRadius="18dp"
+                app:cardElevation="1dp"
+                app:strokeColor="@color/colorBorder"
+                app:strokeWidth="1dp">
 
                 <LinearLayout
                     android:layout_width="match_parent"
@@ -777,22 +959,41 @@
                         android:layout_height="wrap_content"
                         android:layout_marginBottom="10dp">
 
-                        <TextView
+                        <LinearLayout
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="Spesifikasi Perangkat"
-                            android:textColor="@color/textTitle"
-                            android:textSize="14sp"
-                            android:textStyle="bold" />
+                            android:layout_alignParentStart="true"
+                            android:layout_centerVertical="true"
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal">
+
+                            <ImageView
+                                android:layout_width="20dp"
+                                android:layout_height="20dp"
+                                android:contentDescription="Spesifikasi"
+                                android:src="@drawable/ic_device"
+                                app:tint="@color/colorPrimary" />
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginStart="8dp"
+                                android:text="Spesifikasi &amp; Diagnostik"
+                                android:textColor="@color/textTitle"
+                                android:textSize="14sp"
+                                android:textStyle="bold" />
+                        </LinearLayout>
 
                         <Button
                             android:id="@+id/btn_open_diagnostics"
                             style="@style/Widget.Material3.Button.TextButton"
                             android:layout_width="wrap_content"
-                            android:layout_height="32dp"
+                            android:layout_height="36dp"
                             android:layout_alignParentEnd="true"
-                            android:text="Analisis"
-                            android:textSize="12sp" />
+                            android:text="Uji Kesiapan"
+                            android:textColor="@color/colorPrimary"
+                            android:textSize="12sp"
+                            android:textStyle="bold" />
                     </RelativeLayout>
 
                     <TextView
@@ -808,6 +1009,7 @@
                         android:id="@+id/text_android_ver"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
+                        android:layout_marginTop="2dp"
                         android:text="Android 14 (API 34)"
                         android:textColor="@color/textCaption"
                         android:textSize="11sp" />
@@ -816,6 +1018,7 @@
                         android:id="@+id/text_cpu_info"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
+                        android:layout_marginTop="2dp"
                         android:text="Octa-Core Processor"
                         android:textColor="@color/textCaption"
                         android:textSize="11sp" />
@@ -824,6 +1027,7 @@
                         android:id="@+id/text_total_ram"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
+                        android:layout_marginTop="2dp"
                         android:text="RAM Info"
                         android:textColor="@color/textCaption"
                         android:textSize="11sp" />
@@ -832,28 +1036,34 @@
                         android:id="@+id/text_screen_res_detail"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
+                        android:layout_marginTop="2dp"
                         android:text="Display 1080 x 2400 (60 Hz)"
                         android:textColor="@color/textCaption"
                         android:textSize="11sp" />
                 </LinearLayout>
-            </androidx.cardview.widget.CardView>
+            </com.google.android.material.card.MaterialCardView>
 
-            <!-- DASHBOARD ACTIONS GRID (LIBRARY, GAMING, TRIM, SETTINGS) -->
+            <!-- DASHBOARD ACTIONS GRID (LIBRARY, TRIM, GAMING, SETTINGS) -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginBottom="16dp"
+                android:layout_marginBottom="12dp"
                 android:orientation="horizontal">
 
-                <androidx.cardview.widget.CardView
+                <com.google.android.material.card.MaterialCardView
                     android:id="@+id/card_library"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_marginEnd="6dp"
                     android:layout_weight="1"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:foreground="?attr/selectableItemBackground"
                     app:cardBackgroundColor="@color/colorSurface"
-                    app:cardCornerRadius="14dp"
-                    app:cardElevation="2dp">
+                    app:cardCornerRadius="16dp"
+                    app:cardElevation="1dp"
+                    app:strokeColor="@color/colorBorder"
+                    app:strokeWidth="1dp">
 
                     <LinearLayout
                         android:layout_width="match_parent"
@@ -862,16 +1072,25 @@
                         android:orientation="vertical"
                         android:padding="14dp">
 
-                        <ImageView
-                            android:layout_width="28dp"
-                            android:layout_height="28dp"
-                            android:contentDescription="Galeri Rekaman"
-                            android:src="@drawable/ic_library" />
+                        <FrameLayout
+                            android:layout_width="40dp"
+                            android:layout_height="40dp"
+                            android:background="@drawable/bg_chip_pill"
+                            android:backgroundTint="@color/colorPrimaryContainer">
+
+                            <ImageView
+                                android:layout_width="22dp"
+                                android:layout_height="22dp"
+                                android:layout_gravity="center"
+                                android:contentDescription="Galeri Rekaman"
+                                android:src="@drawable/ic_library"
+                                app:tint="@color/colorPrimary" />
+                        </FrameLayout>
 
                         <TextView
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:layout_marginTop="6dp"
+                            android:layout_marginTop="8dp"
                             android:text="Galeri Rekaman"
                             android:textColor="@color/textTitle"
                             android:textSize="12sp"
@@ -885,17 +1104,22 @@
                             android:textColor="@color/textCaption"
                             android:textSize="10sp" />
                     </LinearLayout>
-                </androidx.cardview.widget.CardView>
+                </com.google.android.material.card.MaterialCardView>
 
-                <androidx.cardview.widget.CardView
+                <com.google.android.material.card.MaterialCardView
                     android:id="@+id/card_trim"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_marginStart="6dp"
                     android:layout_weight="1"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:foreground="?attr/selectableItemBackground"
                     app:cardBackgroundColor="@color/colorSurface"
-                    app:cardCornerRadius="14dp"
-                    app:cardElevation="2dp">
+                    app:cardCornerRadius="16dp"
+                    app:cardElevation="1dp"
+                    app:strokeColor="@color/colorBorder"
+                    app:strokeWidth="1dp">
 
                     <LinearLayout
                         android:layout_width="match_parent"
@@ -904,16 +1128,25 @@
                         android:orientation="vertical"
                         android:padding="14dp">
 
-                        <ImageView
-                            android:layout_width="28dp"
-                            android:layout_height="28dp"
-                            android:contentDescription="Editor Video"
-                            android:src="@drawable/ic_trim" />
+                        <FrameLayout
+                            android:layout_width="40dp"
+                            android:layout_height="40dp"
+                            android:background="@drawable/bg_chip_pill"
+                            android:backgroundTint="#15FF9F43">
+
+                            <ImageView
+                                android:layout_width="22dp"
+                                android:layout_height="22dp"
+                                android:layout_gravity="center"
+                                android:contentDescription="Editor Video"
+                                android:src="@drawable/ic_trim"
+                                app:tint="@color/colorAccent" />
+                        </FrameLayout>
 
                         <TextView
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:layout_marginTop="6dp"
+                            android:layout_marginTop="8dp"
                             android:text="Editor &amp; Potong"
                             android:textColor="@color/textTitle"
                             android:textSize="12sp"
@@ -922,28 +1155,33 @@
                         <TextView
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="Trim MP4 Instan"
+                            android:text="Trim MP4 Cepat"
                             android:textColor="@color/textCaption"
                             android:textSize="10sp" />
                     </LinearLayout>
-                </androidx.cardview.widget.CardView>
+                </com.google.android.material.card.MaterialCardView>
             </LinearLayout>
 
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginBottom="20dp"
+                android:layout_marginBottom="18dp"
                 android:orientation="horizontal">
 
-                <androidx.cardview.widget.CardView
+                <com.google.android.material.card.MaterialCardView
                     android:id="@+id/card_gaming"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_marginEnd="6dp"
                     android:layout_weight="1"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:foreground="?attr/selectableItemBackground"
                     app:cardBackgroundColor="@color/colorSurface"
-                    app:cardCornerRadius="14dp"
-                    app:cardElevation="2dp">
+                    app:cardCornerRadius="16dp"
+                    app:cardElevation="1dp"
+                    app:strokeColor="@color/colorBorder"
+                    app:strokeWidth="1dp">
 
                     <LinearLayout
                         android:layout_width="match_parent"
@@ -952,16 +1190,25 @@
                         android:orientation="vertical"
                         android:padding="14dp">
 
-                        <ImageView
-                            android:layout_width="28dp"
-                            android:layout_height="28dp"
-                            android:contentDescription="Mode Gaming"
-                            android:src="@drawable/ic_game" />
+                        <FrameLayout
+                            android:layout_width="40dp"
+                            android:layout_height="40dp"
+                            android:background="@drawable/bg_chip_pill"
+                            android:backgroundTint="@color/colorSuccessContainer">
+
+                            <ImageView
+                                android:layout_width="22dp"
+                                android:layout_height="22dp"
+                                android:layout_gravity="center"
+                                android:contentDescription="Mode Gaming"
+                                android:src="@drawable/ic_game"
+                                app:tint="@color/colorSuccess" />
+                        </FrameLayout>
 
                         <TextView
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:layout_marginTop="6dp"
+                            android:layout_marginTop="8dp"
                             android:text="Mode Gaming"
                             android:textColor="@color/textTitle"
                             android:textSize="12sp"
@@ -970,21 +1217,26 @@
                         <TextView
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="Optimal 60 FPS"
+                            android:text="High FPS &amp; Low Lag"
                             android:textColor="@color/textCaption"
                             android:textSize="10sp" />
                     </LinearLayout>
-                </androidx.cardview.widget.CardView>
+                </com.google.android.material.card.MaterialCardView>
 
-                <androidx.cardview.widget.CardView
+                <com.google.android.material.card.MaterialCardView
                     android:id="@+id/card_settings"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_marginStart="6dp"
                     android:layout_weight="1"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:foreground="?attr/selectableItemBackground"
                     app:cardBackgroundColor="@color/colorSurface"
-                    app:cardCornerRadius="14dp"
-                    app:cardElevation="2dp">
+                    app:cardCornerRadius="16dp"
+                    app:cardElevation="1dp"
+                    app:strokeColor="@color/colorBorder"
+                    app:strokeWidth="1dp">
 
                     <LinearLayout
                         android:layout_width="match_parent"
@@ -993,16 +1245,25 @@
                         android:orientation="vertical"
                         android:padding="14dp">
 
-                        <ImageView
-                            android:layout_width="28dp"
-                            android:layout_height="28dp"
-                            android:contentDescription="Pengaturan"
-                            android:src="@drawable/ic_settings" />
+                        <FrameLayout
+                            android:layout_width="40dp"
+                            android:layout_height="40dp"
+                            android:background="@drawable/bg_chip_pill"
+                            android:backgroundTint="@color/colorSurfaceVariant">
+
+                            <ImageView
+                                android:layout_width="22dp"
+                                android:layout_height="22dp"
+                                android:layout_gravity="center"
+                                android:contentDescription="Pengaturan"
+                                android:src="@drawable/ic_settings"
+                                app:tint="@color/textTitle" />
+                        </FrameLayout>
 
                         <TextView
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:layout_marginTop="6dp"
+                            android:layout_marginTop="8dp"
                             android:text="Pengaturan"
                             android:textColor="@color/textTitle"
                             android:textSize="12sp"
@@ -1015,18 +1276,20 @@
                             android:textColor="@color/textCaption"
                             android:textSize="10sp" />
                     </LinearLayout>
-                </androidx.cardview.widget.CardView>
+                </com.google.android.material.card.MaterialCardView>
             </LinearLayout>
 
             <!-- SAVED RECORDINGS LIST VIEW SECTION -->
-            <androidx.cardview.widget.CardView
+            <com.google.android.material.card.MaterialCardView
                 android:id="@+id/card_home_recordings_section"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginBottom="24dp"
                 app:cardBackgroundColor="@color/colorSurface"
-                app:cardCornerRadius="16dp"
-                app:cardElevation="3dp">
+                app:cardCornerRadius="18dp"
+                app:cardElevation="2dp"
+                app:strokeColor="@color/colorBorder"
+                app:strokeWidth="1dp">
 
                 <LinearLayout
                     android:layout_width="match_parent"
@@ -1048,10 +1311,11 @@
                             android:orientation="horizontal">
 
                             <ImageView
-                                android:layout_width="24dp"
-                                android:layout_height="24dp"
+                                android:layout_width="22dp"
+                                android:layout_height="22dp"
                                 android:contentDescription="Ikon Video"
-                                android:src="@drawable/ic_video" />
+                                android:src="@drawable/ic_video"
+                                app:tint="@color/colorPrimary" />
 
                             <TextView
                                 android:layout_width="wrap_content"
@@ -1084,12 +1348,12 @@
                         android:layout_height="wrap_content"
                         android:gravity="center"
                         android:orientation="vertical"
-                        android:paddingVertical="16dp">
+                        android:paddingVertical="18dp">
 
                         <ImageView
-                            android:layout_width="48dp"
-                            android:layout_height="48dp"
-                            android:alpha="0.6"
+                            android:layout_width="54dp"
+                            android:layout_height="54dp"
+                            android:alpha="0.5"
                             android:contentDescription="Belum ada video"
                             android:src="@drawable/ic_video_placeholder" />
 
@@ -1097,23 +1361,22 @@
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:layout_marginTop="8dp"
-                            android:text="Belum ada video rekaman tersimpan"
+                            android:text="Belum ada rekaman tersimpan"
                             android:textColor="@color/textCaption"
-                            android:textSize="12sp" />
+                            android:textSize="13sp" />
 
                         <Button
                             android:id="@+id/btn_home_create_demo"
                             style="@style/Widget.Material3.Button.TonalButton"
                             android:layout_width="wrap_content"
-                            android:layout_height="36dp"
-                            android:layout_marginTop="10dp"
+                            android:layout_height="40dp"
+                            android:layout_marginTop="12dp"
                             android:text="✨ Buat Video Contoh Demo"
                             android:textColor="@color/colorPrimary"
-                            android:textSize="11sp"
+                            android:textSize="12sp"
                             android:textStyle="bold"
-                            app:cornerRadius="10dp" />
+                            app:cornerRadius="12dp" />
                     </LinearLayout>
-
 
                     <!-- RecyclerView for saved recording files on home screen -->
                     <androidx.recyclerview.widget.RecyclerView
@@ -1124,25 +1387,25 @@
                         android:visibility="gone" />
 
                 </LinearLayout>
-            </androidx.cardview.widget.CardView>
+            </com.google.android.material.card.MaterialCardView>
 
         </LinearLayout>
     </ScrollView>
 
     <!-- FLOATING RECORDING TOGGLE & STATUS PILL (STICKY ON SCREEN) -->
-    <androidx.cardview.widget.CardView
+    <com.google.android.material.card.MaterialCardView
         android:id="@+id/card_floating_recording_pill"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginHorizontal="16dp"
-        android:layout_marginBottom="8dp"
+        android:layout_marginBottom="12dp"
         android:visibility="gone"
         app:cardBackgroundColor="@color/colorError"
         app:cardCornerRadius="28dp"
         app:cardElevation="12dp"
         app:layout_constraintBottom_toTopOf="@id/bottom_navigation"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent">
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent">
 
         <LinearLayout
             android:layout_width="match_parent"
@@ -1156,7 +1419,7 @@
                 android:layout_width="20dp"
                 android:layout_height="20dp"
                 android:contentDescription="Status Merekam"
-                android:src="@drawable/ic_record" />
+                android:src="@drawable/ic_record_beacon" />
 
             <LinearLayout
                 android:layout_width="0dp"
@@ -1189,7 +1452,7 @@
                 android:layout_height="38dp"
                 android:layout_marginEnd="6dp"
                 android:minWidth="0dp"
-                android:paddingHorizontal="12dp"
+                android:paddingHorizontal="14dp"
                 android:text="Jeda"
                 android:textColor="#FFFFFF"
                 android:textSize="12sp"
@@ -1210,17 +1473,17 @@
                 app:backgroundTint="#FFFFFF"
                 app:cornerRadius="19dp" />
         </LinearLayout>
-    </androidx.cardview.widget.CardView>
+    </com.google.android.material.card.MaterialCardView>
 
     <!-- BOTTOM NAVIGATION -->
     <com.google.android.material.bottomnavigation.BottomNavigationView
         android:id="@+id/bottom_navigation"
         style="@style/Widget.App.BottomNav"
         android:layout_width="match_parent"
-        android:layout_height="64dp"
+        android:layout_height="68dp"
+        app:elevation="12dp"
         app:layout_constraintBottom_toBottomOf="parent"
         app:menu="@menu/bottom_nav_menu" />
-
 
     <!-- COUNTDOWN OVERLAY HUD (SHOWN BEFORE RECORDING STARTS) -->
     <androidx.constraintlayout.widget.ConstraintLayout
@@ -1256,7 +1519,7 @@
             android:layout_height="wrap_content"
             android:text="3"
             android:textColor="@color/colorPrimary"
-            android:textSize="130sp"
+            android:textSize="120sp"
             android:textStyle="bold"
             app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintEnd_toEndOf="parent"
@@ -1288,21 +1551,21 @@
             <Button
                 android:id="@+id/btn_cancel_countdown_hud"
                 android:layout_width="wrap_content"
-                android:layout_height="44dp"
+                android:layout_height="48dp"
                 android:layout_marginEnd="12dp"
                 android:text="Batalkan"
                 android:textColor="@color/colorError"
                 app:backgroundTint="#33FFFFFF"
-                app:cornerRadius="22dp" />
+                app:cornerRadius="24dp" />
 
             <Button
                 android:id="@+id/btn_skip_countdown_hud"
                 android:layout_width="wrap_content"
-                android:layout_height="44dp"
+                android:layout_height="48dp"
                 android:text="Mulai Langsung"
                 android:textColor="#FFFFFF"
                 app:backgroundTint="@color/colorPrimary"
-                app:cornerRadius="22dp" />
+                app:cornerRadius="24dp" />
         </LinearLayout>
     </androidx.constraintlayout.widget.ConstraintLayout>
 
