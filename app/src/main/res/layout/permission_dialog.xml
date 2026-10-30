@@ -91,13 +91,15 @@
 
                 <Button
                     android:id="@+id/btn_tidak_keluar"
+                    style="@style/Widget.Material3.Button.TonalButton"
                     android:layout_width="0dp"
                     android:layout_height="48dp"
                     android:layout_marginEnd="8dp"
                     android:layout_weight="1"
-                    android:text="NANTI SAJA"
+                    android:text="Nanti Saja"
                     android:textColor="@color/textCaption"
-                    app:backgroundTint="@color/colorBackground" />
+                    android:textStyle="bold"
+                    app:cornerRadius="12dp" />
 
                 <Button
                     android:id="@+id/btn_tambah_izin"
@@ -105,9 +107,11 @@
                     android:layout_height="48dp"
                     android:layout_marginStart="8dp"
                     android:layout_weight="1"
-                    android:text="IZINKAN SEKARANG"
+                    android:text="Izinkan Sekarang"
                     android:textColor="@color/colorOnPrimary"
-                    app:backgroundTint="@color/colorPrimary" />
+                    android:textStyle="bold"
+                    app:backgroundTint="@color/colorPrimary"
+                    app:cornerRadius="12dp" />
             </LinearLayout>
 
         </LinearLayout>

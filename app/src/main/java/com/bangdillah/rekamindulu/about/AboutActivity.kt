@@ -17,6 +17,10 @@ class AboutActivity : AppCompatActivity() {
         setContentView(R.layout.about_screen)
         supportActionBar?.hide()
 
+        findViewById<android.view.View>(R.id.btn_about_back)?.setOnClickListener {
+            finish()
+        }
+
         // 1. Share App Button
         findViewById<Button>(R.id.btn_share_app)?.setOnClickListener {
             val sharingIntent = Intent(Intent.ACTION_SEND).apply {

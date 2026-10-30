@@ -146,10 +146,13 @@ class PlayerActivity : AppCompatActivity() {
         }
 
         // Tap video to toggle controls visibility
-        videoView?.setOnTouchListener { _, _ ->
-            toggleControls()
+        videoView?.setOnTouchListener { _, event ->
+            if (event.action == android.view.MotionEvent.ACTION_UP) {
+                toggleControls()
+            }
             true
         }
+
 
         findViewById<ImageView>(R.id.btn_rewind)?.setOnClickListener {
             videoView?.let { vv ->

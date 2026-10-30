@@ -43,13 +43,13 @@
 
             <ImageView
                 android:id="@+id/btn_close_dialog"
-                android:layout_width="36dp"
-                android:layout_height="36dp"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
                 android:layout_alignParentEnd="true"
                 android:layout_centerVertical="true"
                 android:background="?attr/selectableItemBackgroundBorderless"
                 android:contentDescription="Tutup"
-                android:padding="6dp"
+                android:padding="12dp"
                 android:src="@drawable/ic_close" />
         </RelativeLayout>
 
@@ -91,13 +91,15 @@
                     android:id="@+id/text_dialog_status_badge"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="4dp"
-                    android:background="@color/colorSuccess"
-                    android:paddingHorizontal="12dp"
-                    android:paddingVertical="4dp"
+                    android:layout_marginTop="6dp"
+                    android:background="@drawable/ic_play_circle_bg"
+                    android:backgroundTint="@color/colorSuccess"
+                    android:paddingHorizontal="14dp"
+                    android:paddingVertical="5dp"
                     android:text="SANGAT SIAP (OPTIMAL)"
                     android:textColor="@color/colorOnPrimary"
                     android:textSize="12sp"
+                    android:textStyle="bold" />
                     android:textStyle="bold" />
 
                 <ProgressBar

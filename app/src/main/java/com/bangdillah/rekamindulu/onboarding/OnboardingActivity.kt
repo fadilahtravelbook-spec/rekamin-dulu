@@ -100,16 +100,15 @@ class OnboardingActivity : AppCompatActivity() {
     }
 
     private fun goToSlide(index: Int) {
-        if (index > currentSlide) {
-            viewFlipper.setInAnimation(this, android.R.anim.slide_in_left)
-            viewFlipper.setOutAnimation(this, android.R.anim.slide_out_right)
+        if (index != currentSlide && index in 0..2) {
+            viewFlipper.setInAnimation(this, android.R.anim.fade_in)
+            viewFlipper.setOutAnimation(this, android.R.anim.fade_out)
             viewFlipper.displayedChild = index
-        } else if (index < currentSlide) {
-            viewFlipper.displayedChild = index
+            currentSlide = index
+            updateSlideUI()
         }
-        currentSlide = index
-        updateSlideUI()
     }
+
 
     private fun updateSlideUI() {
         val colorActive = ContextCompat.getColor(this, R.color.colorPrimary)

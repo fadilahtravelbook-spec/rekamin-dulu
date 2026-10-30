@@ -165,6 +165,19 @@ class LibraryActivity : AppCompatActivity() {
             finish()
         }
 
+        findViewById<View>(R.id.btn_empty_demo)?.setOnClickListener {
+            Toast.makeText(this, "Membuat video demo MP4...", Toast.LENGTH_SHORT).show()
+            StorageHelper.generateDemoVideo(this) { file ->
+                if (file != null) {
+                    Toast.makeText(this, "Video demo berhasil dibuat!", Toast.LENGTH_SHORT).show()
+                    loadVideoFiles()
+                } else {
+                    Toast.makeText(this, "Gagal membuat video demo", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+
+
         findViewById<Button>(R.id.btn_library_stop_rec)?.setOnClickListener {
             val stopIntent = Intent(this, ScreenRecordingService::class.java).apply {
                 action = ScreenRecordingService.ACTION_STOP

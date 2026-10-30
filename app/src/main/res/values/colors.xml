@@ -1,45 +1,45 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Warna Material 3 — Rekamin Dulu by Bangdillah210 -->
-<!-- Light Mode & Dark Mode palette -->
-
+<!-- Modern Material 3 Palette — Rekamin Dulu by Bangdillah210 -->
 <resources>
     <!-- ========== PRIMARY COLORS ========== -->
-    <color name="colorPrimary">#6C5CE7</color>      <!-- Merah utama -->
-    <color name="colorOnPrimary">#FFFFFF</color>     <!-- Teks/ikon di atas primary -->
+    <color name="colorPrimary">#6C5CE7</color>
+    <color name="colorPrimaryDark">#5443DC</color>
+    <color name="colorPrimaryLight">#8E82F3</color>
+    <color name="colorOnPrimary">#FFFFFF</color>
+    <color name="colorPrimaryContainer">#ECE8FD</color>
+    <color name="colorOnPrimaryContainer">#4435B8</color>
 
     <!-- ========== SURFACE & BACKGROUND ========== -->
-    <color name="colorSurface">#FAFAFA</color>      <!-- Light mode -->
-    <color name="colorSurfaceDark">#121212</color>  <!-- Dark mode -->
-    <color name="colorBackground">#F5F6FA</color>   <!-- Background -->
-    <color name="colorBackgroundDark">#12121A</color>
+    <color name="colorSurface">#FFFFFF</color>
+    <color name="colorSurfaceDark">#161622</color>
+    <color name="colorBackground">#F6F7FB</color>
+    <color name="colorBackgroundDark">#0F0F17</color>
+    <color name="colorCardBackground">#FFFFFF</color>
+    <color name="colorCardBackgroundDark">#1A1A28</color>
 
-    <!-- ========== ERROR & WARNING ========== -->
-    <color name="colorError">#E53935</color>       <!-- Error/Delete -->
-    <color name="colorWarning">#FF9F43</color>     <!-- Warning/Alert -->
+    <!-- ========== SYSTEM SEMANTICS ========== -->
+    <color name="colorError">#E53935</color>
+    <color name="colorErrorContainer">#FDECEC</color>
+    <color name="colorWarning">#FF9F43</color>
+    <color name="colorWarningContainer">#FFF4E6</color>
+    <color name="colorSuccess">#00B894</color>
+    <color name="colorSuccessContainer">#E4F9F4</color>
 
-    <!-- ========== SUCCESS ========== -->
-    <color name="colorSuccess">#4CAF50</color>     <!-- Success/check -->
+    <!-- ========== ON SURFACE & TEXT ========== -->
+    <color name="colorOnSurface">#1A1B25</color>
+    <color name="colorOnSurfaceDark">#EAEAF0</color>
+    <color name="colorOnBackground">#1A1B25</color>
+    <color name="textTitle">#1A1B25</color>
+    <color name="textBody">#34374A</color>
+    <color name="textCaption">#72778E</color>
+    <color name="textCaptionDark">#9E9EA6</color>
 
-    <!-- ========== ON SURFACE ========== -->
-    <color name="colorOnSurface">#2D3436</color>   <!-- Teks di surface Light -->
-    <color name="colorOnSurfaceDark">#E0E0E0</color><!-- Teks di surface Dark -->
-    <color name="colorOnBackground">#000000</color> <!-- Teks di background -->
-
-    <!-- ========== VARIANTS ========== -->
-    <color name="colorSurfaceVariant">#E0E0E0</color>
-    <color name="colorOnSurfaceVariant">#49454F</color>
-    <color name="colorPrimaryContainer">#E8E0F2</color>
-    <color name="colorOnPrimaryContainer">#6C5CE7</color>
-    <color name="colorSurfaceContainerHigh">#F5F5F5</color>
-    <color name="colorSurfaceContainerHighDark">#1E1E1E</color>
-
-    <!-- ========== TEXT COLOR VARIANTS ========== -->
-    <color name="textTitle">#212121</color>      <!-- 22sp SemiBold -->
-    <color name="textBody">#2D3436</color>       <!-- Body text -->
-    <color name="textCaption">#636E72</color>    <!-- 14sp opacity 60% -->
-    <color name="textCaptionDark">#777777</color> <!-- 14sp opacity 60% Dark -->
-    <color name="colorCardBackground">#E0E0E0</color>
-<!-- ========== ACCENT COLOR (untuk tombol act/indikator) ========== -->
-    <color name="colorAccent">#FF9F43</color>      <!-- Oranye - gelombang suara -->
-    <color name="colorAccentDark">#FFB74D</color>  <!-- Oranye terang Dark mode -->
+    <!-- ========== VARIANTS & ACCENTS ========== -->
+    <color name="colorSurfaceVariant">#EEF0F6</color>
+    <color name="colorOnSurfaceVariant">#565A6E</color>
+    <color name="colorSurfaceContainerHigh">#F7F8FC</color>
+    <color name="colorSurfaceContainerHighDark">#212130</color>
+    <color name="colorAccent">#FF9F43</color>
+    <color name="colorAccentDark">#FFB74D</color>
+    <color name="navInactive">#83889E</color>
 </resources>

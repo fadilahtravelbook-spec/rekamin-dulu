@@ -1,8 +1,13 @@
 package com.bangdillah.rekamindulu.utils
 
+import android.app.Activity
 import android.content.ContentResolver
 import android.content.ContentValues
 import android.content.Context
+import android.media.MediaCodec
+import android.media.MediaCodecInfo
+import android.media.MediaFormat
+import android.media.MediaMuxer
 import android.media.MediaScannerConnection
 import android.net.Uri
 import android.os.Build
@@ -13,6 +18,7 @@ import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+
 
 /**
  * StorageHelper - Pengelola penyimpanan video publik, direktori rekaman,
@@ -163,4 +169,152 @@ object StorageHelper {
         scanDeletedFile(context, oldFile)
         scanVideoFile(context, newFile)
     }
+
+    /**
+     * Menghasilkan video demo MP4 valid secara langsung menggunakan MediaCodec & MediaMuxer,
+     * berguna agar pengguna/tester dapat langsung menguji Player, Trim, dan Audio Extractor.
+     */
+    fun generateDemoVideo(context: Context, onComplete: ((File?) -> Unit)? = null) {
+        Thread {
+            try {
+                val outputFile = createOutputFile(context, "Demo_Rekamin")
+                val width = 720
+                val height = 1280
+                val bitRate = 2_000_000
+                val frameRate = 30
+                val durationSec = 3
+                val numFrames = frameRate * durationSec
+
+                val format = MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_AVC, width, height).apply {
+                    setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface)
+                    setInteger(MediaFormat.KEY_BIT_RATE, bitRate)
+                    setInteger(MediaFormat.KEY_FRAME_RATE, frameRate)
+                    setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 1)
+                }
+
+                val encoder = MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_VIDEO_AVC)
+                encoder.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
+                val inputSurface = encoder.createInputSurface()
+                encoder.start()
+
+                val muxer = MediaMuxer(outputFile.absolutePath, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
+                var trackIndex = -1
+                var muxerStarted = false
+                val bufferInfo = MediaCodec.BufferInfo()
+
+                val paintBg = android.graphics.Paint().apply { color = android.graphics.Color.parseColor("#161622") }
+                val paintHeader = android.graphics.Paint().apply { color = android.graphics.Color.parseColor("#6C5CE7") }
+                val paintText = android.graphics.Paint().apply {
+                    color = android.graphics.Color.WHITE
+                    textSize = 38f
+                    isAntiAlias = true
+                    textAlign = android.graphics.Paint.Align.CENTER
+                }
+                val paintSubtext = android.graphics.Paint().apply {
+                    color = android.graphics.Color.parseColor("#A29BFE")
+                    textSize = 24f
+                    isAntiAlias = true
+                    textAlign = android.graphics.Paint.Align.CENTER
+                }
+                val paintDot = android.graphics.Paint().apply {
+                    color = android.graphics.Color.parseColor("#E53935")
+                    isAntiAlias = true
+                }
+                val paintCircle = android.graphics.Paint().apply {
+                    color = android.graphics.Color.parseColor("#00B894")
+                    isAntiAlias = true
+                }
+
+                for (i in 0 until numFrames) {
+                    val canvas = inputSurface.lockHardwareCanvas()
+                    canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), paintBg)
+
+                    // Draw header banner
+                    canvas.drawRoundRect(40f, 120f, width - 40f, 300f, 24f, 24f, paintHeader)
+                    canvas.drawCircle(80f, 210f, 14f, paintDot)
+                    canvas.drawText("Rekamin Dulu • Demo HD", width / 2f + 16f, 195f, paintText)
+                    canvas.drawText("Rekam Layar & Audio Game", width / 2f + 16f, 245f, paintSubtext)
+
+                    // Draw moving pulse circle
+                    val animY = 440f + (i * 7f) % 450f
+                    canvas.drawCircle(width / 2f, animY, 54f, paintCircle)
+
+                    val sec = i / frameRate
+                    canvas.drawText("Sample Rekaman Video 00:0$sec / 00:03", width / 2f, 1020f, paintText)
+                    canvas.drawText("1080p 60FPS • Siap Diputar & Dipotong", width / 2f, 1070f, paintSubtext)
+
+                    inputSurface.unlockCanvasAndPost(canvas)
+
+                    while (true) {
+                        val outputBufferId = encoder.dequeueOutputBuffer(bufferInfo, 10000)
+                        if (outputBufferId == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) {
+                            if (!muxerStarted) {
+                                trackIndex = muxer.addTrack(encoder.outputFormat)
+                                muxer.start()
+                                muxerStarted = true
+                            }
+                        } else if (outputBufferId >= 0) {
+                            val outputBuffer = encoder.getOutputBuffer(outputBufferId)
+                            if (outputBuffer != null && bufferInfo.size > 0 && muxerStarted) {
+                                bufferInfo.presentationTimeUs = (i * 1000000L / frameRate)
+                                muxer.writeSampleData(trackIndex, outputBuffer, bufferInfo)
+                            }
+                            encoder.releaseOutputBuffer(outputBufferId, false)
+                            break
+                        } else {
+                            break
+                        }
+                    }
+                }
+
+                encoder.signalEndOfInputStream()
+
+                while (true) {
+                    val outputBufferId = encoder.dequeueOutputBuffer(bufferInfo, 10000)
+                    if (outputBufferId >= 0) {
+                        val outputBuffer = encoder.getOutputBuffer(outputBufferId)
+                        if (outputBuffer != null && bufferInfo.size > 0 && muxerStarted) {
+                            muxer.writeSampleData(trackIndex, outputBuffer, bufferInfo)
+                        }
+                        encoder.releaseOutputBuffer(outputBufferId, false)
+                        if ((bufferInfo.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM) != 0) {
+                            break
+                        }
+                    } else if (outputBufferId == MediaCodec.INFO_TRY_AGAIN_LATER) {
+                        break
+                    }
+                }
+
+                try {
+                    encoder.stop()
+                    encoder.release()
+                } catch (ignored: Exception) {}
+
+                try {
+                    inputSurface.release()
+                } catch (ignored: Exception) {}
+
+                try {
+                    if (muxerStarted) {
+                        muxer.stop()
+                    }
+                    muxer.release()
+                } catch (ignored: Exception) {}
+
+                scanVideoFile(context, outputFile)
+
+                (context as? Activity)?.runOnUiThread {
+                    onComplete?.invoke(outputFile)
+                } ?: run {
+                    onComplete?.invoke(outputFile)
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "generateDemoVideo failed", e)
+                (context as? Activity)?.runOnUiThread {
+                    onComplete?.invoke(null)
+                }
+            }
+        }.start()
+    }
 }
+

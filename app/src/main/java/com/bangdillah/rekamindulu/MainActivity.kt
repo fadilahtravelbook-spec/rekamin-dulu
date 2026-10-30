@@ -201,9 +201,49 @@ open class MainActivity : AppCompatActivity() {
                 isGameAudioOn = true
             }
         }
-        findViewById<Button>(R.id.toggle_mic)?.text = if (isMicOn) "ON" else "OFF"
-        findViewById<Button>(R.id.toggle_game_audio)?.text = if (isGameAudioOn) "ON" else "OFF"
+        updateAudioToggleViews()
     }
+
+    private fun updateAudioToggleViews() {
+        val toggleMic = findViewById<Button>(R.id.toggle_mic)
+        val toggleGameAudio = findViewById<Button>(R.id.toggle_game_audio)
+        val toggleFacecam = findViewById<Button>(R.id.toggle_facecam)
+
+        toggleMic?.apply {
+            text = if (isMicOn) "✓ AKTIF" else "NONAKTIF"
+            if (isMicOn) {
+                backgroundTintList = ContextCompat.getColorStateList(this@MainActivity, R.color.colorPrimaryContainer)
+                setTextColor(ContextCompat.getColor(this@MainActivity, R.color.colorPrimary))
+            } else {
+                backgroundTintList = ContextCompat.getColorStateList(this@MainActivity, R.color.colorSurfaceVariant)
+                setTextColor(ContextCompat.getColor(this@MainActivity, R.color.textCaption))
+            }
+        }
+
+        toggleGameAudio?.apply {
+            text = if (isGameAudioOn) "✓ AKTIF" else "NONAKTIF"
+            if (isGameAudioOn) {
+                backgroundTintList = ContextCompat.getColorStateList(this@MainActivity, R.color.colorPrimaryContainer)
+                setTextColor(ContextCompat.getColor(this@MainActivity, R.color.colorPrimary))
+            } else {
+                backgroundTintList = ContextCompat.getColorStateList(this@MainActivity, R.color.colorSurfaceVariant)
+                setTextColor(ContextCompat.getColor(this@MainActivity, R.color.textCaption))
+            }
+        }
+
+        toggleFacecam?.apply {
+            val stateStr = facecamStates[facecamStateIndex]
+            text = stateStr
+            if (stateStr != "OFF") {
+                backgroundTintList = ContextCompat.getColorStateList(this@MainActivity, R.color.colorPrimaryContainer)
+                setTextColor(ContextCompat.getColor(this@MainActivity, R.color.colorPrimary))
+            } else {
+                backgroundTintList = ContextCompat.getColorStateList(this@MainActivity, R.color.colorSurfaceVariant)
+                setTextColor(ContextCompat.getColor(this@MainActivity, R.color.textCaption))
+            }
+        }
+    }
+
 
     private fun checkAppLock() {
         if (appPreferences.isAppLockEnabled && appPreferences.appLockPin.isNotEmpty() && !isSessionUnlocked) {
@@ -303,7 +343,7 @@ open class MainActivity : AppCompatActivity() {
         val toggleMic = findViewById<Button>(R.id.toggle_mic)
         toggleMic?.setOnClickListener {
             isMicOn = !isMicOn
-            toggleMic.text = if (isMicOn) "ON" else "OFF"
+            updateAudioToggleViews()
             syncAudioPreferences()
             showSnackbar(if (isMicOn) "🎤 Mikrofon diaktifkan" else "🔇 Mikrofon dinonaktifkan")
         }
@@ -312,7 +352,7 @@ open class MainActivity : AppCompatActivity() {
         val toggleGameAudio = findViewById<Button>(R.id.toggle_game_audio)
         toggleGameAudio?.setOnClickListener {
             isGameAudioOn = !isGameAudioOn
-            toggleGameAudio.text = if (isGameAudioOn) "ON" else "OFF"
+            updateAudioToggleViews()
             syncAudioPreferences()
             showSnackbar(if (isGameAudioOn) "🎮 Audio internal game diaktifkan" else "Audio internal game dinonaktifkan")
         }
@@ -322,10 +362,11 @@ open class MainActivity : AppCompatActivity() {
         toggleFacecam?.setOnClickListener {
             facecamStateIndex = (facecamStateIndex + 1) % facecamStates.size
             val stateStr = facecamStates[facecamStateIndex]
-            toggleFacecam.text = stateStr
             appPreferences.facecamMode = stateStr
+            updateAudioToggleViews()
             showSnackbar("Mode Kamera Wajah: $stateStr")
         }
+
 
         // Pause / Resume button on active banner
         findViewById<Button>(R.id.btn_home_pause_recording)?.setOnClickListener {
@@ -406,10 +447,10 @@ open class MainActivity : AppCompatActivity() {
     fun setAudioRecordingConfig(micEnabled: Boolean, internalAudioEnabled: Boolean) {
         this.isMicOn = micEnabled
         this.isGameAudioOn = internalAudioEnabled
-        findViewById<Button>(R.id.toggle_mic)?.text = if (isMicOn) "ON" else "OFF"
-        findViewById<Button>(R.id.toggle_game_audio)?.text = if (isGameAudioOn) "ON" else "OFF"
+        updateAudioToggleViews()
         syncAudioPreferences()
     }
+
 
     private fun showQualityPickerDialog() {
         val options = arrayOf(
@@ -578,17 +619,23 @@ open class MainActivity : AppCompatActivity() {
                 }
                 startActivity(intent)
             },
-            onDeleteClick = { file ->
-                confirmDeleteHomeRecording(file)
-            },
-            onShareClick = { file ->
-                shareVideoFile(file)
+            onRenameClick = { file ->
+                showRenameHomeRecordingDialog(file)
             },
             onEditClick = { file ->
                 val intent = Intent(this, TrimActivity::class.java).apply {
                     putExtra("VIDEO_PATH", file.absolutePath)
                 }
                 startActivity(intent)
+            },
+            onExtractAudioClick = { file ->
+                handleExtractAudioHome(file)
+            },
+            onShareClick = { file ->
+                shareVideoFile(file)
+            },
+            onDeleteClick = { file ->
+                confirmDeleteHomeRecording(file)
             }
         )
 
@@ -597,9 +644,91 @@ open class MainActivity : AppCompatActivity() {
         btnViewAll?.setOnClickListener {
             startActivity(Intent(this, LibraryActivity::class.java))
         }
+
+        findViewById<View>(R.id.btn_home_create_demo)?.setOnClickListener {
+            Toast.makeText(this, "Membuat video demo MP4...", Toast.LENGTH_SHORT).show()
+            StorageHelper.generateDemoVideo(this) { file ->
+                if (file != null) {
+                    Toast.makeText(this, "Video demo berhasil dibuat!", Toast.LENGTH_SHORT).show()
+                    updateHomeRecordingsList()
+                    updateLibraryStats()
+                } else {
+                    Toast.makeText(this, "Gagal membuat video demo", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
+
+    private fun showRenameHomeRecordingDialog(file: File) {
+        val currentNameWithoutExt = file.nameWithoutExtension
+        val input = EditText(this).apply {
+            setText(currentNameWithoutExt)
+            setSelection(currentNameWithoutExt.length)
+            setPadding(48, 32, 48, 32)
+            hint = "Nama baru video"
+            maxLines = 1
+            isSingleLine = true
+        }
+
+        AlertDialog.Builder(this)
+            .setTitle("Ubah Nama Rekaman")
+            .setMessage("Masukkan nama baru untuk rekaman ini:")
+            .setView(input)
+            .setPositiveButton("Simpan") { _, _ ->
+                val newName = input.text.toString().trim()
+                if (newName.isEmpty()) {
+                    Toast.makeText(this, "Nama tidak boleh kosong", Toast.LENGTH_SHORT).show()
+                    return@setPositiveButton
+                }
+                val illegalChars = charArrayOf('/', '\\', ':', '*', '?', '"', '<', '>', '|')
+                if (newName.any { it in illegalChars }) {
+                    Toast.makeText(this, "Nama mengandung karakter tidak valid", Toast.LENGTH_SHORT).show()
+                    return@setPositiveButton
+                }
+                val finalFileName = if (newName.endsWith(".mp4", ignoreCase = true)) newName else "$newName.mp4"
+                val targetFile = File(file.parentFile, finalFileName)
+                if (targetFile.exists() && targetFile.absolutePath != file.absolutePath) {
+                    Toast.makeText(this, "Nama file tersebut sudah digunakan", Toast.LENGTH_SHORT).show()
+                    return@setPositiveButton
+                }
+                if (file.renameTo(targetFile)) {
+                    StorageHelper.scanRenamedFile(this, file, targetFile)
+                    Toast.makeText(this, "Nama berhasil diubah", Toast.LENGTH_SHORT).show()
+                    updateHomeRecordingsList()
+                }
+            }
+            .setNegativeButton("Batal", null)
+            .show()
+    }
+
+    private fun handleExtractAudioHome(file: File) {
+        val progressDialog = AlertDialog.Builder(this)
+            .setTitle("Mengekstrak Audio 🎵")
+            .setMessage("Sedang memisahkan audio dari ${file.name}...")
+            .setCancelable(false)
+            .create()
+        progressDialog.show()
+
+        Thread {
+            val (success, audioFile) = com.bangdillah.rekamindulu.audio.AudioExtractorHelper.extractAudio(this, file)
+            runOnUiThread {
+                progressDialog.dismiss()
+                if (success && audioFile != null && audioFile.exists()) {
+                    AlertDialog.Builder(this)
+                        .setTitle("Ekstrak Audio Berhasil! 🎉")
+                        .setIcon(R.drawable.ic_check_circle)
+                        .setMessage("Tersimpan sebagai:\n${audioFile.name}")
+                        .setPositiveButton("Bagus", null)
+                        .show()
+                } else {
+                    Toast.makeText(this, "Gagal mengekstrak audio dari video ini", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }.start()
     }
 
     private fun updateHomeRecordingsList() {
+
         if (!::homeRecordingsAdapter.isInitialized) return
         homeRecordingFiles.clear()
         val allFiles = StorageHelper.getAllVideoFiles(this)
