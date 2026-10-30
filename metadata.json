@@ -1,0 +1,6 @@
+{
+  "name": "Rekamin Dulu",
+  "description": "Aplikasi rekam layar Android dengan audio jernih dan kontrol mengambang",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

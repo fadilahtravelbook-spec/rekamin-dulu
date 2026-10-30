@@ -1,0 +1,213 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/colorBackground"
+    android:fillViewport="true">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_horizontal"
+        android:orientation="vertical"
+        android:padding="24dp">
+
+        <!-- App Logo & Branding -->
+        <androidx.cardview.widget.CardView
+            android:layout_width="100dp"
+            android:layout_height="100dp"
+            android:layout_marginTop="8dp"
+            app:cardBackgroundColor="@color/colorSurface"
+            app:cardCornerRadius="26dp"
+            app:cardElevation="6dp">
+
+            <ImageView
+                android:layout_width="85dp"
+                android:layout_height="85dp"
+                android:layout_gravity="center"
+                android:contentDescription="Logo Aplikasi"
+                android:src="@drawable/app_logo" />
+        </androidx.cardview.widget.CardView>
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:text="Rekamin Dulu"
+            android:textColor="@color/textTitle"
+            android:textSize="24sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text="Versi 1.0.0 (Pro Release)"
+            android:textColor="@color/textCaption"
+            android:textSize="13sp" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:text="Dikembangkan oleh Bangdillah210"
+            android:textColor="@color/colorPrimary"
+            android:textSize="13sp"
+            android:textStyle="bold" />
+
+        <!-- Feature List Card -->
+        <androidx.cardview.widget.CardView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="20dp"
+            app:cardBackgroundColor="@color/colorSurface"
+            app:cardCornerRadius="16dp"
+            app:cardElevation="3dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="20dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Fitur Unggulan Rekamin:"
+                    android:textColor="@color/textTitle"
+                    android:textSize="15sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="10dp"
+                    android:text="• Rekam Layar Full HD 1080p 60FPS Tanpa Watermark"
+                    android:textColor="@color/textTitle"
+                    android:textSize="13sp" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:text="• Dukungan Audio Internal Game + Suara Mikrofon"
+                    android:textColor="@color/textTitle"
+                    android:textSize="13sp" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:text="• Floating Controls Overlay &amp; Quick Trim Video"
+                    android:textColor="@color/textTitle"
+                    android:textSize="13sp" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:text="• Ekstrak Audio ke M4A &amp; App Lock Keamanan PIN"
+                    android:textColor="@color/textTitle"
+                    android:textSize="13sp" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:text="• 100% Bebas Iklan &amp; Tanpa Batas Durasi Rekam"
+                    android:textColor="@color/textTitle"
+                    android:textSize="13sp" />
+
+            </LinearLayout>
+        </androidx.cardview.widget.CardView>
+
+        <!-- Share App Button -->
+        <Button
+            android:id="@+id/btn_share_app"
+            android:layout_width="match_parent"
+            android:layout_height="52dp"
+            android:layout_marginTop="20dp"
+            android:text="📤 BAGIKAN APLIKASI (SHARE APK)"
+            android:textColor="@color/colorOnPrimary"
+            android:textStyle="bold"
+            app:backgroundTint="@color/colorPrimary"
+            app:cornerRadius="14dp" />
+
+        <!-- Check Update Button -->
+        <Button
+            android:id="@+id/btn_check_update"
+            android:layout_width="match_parent"
+            android:layout_height="50dp"
+            android:layout_marginTop="10dp"
+            android:text="🚀 CEK PEMBARUAN VERSI"
+            android:textColor="@color/colorPrimary"
+            android:textStyle="bold"
+            app:backgroundTint="@color/colorPrimaryContainer"
+            app:cornerRadius="14dp" />
+
+        <!-- Check Diagnostics Button -->
+        <Button
+            android:id="@+id/btn_about_diagnostics"
+            android:layout_width="match_parent"
+            android:layout_height="50dp"
+            android:layout_marginTop="10dp"
+            android:text="🔍 ANALISIS SPESIFIKASI &amp; SKOR HP"
+            android:textColor="@color/colorPrimary"
+            android:textStyle="bold"
+            app:backgroundTint="@color/colorPrimaryContainer"
+            app:cornerRadius="14dp" />
+
+        <!-- Support Developer Coffee Button -->
+        <Button
+            android:id="@+id/btn_support_coffee"
+            android:layout_width="match_parent"
+            android:layout_height="52dp"
+            android:layout_marginTop="10dp"
+            android:text="☕ TRAKTIR BANGDILLAH210 (DUKUNG PENGEMBANG)"
+            android:textColor="@color/colorOnPrimary"
+            android:textStyle="bold"
+            app:backgroundTint="@color/colorSuccess"
+            app:cornerRadius="14dp" />
+
+        <!-- Sideload Guide Card -->
+        <androidx.cardview.widget.CardView
+            android:id="@+id/card_sideload_guide"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            app:cardBackgroundColor="@color/colorSurface"
+            app:cardCornerRadius="16dp"
+            app:cardElevation="2dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="16dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="ℹ️ Panduan Instalasi APK Mandiri"
+                    android:textColor="@color/textTitle"
+                    android:textSize="14sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:lineSpacingExtra="3dp"
+                    android:text="1. Izinkan 'Instal dari Sumber Tidak Dikenal' pada file manager Anda.\n2. Jika Google Play Protect memberi peringatan, pilih 'Detail Lainnya' lalu 'Tetap Instal'.\n3. Berikan izin Mikrofon, Layar, dan Notifikasi untuk hasil optimal."
+                    android:textColor="@color/textCaption"
+                    android:textSize="12sp" />
+            </LinearLayout>
+        </androidx.cardview.widget.CardView>
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="20dp" />
+
+    </LinearLayout>
+</ScrollView>

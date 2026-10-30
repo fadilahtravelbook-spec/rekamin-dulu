@@ -1,0 +1,117 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Semua string UI untuk Rekamin Dulu by Bangdillah210 (Bahasa Indonesia) -->
+
+<resources>
+
+    <!-- ========== SPLASH SCREEN ========== -->
+    <string name="app_name">Rekamin Dulu</string>
+    <string name="by_bangdillah210">by Bangdillah210</string>
+    <string name="loading_dots_anim">3dot_anim</string>
+
+    <!-- ========== ONBOARDING ========== -->
+    <string name="onboarding_skip">Skip</string>
+    <string name="onboarding_lanjut">Lanjut</string>
+    <string name="onboarding_mulai_sekarang">Mulai Sekarang</string>
+
+    <string name="onboarding_slide1_title">Kenalan</string>
+    <string name="onboarding_slide1_body">Rekam layar dengan Mudah</string>
+    <string name="onboarding_slide1_body2">Rekam semua aktivitas layar tanpa batas waktu.</string>
+
+    <string name="onboarding_slide2_title">Audio Jernih, Hasil Maksimal</string>
+    <string name="onboarding_slide2_body">Rekam mikrofon dan suara aplikasi sekaligus.</string>
+
+    <string name="onboarding_slide3_title">Izin yang Dibutuhkan</string>
+    <string name="onboarding_slide3_body">Rekamin Dulu butuh izin mikrofon dan notifikasi untuk merekam dengan baik.</string>
+
+    <string name="record_audio_rationale">Aplikasi ingin mendengarkan mikrofon Anda untuk merekam suara.</string>
+    <string name="post_notifications_rationale">Aplikasi ingin mengirim notifikasi kontrol rekaman.</string>
+
+    <string name="izin_butuh">Izin Diperlukan</string>
+    <string name="buka_pengaturan">Buka Pengaturan</string>
+    <string name="nanti_saja">Nanti Saja</string>
+
+    <string name="tangkap_layar">🖥️ Tangkap Layar</string>
+    <string name="mikrofon">🎤 Mikrofon</string>
+    <string name="notifikasi">🔔 Notifikasi</string>
+
+    <!-- ========== HOME SCREEN ========== -->
+    <string name="library">Library</string>
+    <string name="settings">Settings</string>
+    <string name="siap_merekam">Siap merekam</string>
+    <string name="mulai_rekam">MULAI REKAM</string>
+    <string name="resolusi_info">1080p • 30 FPS</string>
+
+    <!-- ========== PERMISSION DIALOG ========== -->
+    <string name="izin_ditolak">Izin Ditolak</string>
+    <string name="aktifkan_izin">Aktifkan izin untuk merekam</string>
+    <string name="buka_sett">Buka Pengaturan</string>
+
+    <!-- ========== COUNTDOWN ========== -->
+    <string name="bersiap_merekam">Bersiap merekam...</string>
+    <string name="batalkan">Batalkan</string>
+
+    <!-- ========== RECORDING STATE ========== -->
+    <string name="merekam">Merekam...</string>
+    <string name="dijeda">Dijeda •</string>
+    <string name="lanjut">Lanjut</string>
+    <string name="hentikan">Hentikan</string>
+    <string name="menyimpan">Menyimpan rekaman...</string>
+
+    <!-- ========== SAVE TRANSITION ========== -->
+    <string name="tersimpan">Tersimpan</string>
+    <string name="galeri">Galeri</string>
+    <string name="movies">Movies</string>
+    <string name="rekamin_dulu">RekaminDulu</string>
+    <string name="gagal_simpan">Gagal menyimpan rekaman.</string>
+    <string name="coba_lagi">Coba lagi</string>
+
+    <!-- ========== LIBRARY ========== -->
+    <string name="belum_ada_rekaman">Belum ada rekaman. Mulai merekam!</string>
+    <string name="mulai_merekam">Mulai merekam</string>
+    <string name="cari_rekaman">Cari rekaman...</string>
+    <string name="ganti_nama">Ganti Nama</string>
+    <string name="bagikan">Bagikan</string>
+    <string name="hapus">Hapus</string>
+    <string name="konfirmasi_hapus">Hapus Rekaman?</string>
+    <string name="rekanan_hapus">Rekaman ini akan dihapus permanen. Tidak bisa dikembalikan.</string>
+    <string name="dibatalkan">Dibatalkan</string>
+
+    <!-- ========== PLAYER ========== -->
+    <string name="player">Player</string>
+    <string name="buka_di_aplikasi_lain">Buka di aplikasi lain</string>
+    <string name="coba_lagi_player">Coba lagi</string>
+    <string name="skip_10_detik">Skip 10 detik</string>
+
+    <!-- ========== SETTINGS ========== -->
+    <string name="pengaturan">Pengaturan</string>
+    <string name="video">Video</string>
+    <string name="audio">Audio</string>
+    <string name="perilaku">Perilaku</string>
+    <string name="tampilan">Tampilan</string>
+
+    <string name="tentang">Tentang</string>
+    <string name="versi">Versi 1.0.0</string>
+    <string name="kebijakan_privasi">Kebijakan Privasi</string>
+    <string name="tentang_aplikasi">Tentang Aplikasi</string>
+
+    <string name="countdown_3s">3 Detik</string>
+    <string name="countdown_1s">1 Detik</string>
+    <string name="getar_saat_mulai">Getar saat mulai</string>
+    <string name="hentikan_jika_panggilan">Hentikan jika ada panggilan</string>
+
+    <string name="tema_sistem">Sistem</string>
+    <string name="tema_light">Light</string>
+    <string name="tema_dark">Dark</string>
+
+    <string name="hapus_data">Hapus Data</string>
+
+    <!-- ========== TOAST/ SNACKBAR ========== -->
+    <string name="rekam_dihentikan">Rekaman dihentikan.</string>
+    <string name="penyimpanan_penuh">Penyimpanan penuh.</string>
+
+    <!-- ========== EDGE CASES ========== -->
+    <string name="rotasi_tidak_ikut">Rotasi layar tidak mempengaruhi rekaman.</string>
+    <string name="battery_rendah">Battery rendah, rekaman akan dihentikan otomatis.</string>
+    <string name="stop_sekarang">Stop sekarang</string>
+
+</resources>

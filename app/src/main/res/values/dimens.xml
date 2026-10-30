@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Design Tokens — Rekamin Dulu by Bangdillah210 -->
+<!-- Semua dimensi menggunakan sistem grid 8dp -->
+
+<resources>
+
+    <!-- ========== SPACING (Grid 8dp) ========== -->
+    <dimen name="spacing_4dp">4dp</dimen>
+    <dimen name="spacing_8dp">8dp</dimen>
+    <dimen name="spacing_12dp">12dp</dimen>
+    <dimen name="spacing_16dp">16dp</dimen>
+    <dimen name="spacing_20dp">20dp</dimen>
+    <dimen name="spacing_24dp">24dp</dimen>
+    <dimen name="spacing_32dp">32dp</dimen>
+    <dimen name="spacing_48dp">48dp</dimen>
+    <dimen name="spacing_64dp">64dp</dimen>
+
+    <!-- ========== RADIUS ========== -->
+    <dimen name="radius_8dp">8dp</dimen>
+    <dimen name="radius_12dp">12dp</dimen>
+    <dimen name="radius_16dp">16dp</dimen>
+    <dimen name="radius_20dp">20dp</dimen>
+    <dimen name="radius_24dp">24dp</dimen>
+    <dimen name="radius_28dp">28dp</dimen>
+    <dimen name="radius_32dp">32dp</dimen>
+
+    <!-- ========== TYPOGRAPHY ========== -->
+    <!-- Text sizes -->
+    <dimen name="text_display1">56sp</dimen>
+    <dimen name="text_display2">45sp</dimen>
+    <dimen name="text_display3">36sp</dimen>
+    <dimen name="text_headline1">32sp</dimen>
+    <dimen name="text_headline2">28sp</dimen>      <!-- Judul layar -->
+    <dimen name="text_headline3">24sp</dimen>
+    <dimen name="text_headline4">20sp</dimen>      <!-- Sub-judul -->
+    <dimen name="text_title1">17sp</dimen>
+    <dimen name="text_title2">16sp</dimen>        <!-- Teks tubuh -->
+    <dimen name="text_body1">14sp</dimen>
+    <dimen name="text_body2">12sp</dimen>
+    <dimen name="text_caption">11sp</dimen>
+    <dimen name="text_overline">10sp</dimen>
+
+    <!-- ========== COMPONENT SIZES ========== -->
+    <!-- FAB -->
+    <dimen name="fab_diameter">56dp</dimen>
+    <dimen name="fab_elevation_normal">4dp</dimen>
+    <dimen name="fab_elevation_pressed">6dp</dimen>
+
+    <!-- Buttons -->
+    <dimen name="button_primary_height">48dp</dimen>
+    <dimen name="button_primary_radius">28dp</dimen>
+
+    <!-- Toggle/Switch -->
+    <dimen name="toggle_track_height">20dp</dimen>
+
+    <!-- Card / Item Kartu -->
+    <dimen name="card_radius">16dp</dimen>
+    <dimen name="card_elevation">2dp</dimen>
+    <dimen name="card_padding">16dp</dimen>
+
+    <!-- AppBar / Toolbar -->
+    <dimen name="appbar_height">56dp</dimen>
+
+    <!-- Notification -->
+    <dimen name="notification_height">60dp</dimen>
+    <dimen name="notification_timer_text">24sp</dimen>
+    <dimen name="notification_button_width">48dp</dimen>
+
+    <!-- Library Item -->
+    <dimen name="library_item_height">120dp</dimen>
+    <dimen name="library_grid_width">160dp</dimen>
+
+    <!-- Player -->
+    <dimen name="player_seek_bar_height">4dp</dimen>
+    <dimen name="player_button_height">40dp</dimen>
+    <dimen name="player_button_radius">8dp</dimen>
+
+    <!-- Toast / Snackbar -->
+    <dimen name="toast_padding_horizontal">24dp</dimen>
+    <dimen name="toast_height">40dp</dimen>
+
+    <!-- Edge cases / Misc -->
+
+</resources>

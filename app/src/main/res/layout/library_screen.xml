@@ -1,0 +1,219 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/colorBackground"
+    tools:context="com.bangdillah.rekamindulu.library.LibraryActivity">
+
+    <!-- Header Toolbar -->
+    <LinearLayout
+        android:id="@+id/toolbar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="@color/colorSurface"
+        android:elevation="4dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:padding="16dp"
+        app:layout_constraintTop_toTopOf="parent">
+
+        <ImageView
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:contentDescription="Logo Rekamin"
+            android:src="@mipmap/ic_launcher" />
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="10dp"
+            android:layout_weight="1"
+            android:text="Galeri Rekaman Video"
+            android:textColor="@color/textTitle"
+            android:textSize="18sp"
+            android:textStyle="bold" />
+
+        <Button
+            android:id="@+id/btn_tambah_rekam"
+            android:layout_width="wrap_content"
+            android:layout_height="36dp"
+            android:paddingHorizontal="12dp"
+            android:text="+ Rekam Baru"
+            android:textColor="@color/colorOnPrimary"
+            android:textSize="12sp"
+            app:backgroundTint="@color/colorPrimary" />
+    </LinearLayout>
+
+    <!-- ACTIVE RECORDING PERSISTENT INDICATOR -->
+    <androidx.cardview.widget.CardView
+        android:id="@+id/card_library_recording_indicator"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginHorizontal="12dp"
+        android:layout_marginTop="8dp"
+        android:visibility="gone"
+        app:cardBackgroundColor="@color/colorError"
+        app:cardCornerRadius="12dp"
+        app:cardElevation="4dp"
+        app:layout_constraintTop_toBottomOf="@id/toolbar">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:padding="10dp">
+
+            <ImageView
+                android:layout_width="20dp"
+                android:layout_height="20dp"
+                android:src="@drawable/ic_record" />
+
+            <TextView
+                android:id="@+id/text_library_rec_timer"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:layout_weight="1"
+                android:text="🔴 Perekaman Layar Aktif • 00:00"
+                android:textColor="#FFFFFF"
+                android:textSize="12sp"
+                android:textStyle="bold" />
+
+            <Button
+                android:id="@+id/btn_library_stop_rec"
+                android:layout_width="wrap_content"
+                android:layout_height="32dp"
+                android:text="Stop"
+                android:textColor="@color/colorError"
+                android:textSize="11sp"
+                android:textStyle="bold"
+                app:backgroundTint="#FFFFFF" />
+        </LinearLayout>
+    </androidx.cardview.widget.CardView>
+
+    <!-- SEARCH & FILTER BAR -->
+    <androidx.cardview.widget.CardView
+        android:id="@+id/card_search_bar"
+        android:layout_width="match_parent"
+        android:layout_height="44dp"
+        android:layout_marginHorizontal="12dp"
+        android:layout_marginTop="8dp"
+        app:cardBackgroundColor="@color/colorSurface"
+        app:cardCornerRadius="12dp"
+        app:cardElevation="2dp"
+        app:layout_constraintTop_toBottomOf="@id/card_library_recording_indicator">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingHorizontal="12dp">
+
+            <ImageView
+                android:layout_width="20dp"
+                android:layout_height="20dp"
+                android:src="@drawable/ic_library" />
+
+            <EditText
+                android:id="@+id/et_search_library"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_marginStart="8dp"
+                android:layout_weight="1"
+                android:background="@android:color/transparent"
+                android:hint="Cari rekaman video..."
+                android:imeOptions="actionSearch"
+                android:inputType="text"
+                android:maxLines="1"
+                android:textColor="@color/textTitle"
+                android:textColorHint="@color/textCaption"
+                android:textSize="13sp" />
+
+            <ImageView
+                android:id="@+id/btn_sort_library"
+                android:layout_width="32dp"
+                android:layout_height="32dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="Urutkan Rekaman"
+                android:padding="6dp"
+                android:src="@drawable/ic_sort" />
+        </LinearLayout>
+    </androidx.cardview.widget.CardView>
+
+    <!-- Empty State View -->
+    <LinearLayout
+        android:id="@+id/empty_state"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:gravity="center"
+        android:orientation="vertical"
+        android:padding="32dp"
+        android:visibility="gone"
+        app:layout_constraintBottom_toTopOf="@id/bottom_navigation_library"
+        app:layout_constraintTop_toBottomOf="@id/card_search_bar">
+
+        <ImageView
+            android:layout_width="80dp"
+            android:layout_height="80dp"
+            android:layout_marginBottom="16dp"
+            android:contentDescription="Belum ada rekaman"
+            android:src="@drawable/ic_library" />
+
+        <TextView
+            android:id="@+id/text_empty_title"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Belum Ada Hasil Rekaman"
+            android:textColor="@color/textTitle"
+            android:textSize="18sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/text_empty_subtitle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:gravity="center"
+            android:text="Mulai rekam layar HP Anda sekarang! Hasil video MP4 akan otomatis tersimpan di sini."
+            android:textColor="@color/textCaption"
+            android:textSize="13sp" />
+
+        <Button
+            android:id="@+id/btn_empty_start"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="20dp"
+            android:text="Mulai Merekam Sekarang"
+            android:textColor="@color/colorOnPrimary"
+            app:backgroundTint="@color/colorError" />
+    </LinearLayout>
+
+    <!-- RecyclerView daftar rekaman -->
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/library_recycler_view"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:clipToPadding="false"
+        android:paddingVertical="8dp"
+        android:scrollbars="vertical"
+        app:layout_constraintBottom_toTopOf="@id/bottom_navigation_library"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/card_search_bar" />
+
+    <!-- BOTTOM NAVIGATION -->
+    <com.google.android.material.bottomnavigation.BottomNavigationView
+        android:id="@+id/bottom_navigation_library"
+        android:layout_width="match_parent"
+        android:layout_height="60dp"
+        android:background="@color/colorSurface"
+        app:itemIconTint="@color/colorPrimary"
+        app:itemTextColor="@color/colorPrimary"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:menu="@menu/bottom_nav_menu" />
+
+</androidx.constraintlayout.widget.ConstraintLayout>

@@ -1,0 +1,128 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- ========== PERMISSIONS ========== -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="28" />
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
+    <uses-permission android:name="android.permission.VIBRATE" />
+
+    <!-- ========== APPLICATION CONFIG ========== -->
+    <application
+        android:allowBackup="true"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:label="@string/app_name"
+        android:theme="@style/Theme.RekaminDulu">
+
+        <!-- Notification Channel Meta -->
+        <meta-data
+            android:name="android.app.default_notification_channel_id"
+            android:value="rekam_notifikasi" />
+
+        <!-- SPLASH SCREEN ACTIVITY (LAUNCHER) -->
+        <activity
+            android:name=".SplashActivity"
+            android:exported="true"
+            android:theme="@style/Theme.RekaminDulu.NoActionBar">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- ONBOARDING ACTIVITY -->
+        <activity
+            android:name=".onboarding.OnboardingActivity"
+            android:exported="false"
+            android:theme="@style/Theme.RekaminDulu.NoActionBar" />
+
+        <!-- MAIN ACTIVITY -->
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:theme="@style/Theme.RekaminDulu.NoActionBar" />
+
+        <!-- HOME SCREEN ACTIVITY -->
+        <activity
+            android:name=".HomeActivity"
+            android:exported="true"
+            android:theme="@style/Theme.RekaminDulu.NoActionBar" />
+
+        <!-- PERMISSION DIALOG ACTIVITY -->
+        <activity
+            android:name=".permission.PermissionDialogActivity"
+            android:exported="false"
+            android:theme="@style/Theme.RekaminDulu.Dialog" />
+
+        <!-- COUNTDOWN ACTIVITY -->
+        <activity
+            android:name=".countdown.CountdownActivity"
+            android:exported="false"
+            android:theme="@style/Theme.RekaminDulu.NoActionBar" />
+
+        <!-- SETTINGS ACTIVITY -->
+        <activity
+            android:name=".settings.SettingsActivity"
+            android:exported="false"
+            android:theme="@style/Theme.RekaminDulu.NoActionBar" />
+
+        <!-- LIBRARY ACTIVITY -->
+        <activity
+            android:name=".library.LibraryActivity"
+            android:exported="false"
+            android:theme="@style/Theme.RekaminDulu.NoActionBar" />
+
+        <!-- PLAYER ACTIVITY -->
+        <activity
+            android:name=".player.PlayerActivity"
+            android:exported="false"
+            android:theme="@style/Theme.RekaminDulu.NoActionBar" />
+
+        <!-- TRIM ACTIVITY -->
+        <activity
+            android:name=".trim.TrimActivity"
+            android:exported="false"
+            android:theme="@style/Theme.RekaminDulu.NoActionBar" />
+
+        <!-- ABOUT SCREEN ACTIVITY -->
+        <activity
+            android:name=".about.AboutActivity"
+            android:exported="false"
+            android:theme="@style/Theme.RekaminDulu.NoActionBar" />
+
+        <!-- FLOATING OVERLAY SERVICE -->
+        <service
+            android:name=".floating.FloatingOverlayService"
+            android:exported="false" />
+
+        <!-- SCREEN RECORDING SERVICE -->
+        <service
+            android:name=".service.ScreenRecordingService"
+            android:exported="false"
+            android:foregroundServiceType="mediaProjection|microphone" />
+
+        <!-- SCREEN RECORDER SERVICE -->
+        <service
+            android:name=".service.ScreenRecorderService"
+            android:exported="false"
+            android:foregroundServiceType="mediaProjection|microphone" />
+
+        <!-- FILE PROVIDER UNTUK SHARE VIDEO -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
+
+    </application>
+</manifest>

@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <!-- ========== THEME ========== -->
+    <style name="Theme.RekaminDulu" parent="Theme.Material3.DayNight.NoActionBar">
+        <item name="colorPrimary">#6C5CE7</item>
+        <item name="colorOnPrimary">#FFFFFF</item>
+        <item name="android:windowBackground">@color/colorBackground</item>
+        <item name="android:statusBarColor">#6C5CE7</item>
+        <item name="android:navigationBarColor">@android:color/darker_gray</item>
+    </style>
+
+    <style name="Theme.RekaminDulu.NoActionBar" parent="Theme.RekaminDulu" />
+
+    <style name="Theme.RekaminDulu.Light" parent="Theme.Material3.Light.NoActionBar">
+        <item name="colorPrimary">#6C5CE7</item>
+        <item name="colorOnPrimary">#FFFFFF</item>
+        <item name="colorSurface">#FAFAFA</item>
+        <item name="colorOnSurface">#212121</item>
+        <item name="android:windowBackground">#FAFAFA</item>
+    </style>
+
+    <style name="Theme.RekaminDulu.Dark" parent="Theme.Material3.Dark.NoActionBar">
+        <item name="colorPrimary">#6C5CE7</item>
+        <item name="colorOnPrimary">#FFFFFF</item>
+        <item name="colorSurface">#121212</item>
+        <item name="android:windowBackground">#121212</item>
+    </style>
+
+    <style name="Theme.RekaminDulu.Dialog" parent="Theme.Material3.DayNight.Dialog">
+        <item name="colorPrimary">#6C5CE7</item>
+    </style>
+
+    <style name="Theme.RekaminDulu.Splash" parent="Theme.RekaminDulu.NoActionBar" />
+
+    <!-- ========== COMPONENT STYLES ========== -->
+    <style name="Widget.App.Button" parent="Widget.Material3.Button">
+        <item name="android:layout_height">48dp</item>
+        <item name="android:elevation">2dp</item>
+        <item name="android:minHeight">48dp</item>
+        <item name="android:paddingLeft">24dp</item>
+        <item name="android:paddingRight">24dp</item>
+    </style>
+
+</resources>
