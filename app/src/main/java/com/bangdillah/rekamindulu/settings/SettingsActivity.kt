@@ -190,7 +190,7 @@ class SettingsActivity : AppCompatActivity() {
     }
 
     private fun setupListeners() {
-        // Gaming mode toggle with automatic FPS & Bitrate sync
+        // Gaming mode toggle with automatic FPS & Bitrate sync + sub-feature coordination
         toggleGaming?.setOnCheckedChangeListener { _, isChecked ->
             appPreferences.isGamingMode = isChecked
             findViewById<View>(R.id.gaming_mode_tooltip)?.visibility =
@@ -200,8 +200,14 @@ class SettingsActivity : AppCompatActivity() {
                 // Boost parameters for gaming
                 appPreferences.fps = 60
                 appPreferences.bitrateMbps = 12
+                appPreferences.fpsStabilizerEnabled = true
+                appPreferences.gamingTurboBoost = true
+                appPreferences.hardwareAccelerationEnabled = true
+                toggleFpsStabilizer?.isChecked = true
+                toggleTurboBoost?.isChecked = true
+                toggleHardwareAcceleration?.isChecked = true
                 updateUIValues(skipGamingSwitch = true)
-                Toast.makeText(this, "⚡ Mode Gaming Pro Aktif: 60 FPS & 12 Mbps", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "⚡ Mode Gaming Pro Aktif: 60 FPS & 12 Mbps (Stabilisator + Turbo CPU + GPU HW)", Toast.LENGTH_SHORT).show()
             } else {
                 appPreferences.fps = 30
                 appPreferences.bitrateMbps = 8
@@ -213,8 +219,12 @@ class SettingsActivity : AppCompatActivity() {
         // FPS Stabilizer toggle
         toggleFpsStabilizer?.setOnCheckedChangeListener { _, isChecked ->
             appPreferences.fpsStabilizerEnabled = isChecked
+            if (isChecked && appPreferences.fps < 60) {
+                appPreferences.fps = 60
+                updateUIValues(skipGamingSwitch = true)
+            }
             val msg = if (isChecked) {
-                "⚡ Stabilisator FPS Aktif: Frame rate terkunci stabil 60 FPS"
+                "⚡ Stabilisator FPS Aktif: Frame rate terkunci stabil 60 FPS (Anti-Drop)"
             } else {
                 "Stabilisator FPS Dinonaktifkan"
             }
@@ -225,7 +235,7 @@ class SettingsActivity : AppCompatActivity() {
         toggleTurboBoost?.setOnCheckedChangeListener { _, isChecked ->
             appPreferences.gamingTurboBoost = isChecked
             val msg = if (isChecked) {
-                "🚀 Game Turbo Aktif: Prioritas thread encoder dimaksimalkan"
+                "🚀 Game Turbo Aktif: Prioritas thread URGENT_DISPLAY & CPU Anti-Throttle"
             } else {
                 "Game Turbo Dinonaktifkan"
             }
@@ -236,9 +246,9 @@ class SettingsActivity : AppCompatActivity() {
         toggleHardwareAcceleration?.setOnCheckedChangeListener { _, isChecked ->
             appPreferences.hardwareAccelerationEnabled = isChecked
             val msg = if (isChecked) {
-                "⚡ Akselerasi Hardware GPU Aktif: Beban CPU dialihkan ke GPU/VPU"
+                "⚡ Akselerasi Hardware GPU Aktif: AVCProfileHigh 4.2 via VPU Hardware (CPU Bebas Lag)"
             } else {
-                "Akselerasi Hardware Dinonaktifkan (Mode Software Standar)"
+                "Akselerasi Hardware Dinonaktifkan (Mode Baseline Kompatibel)"
             }
             Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
         }

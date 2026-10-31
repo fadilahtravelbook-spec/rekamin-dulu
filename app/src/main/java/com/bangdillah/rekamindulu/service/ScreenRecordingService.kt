@@ -15,9 +15,11 @@ import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
 import android.hardware.display.DisplayManager
 import android.hardware.display.VirtualDisplay
+import android.media.MediaMetadataRetriever
 import android.media.MediaRecorder
 import android.media.projection.MediaProjection
 import android.media.projection.MediaProjectionManager
+import android.net.wifi.WifiManager
 import android.os.Build
 import android.os.Handler
 import android.os.IBinder
@@ -41,6 +43,9 @@ import com.bangdillah.rekamindulu.utils.DeviceAnalyzer
 import com.bangdillah.rekamindulu.utils.StorageHelper
 import java.io.File
 import java.util.Locale
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 
 /**
  * ScreenRecordingService - Foreground Service that manages the MediaProjection lifecycle,
@@ -86,8 +91,11 @@ open class ScreenRecordingService : Service() {
     protected var mediaProjection: MediaProjection? = null
     protected var mediaProjectionCallback: MediaProjection.Callback? = null
     protected var virtualDisplay: VirtualDisplay? = null
+    protected var virtualDisplayThread: android.os.HandlerThread? = null
+    protected var virtualDisplayHandler: Handler? = null
     protected var mediaRecorder: MediaRecorder? = null
     protected var wakeLock: PowerManager.WakeLock? = null
+    protected var wifiLock: WifiManager.WifiLock? = null
 
     protected var screenWidth = 720
     protected var screenHeight = 1280
@@ -221,19 +229,23 @@ open class ScreenRecordingService : Service() {
         isStarting = true
         val prefs = AppPreferences(this)
 
-        // 1. Inisialisasi WakeLock untuk menjamin proses latar belakang tidak tertidur oleh OS
-        acquireWakeLock()
+        // 1. Inisialisasi WakeLock dan Wi-Fi lock untuk performa maksimal bebas throttle
+        acquireWakeLock(prefs)
 
-        // 1b. Game Turbo & Hardware Acceleration: Elevasi prioritas thread encoder GPU/CPU agar tidak di-throttle oleh game berat
-        if (prefs.gamingTurboBoost || prefs.isGamingMode || prefs.hardwareAccelerationEnabled) {
+        // 1b. Game Turbo & Mode Gaming: Elevasi prioritas thread encoder CPU ke URGENT_DISPLAY
+        if (prefs.gamingTurboBoost || prefs.isGamingMode) {
             try {
                 android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_URGENT_DISPLAY)
-                Log.i(TAG, "Game Turbo & GPU Offload: Thread priority elevated to THREAD_PRIORITY_URGENT_DISPLAY")
+                Log.i(TAG, "Game Turbo: Service process priority elevated to THREAD_PRIORITY_URGENT_DISPLAY (-8)")
             } catch (e: Exception) {
                 try {
                     android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_FOREGROUND)
                 } catch (ignored: Exception) {}
             }
+        } else {
+            try {
+                android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_FOREGROUND)
+            } catch (ignored: Exception) {}
         }
 
         // 2. Buat Notification Channel dan promosikan Service ke Foreground Service
@@ -246,7 +258,7 @@ open class ScreenRecordingService : Service() {
             @Suppress("DEPRECATION")
             windowManager.defaultDisplay.getRealMetrics(metrics)
 
-            calculateOutputDimensions(metrics, prefs.resolution)
+            calculateOutputDimensions(metrics, prefs.resolution, prefs.orientation)
             screenDensity = metrics.densityDpi
 
             // 4. Siapkan file output di direktori aman
@@ -267,6 +279,21 @@ open class ScreenRecordingService : Service() {
                 return
             }
 
+            // Inisialisasi dedicated HandlerThread dengan prioritas URGENT_DISPLAY (Game Turbo)
+            // agar antrean buffer frame dari SurfaceFlinger tidak pernah terhambat oleh thread UI
+            try {
+                virtualDisplayThread?.quitSafely()
+            } catch (ignored: Exception) {}
+            val vdPriority = if (prefs.gamingTurboBoost || prefs.isGamingMode) {
+                android.os.Process.THREAD_PRIORITY_URGENT_DISPLAY
+            } else {
+                android.os.Process.THREAD_PRIORITY_FOREGROUND
+            }
+            val vdThread = android.os.HandlerThread("RekaminVDisplayWorker", vdPriority).apply { start() }
+            virtualDisplayThread = vdThread
+            val vdHandler = Handler(vdThread.looper)
+            virtualDisplayHandler = vdHandler
+
             // Callback MediaProjection untuk Android 14+
             val callback = object : MediaProjection.Callback() {
                 override fun onStop() {
@@ -277,7 +304,7 @@ open class ScreenRecordingService : Service() {
                 }
             }
             mediaProjectionCallback = callback
-            mediaProjection?.registerCallback(callback, Handler(Looper.getMainLooper()))
+            mediaProjection?.registerCallback(callback, vdHandler)
 
             // 7. Mulai MediaRecorder TERLEBIH DAHULU sebelum VirtualDisplay
             // Menjamin recorder.surface aktif di state RECORDING dan token MediaProjection belum terpakai jika gagal
@@ -305,7 +332,8 @@ open class ScreenRecordingService : Service() {
                 return
             }
 
-            val displayFlags = DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR or DisplayManager.VIRTUAL_DISPLAY_FLAG_PRESENTATION
+            // Gunakan VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR murni untuk latensi terendah & sinkronisasi VSYNC 60 FPS langsung
+            val displayFlags = DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR
             virtualDisplay = mediaProjection?.createVirtualDisplay(
                 "RekaminDisplay",
                 screenWidth,
@@ -314,7 +342,7 @@ open class ScreenRecordingService : Service() {
                 displayFlags,
                 recorderSurface,
                 null,
-                null
+                vdHandler
             )
 
             isRecording = true
@@ -369,11 +397,37 @@ open class ScreenRecordingService : Service() {
         sendBroadcast(errorIntent)
     }
 
-    private fun acquireWakeLock() {
+    private fun acquireWakeLock(prefs: AppPreferences) {
         try {
             val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
-            wakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "RekaminDulu:RecordingWakeLock").apply {
+            val lockTag = if (prefs.gamingTurboBoost || prefs.isGamingMode) {
+                "RekaminDulu:GameTurboCpuLock"
+            } else {
+                "RekaminDulu:RecordingWakeLock"
+            }
+            wakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, lockTag).apply {
+                setReferenceCounted(false)
                 acquire(24 * 60 * 60 * 1000L) // maks 24 jam
+            }
+
+            // Jika Game Turbo atau Mode Gaming aktif, kunci Wi-Fi low latency agar ping game online stabil
+            if (prefs.gamingTurboBoost || prefs.isGamingMode) {
+                try {
+                    val wifiManager = applicationContext.getSystemService(Context.WIFI_SERVICE) as? WifiManager
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                        wifiLock = wifiManager?.createWifiLock(WifiManager.WIFI_MODE_FULL_LOW_LATENCY, "RekaminDulu:GameTurboWifiLock")
+                    } else {
+                        @Suppress("DEPRECATION")
+                        wifiLock = wifiManager?.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "RekaminDulu:GameTurboWifiLock")
+                    }
+                    wifiLock?.apply {
+                        setReferenceCounted(false)
+                        acquire()
+                    }
+                    Log.i(TAG, "Game Turbo: Low-latency CPU & Wi-Fi Lock aktif untuk game online")
+                } catch (eWifi: Exception) {
+                    Log.w(TAG, "Wi-Fi Lock notice: ${eWifi.message}")
+                }
             }
         } catch (e: Exception) {
             Log.w(TAG, "WakeLock acquisition notice: ${e.message}")
@@ -390,34 +444,60 @@ open class ScreenRecordingService : Service() {
         } finally {
             wakeLock = null
         }
+
+        try {
+            if (wifiLock?.isHeld == true) {
+                wifiLock?.release()
+            }
+        } catch (eWifi: Exception) {
+            Log.w(TAG, "WiFiLock release error: ${eWifi.message}")
+        } finally {
+            wifiLock = null
+        }
     }
 
-    protected fun calculateOutputDimensions(metrics: DisplayMetrics, resolutionPref: String) {
+    protected fun calculateOutputDimensions(metrics: DisplayMetrics, resolutionPref: String, orientationPref: String = "AUTO") {
         val rawWidth = metrics.widthPixels.coerceAtLeast(320)
         val rawHeight = metrics.heightPixels.coerceAtLeast(480)
-        val isPortrait = rawHeight >= rawWidth
-
-        val longSide = if (isPortrait) rawHeight else rawWidth
-        val shortSide = if (isPortrait) rawWidth else rawHeight
-        val aspectRatio = longSide.toDouble() / shortSide.toDouble()
-
-        // Clamp maximum dimension so mobile hardware encoders never reject out-of-spec heights
-        val maxLong = when (resolutionPref) {
-            "4K" -> 3840
-            "1080p" -> 1920
-            "720p" -> 1280
-            else -> 854
+        val isPortrait = when (orientationPref) {
+            "LANDSCAPE" -> false
+            "PORTRAIT" -> true
+            else -> rawHeight >= rawWidth
         }
 
-        val effectiveLong = maxLong.coerceAtMost(longSide).coerceAtLeast(480)
-        val effectiveShort = (effectiveLong / aspectRatio).toInt().coerceAtLeast(320)
+        val longSide = maxOf(rawWidth, rawHeight)
+        val shortSide = minOf(rawWidth, rawHeight)
+        val aspectRatio = longSide.toDouble() / shortSide.toDouble()
 
-        var finalW = if (isPortrait) effectiveShort else effectiveLong
-        var finalH = if (isPortrait) effectiveLong else effectiveShort
+        // Standar resolusi rekaman layar mobile:
+        // Jika resolusi native perangkat memiliki sisi pendek <= 1080 (misal 1080x2400 pada layar 20:9),
+        // mempertahankan resolusi native 1:1 pixel match menghilangkan overhead scaling GPU SurfaceFlinger,
+        // mencegah stutter, frame drop, dan distorsi aspek rasio di game 3D!
+        val targetShort = when (resolutionPref) {
+            "4K" -> minOf(2160, shortSide)
+            "1080p" -> minOf(1080, shortSide)
+            "720p" -> minOf(720, shortSide)
+            else -> minOf(480, shortSide)
+        }
 
-        // Ensure divisible by 16 for universal H.264 / H.265 hardware compatibility
-        finalW -= (finalW % 16)
-        finalH -= (finalH % 16)
+        val effectiveShort = targetShort.coerceAtLeast(320)
+        var finalW: Int
+        var finalH: Int
+
+        if (effectiveShort == shortSide) {
+            // 1:1 Pixel Match Native: Zero-copy GPU Hardware Overlay tanpa cropping atau black bars
+            finalW = if (isPortrait) shortSide else longSide
+            finalH = if (isPortrait) longSide else shortSide
+        } else {
+            // Skala resolusi (misal 720p pada layar 1080p)
+            val effectiveLong = (effectiveShort * aspectRatio).toInt().coerceAtLeast(480)
+            finalW = if (isPortrait) effectiveShort else effectiveLong
+            finalH = if (isPortrait) effectiveLong else effectiveShort
+        }
+
+        // Pastikan dimensi selalu bilangan genap (divisible by 2) untuk encoder H.264 / H.265 YUV420
+        if (finalW % 2 != 0) finalW -= 1
+        if (finalH % 2 != 0) finalH -= 1
 
         screenWidth = finalW.coerceAtLeast(320)
         screenHeight = finalH.coerceAtLeast(480)
@@ -497,9 +577,10 @@ open class ScreenRecordingService : Service() {
                     if (withAudio) {
                         try {
                             setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
-                            // Jalur internal menggunakan 48kHz (standar output game Android) 160kbps untuk kejernihan audio game
-                            val sampleRate = if (isInternalOnly) 48000 else 44100
-                            val audioBitrate = if (isInternalOnly) 160000 else 128000
+                            // Jalur internal & mic menggunakan 48kHz (standar native audio HAL Android)
+                            // 48kHz menghindari resampling perangkat lunak CPU di AudioFlinger yang menyebabkan buffer stall
+                            val sampleRate = 48000
+                            val audioBitrate = 128000
                             setAudioChannels(1) // Kompatibilitas universal
                             setAudioSamplingRate(sampleRate)
                             setAudioEncodingBitRate(audioBitrate)
@@ -525,9 +606,24 @@ open class ScreenRecordingService : Service() {
                     }
                     setVideoEncoder(encoder)
                     setOutputFile(filePath)
+                    val chosenFps = if (prefs.isGamingMode || prefs.fpsStabilizerEnabled) maxOf(60, fps) else fps
+                    // Bitrate 8-10 Mbps adalah sweet-spot emas untuk video 1080p 60FPS:
+                    // Sangat jernih, latensi kompresi hardware < 6ms per frame, antrean buffer SurfaceFlinger tidak pernah tersumbat!
+                    val chosenBitrate = if (prefs.isGamingMode) {
+                        maxOf(8_000_000, minOf(10_000_000, bitrate))
+                    } else {
+                        minOf(8_000_000, bitrate)
+                    }
+
                     setVideoSize(targetWidth, targetHeight)
-                    setVideoEncodingBitRate(bitrate)
-                    setVideoFrameRate(fps)
+                    setVideoEncodingBitRate(chosenBitrate)
+                    setVideoFrameRate(chosenFps)
+
+                    // Sinkronisasi frame rate surface recorder (mencegah variable frame rate judder & drop fps)
+                    // Catatan arsitektur: Hindari memanggil setCaptureRate() di MediaRecorder karena mengaktifkan
+                    // time-lapse recorder pada Stagefright C++ layer dan menonaktifkan VSYNC timestamp real-time.
+                    // Menggunakan setVideoFrameRate(chosenFps) dengan Surface dari VirtualDisplay menjamin 60 FPS murni.
+                    Log.i(TAG, "Stabilisator FPS: Hardware encoder aktif pada $chosenFps FPS (${chosenBitrate / 1_000_000} Mbps)")
 
                     setOnErrorListener { _, what, extra ->
                         Log.e(TAG, "MediaRecorder error: what=$what, extra=$extra")
@@ -557,60 +653,68 @@ open class ScreenRecordingService : Service() {
         val ultraSafeW = if (isPortrait) 480 else 848
         val ultraSafeH = if (isPortrait) 848 else 480
 
-        val initialBitrate = prefs.bitrateMbps * 1000 * 1000
-        val initialFps = prefs.fps
+        val initialBitrate = if (prefs.isGamingMode) {
+            maxOf(8_000_000, minOf(10_000_000, prefs.bitrateMbps * 1000 * 1000))
+        } else {
+            minOf(8_000_000, prefs.bitrateMbps * 1000 * 1000)
+        }
+        val initialFps = if (prefs.isGamingMode || prefs.fpsStabilizerEnabled) {
+            maxOf(60, prefs.fps)
+        } else {
+            prefs.fps
+        }
         val preferredAudioSource = if (isInternalOnly && prefs.internalAudioStabilizer) {
             MediaRecorder.AudioSource.VOICE_RECOGNITION
         } else {
             com.bangdillah.rekamindulu.audio.MicrophoneSelector.getAudioSource(prefs.micType)
         }
 
-        // Tier 1: Konfigurasi optimal sesuai pilihan pengguna (Hardware GPU + Audio Internal/Mic)
+        // Tier 1: Konfigurasi optimal sesuai pilihan pengguna (Resolusi Asli Layar 1:1 + Target FPS 60 + Audio)
         if (configureAndPrepare(wantsAudio, screenWidth, screenHeight, initialBitrate, initialFps, preferredAudioSource)) {
-            Log.i(TAG, "Tier 1: MediaRecorder siap (${screenWidth}x${screenHeight}, audio=$wantsAudio, internal=$isInternalOnly)")
+            Log.i(TAG, "Tier 1: MediaRecorder siap (${screenWidth}x${screenHeight} @ ${initialFps} FPS, audio=$wantsAudio, internal=$isInternalOnly)")
             return
         }
 
-        // Tier 2: Jika Tier 1 gagal dan pengguna menginginkan audio, coba dengan sumber MIC standar
+        // Tier 2: Jika Tier 1 gagal dan pengguna menginginkan audio, coba dengan sumber MIC standar pada 60 FPS
         if (wantsAudio && preferredAudioSource != MediaRecorder.AudioSource.MIC) {
-            Log.w(TAG, "Tier 1 gagal, mencoba Tier 2 (Resolusi asli + Audio MIC Standar)")
+            Log.w(TAG, "Tier 1 gagal, mencoba Tier 2 (Resolusi asli @ ${initialFps} FPS + Audio MIC Standar)")
             if (configureAndPrepare(true, screenWidth, screenHeight, initialBitrate, initialFps, MediaRecorder.AudioSource.MIC)) {
-                Log.i(TAG, "Tier 2: MediaRecorder siap dengan audio MIC standar")
+                Log.i(TAG, "Tier 2: MediaRecorder siap dengan audio MIC standar @ ${initialFps} FPS")
                 return
             }
         }
 
-        // Tier 3: Fallback ke standar HD 720p 30fps TETAP DENGAN AUDIO (Jalur Audio Dipertahankan)
-        Log.w(TAG, "Mencoba Tier 3 (HD 720p 30fps DENGAN AUDIO)")
-        if (configureAndPrepare(wantsAudio, safeW, safeH, 3_500_000, 30, MediaRecorder.AudioSource.MIC)) {
+        // Tier 3: Fallback ke HD 720p TETAP PADA 60 FPS DENGAN AUDIO (Anti Drop FPS)
+        Log.w(TAG, "Mencoba Tier 3 (HD 720p @ ${initialFps} FPS DENGAN AUDIO)")
+        if (configureAndPrepare(wantsAudio, safeW, safeH, 6_000_000, initialFps, MediaRecorder.AudioSource.MIC)) {
             screenWidth = safeW
             screenHeight = safeH
-            Log.i(TAG, "Tier 3: MediaRecorder 720p siap (audio=$wantsAudio)")
+            Log.i(TAG, "Tier 3: MediaRecorder 720p siap @ ${initialFps} FPS (audio=$wantsAudio)")
             return
         }
 
-        // Tier 4: Fallback ke 480p 30fps TETAP DENGAN AUDIO
-        Log.w(TAG, "Mencoba Tier 4 (480p 30fps DENGAN AUDIO)")
-        if (configureAndPrepare(wantsAudio, ultraSafeW, ultraSafeH, 1_500_000, 30, MediaRecorder.AudioSource.MIC)) {
+        // Tier 4: Fallback ke 480p TETAP PADA 60 FPS DENGAN AUDIO
+        Log.w(TAG, "Mencoba Tier 4 (480p @ ${initialFps} FPS DENGAN AUDIO)")
+        if (configureAndPrepare(wantsAudio, ultraSafeW, ultraSafeH, 3_000_000, initialFps, MediaRecorder.AudioSource.MIC)) {
             screenWidth = ultraSafeW
             screenHeight = ultraSafeH
-            Log.i(TAG, "Tier 4: MediaRecorder 480p siap (audio=$wantsAudio)")
+            Log.i(TAG, "Tier 4: MediaRecorder 480p siap @ ${initialFps} FPS (audio=$wantsAudio)")
             return
         }
 
-        // Tier 5: Hanya jika hardware audio menolak karena in-game voice chat eksklusif, fallback ke video-only 720p
+        // Tier 5: Hanya jika hardware audio menolak karena in-game voice chat eksklusif, fallback ke video-only 720p 60 FPS
         if (wantsAudio) {
-            Log.w(TAG, "Perangkat keras audio sibuk/tidak merespon, fallback ke video-only")
-            if (configureAndPrepare(false, safeW, safeH, 3_000_000, 30)) {
+            Log.w(TAG, "Perangkat keras audio sibuk/tidak merespon, fallback ke video-only 720p @ ${initialFps} FPS")
+            if (configureAndPrepare(false, safeW, safeH, 5_000_000, initialFps)) {
                 screenWidth = safeW
                 screenHeight = safeH
-                Log.i(TAG, "Tier 5: MediaRecorder 720p video-only siap")
+                Log.i(TAG, "Tier 5: MediaRecorder 720p video-only siap @ ${initialFps} FPS")
                 return
             }
         }
 
-        // Tier 6: Fallback terakhir universal 480p video-only
-        if (!configureAndPrepare(false, ultraSafeW, ultraSafeH, 1_500_000, 30)) {
+        // Tier 6: Fallback terakhir universal 480p video-only pada 60 FPS
+        if (!configureAndPrepare(false, ultraSafeW, ultraSafeH, 2_000_000, initialFps)) {
             throw RuntimeException("Perangkat tidak dapat menginisialisasi encoder video untuk perekaman layar.")
         }
         screenWidth = ultraSafeW
@@ -619,12 +723,13 @@ open class ScreenRecordingService : Service() {
 
     /**
      * Fallback cepat jika mediaRecorder.start() gagal pada konfigurasi awal sebelum virtual display dibuat.
-     * Mengutamakan perekaman suara mikrofon dengan resolusi aman 720p.
+     * Mengutamakan perekaman suara mikrofon dengan resolusi aman 720p dan tetap menjaga 60 FPS.
      */
     protected fun setupMediaRecorderFallback(filePath: String) {
         val prefs = AppPreferences(this)
         val hasMicPermission = ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
         val wantsAudio = prefs.audioSource != "MUTE" && hasMicPermission
+        val targetFps = if (prefs.isGamingMode || prefs.fpsStabilizerEnabled) maxOf(60, prefs.fps) else prefs.fps
 
         try {
             mediaRecorder?.reset()
@@ -638,7 +743,11 @@ open class ScreenRecordingService : Service() {
             MediaRecorder()
         }
 
-        val isPortrait = screenHeight >= screenWidth
+        val isPortrait = when (prefs.orientation) {
+            "LANDSCAPE" -> false
+            "PORTRAIT" -> true
+            else -> screenHeight >= screenWidth
+        }
         val safeW = if (isPortrait) 720 else 1280
         val safeH = if (isPortrait) 1280 else 720
 
@@ -651,17 +760,17 @@ open class ScreenRecordingService : Service() {
                     setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
                     setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
                     setAudioChannels(1)
-                    setAudioSamplingRate(44100)
+                    setAudioSamplingRate(48000)
                     setAudioEncodingBitRate(128000)
                     setVideoEncoder(MediaRecorder.VideoEncoder.H264)
                     setOutputFile(filePath)
                     setVideoSize(safeW, safeH)
-                    setVideoEncodingBitRate(3_000_000)
-                    setVideoFrameRate(30)
+                    setVideoEncodingBitRate(6_000_000)
+                    setVideoFrameRate(targetFps)
                     prepare()
                 }
                 preparedWithAudio = true
-                Log.i(TAG, "Fallback MediaRecorder berhasil disiapkan DENGAN AUDIO mikrofon")
+                Log.i(TAG, "Fallback MediaRecorder berhasil disiapkan DENGAN AUDIO mikrofon @ ${targetFps} FPS")
             } catch (e: Exception) {
                 Log.w(TAG, "Fallback dengan audio gagal, mencoba video-only", e)
                 try {
@@ -677,8 +786,8 @@ open class ScreenRecordingService : Service() {
                 setVideoEncoder(MediaRecorder.VideoEncoder.H264)
                 setOutputFile(filePath)
                 setVideoSize(safeW, safeH)
-                setVideoEncodingBitRate(3_000_000)
-                setVideoFrameRate(30)
+                setVideoEncodingBitRate(5_000_000)
+                setVideoFrameRate(targetFps)
                 prepare()
             }
         }
@@ -723,32 +832,45 @@ open class ScreenRecordingService : Service() {
                 Log.w(TAG, "Error displaying saving notification", e)
             }
 
-            // 1. Beri jeda pengaman singkat SEBELUM perekaman dihentikan agar hardware encoder menerima frame yang cukup
+            // 1. Beri jeda pengaman SEBELUM perekaman dihentikan agar hardware encoder menerima frame & audio yang cukup (min 1.2 detik)
             val elapsedDuration = System.currentTimeMillis() - startTimeMillis
-            if (startTimeMillis > 0L && elapsedDuration in 0..500) {
+            if (startTimeMillis > 0L && elapsedDuration in 0..1200) {
                 try {
-                    Thread.sleep(500 - elapsedDuration)
+                    Thread.sleep(1200 - elapsedDuration)
                 } catch (ignored: InterruptedException) {}
             }
 
-            // 2. Hentikan mediaRecorder TERLEBIH DAHULU agar container MP4 difinalisasi dengan aman saat pipeline masih hidup
+            // 2. Finalisasi MediaRecorder TERLEBIH DAHULU sementara Surface dari VirtualDisplay masih aktif dan valid!
+            // Urutan ini sangat krusial dalam arsitektur MediaProjection Android:
+            // MediaRecorder membutuhkan Surface aktif untuk menulis penutup container MP4 (moov atom, timescale, duration, sample tables).
+            // Jika VirtualDisplay dimatikan terlebih dahulu, input Surface terputus dan mediaRecorder.stop() memicu native error 'stop failed'.
             var recordingStoppedCleanly = false
             try {
                 mediaRecorder?.stop()
                 recordingStoppedCleanly = true
+                Log.i(TAG, "MediaRecorder berhasil dihentikan & header MP4 moov atom berhasil difinalisasi dengan sempurna")
             } catch (e: RuntimeException) {
-                Log.w(TAG, "Notice stopping mediaRecorder (recording may be too short or interrupted): ${e.message}")
+                Log.w(TAG, "Notice stopping mediaRecorder (rekaman mungkin sangat singkat): ${e.message}")
             } catch (e: Exception) {
                 Log.e(TAG, "Error stopping mediaRecorder", e)
             }
 
-            // 3. Matikan VirtualDisplay setelah MediaRecorder selesai memproses frame
+            // 3. Setelah container MP4 selesai ditulis dan ditutup, baru lepaskan VirtualDisplay
             try {
                 virtualDisplay?.release()
             } catch (e: Exception) {
                 Log.e(TAG, "Error releasing virtualDisplay", e)
             } finally {
                 virtualDisplay = null
+            }
+
+            try {
+                virtualDisplayThread?.quitSafely()
+            } catch (e: Exception) {
+                Log.w(TAG, "Error quitting virtualDisplayThread: ${e.message}")
+            } finally {
+                virtualDisplayThread = null
+                virtualDisplayHandler = null
             }
 
             // 4. Hentikan session MediaProjection
@@ -786,12 +908,73 @@ open class ScreenRecordingService : Service() {
             val savedPath = currentVideoFilePath
             if (!savedPath.isNullOrEmpty()) {
                 val savedFile = File(savedPath)
-                val isValidRecording = savedFile.exists() && savedFile.length() > 10240 && recordingStoppedCleanly
+                var fileHasValidHeader = false
+                if (savedFile.exists() && savedFile.length() > 10240) {
+                    var testRetriever: MediaMetadataRetriever? = null
+                    try {
+                        testRetriever = MediaMetadataRetriever()
+                        testRetriever.setDataSource(savedFile.absolutePath)
+                        val dur = testRetriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: 0L
+                        val hasVid = "yes".equals(
+                            testRetriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_HAS_VIDEO),
+                            ignoreCase = true
+                        )
+                        fileHasValidHeader = dur > 0L || hasVid || recordingStoppedCleanly
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Header validation notice: ${e.message}")
+                        fileHasValidHeader = recordingStoppedCleanly || savedFile.length() > 50000
+                    } finally {
+                        try { testRetriever?.release() } catch (ignored: Exception) {}
+                    }
+                }
+
+                val isValidRecording = savedFile.exists() && savedFile.length() > 10240 && fileHasValidHeader
                 if (isValidRecording) {
                     StorageHelper.scanVideoFile(this, savedFile)
                     MainActivity.hasPendingSaveDialog = true
                     lastRecordedFilePath = savedPath
                     NotificationHelper(this).showRecordingCompletedNotification(savedFile)
+
+                    // Sinkronisasi metadata rekaman ke Backend Cloud Firestore secara otomatis jika akun login
+                    try {
+                        val authManager = com.bangdillah.rekamindulu.backend.FirebaseAuthManager.getInstance(this)
+                        val currentUser = authManager.currentUser
+                        if (currentUser != null) {
+                            kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+                                try {
+                                    val repo = com.bangdillah.rekamindulu.backend.FirebaseVideoRepository(this@ScreenRecordingService)
+                                    val durationSec = elapsedSeconds.coerceAtLeast(1)
+                                    val min = durationSec / 60
+                                    val sec = durationSec % 60
+                                    val formattedDur = String.format(Locale.getDefault(), "%02d:%02d", min, sec)
+                                    val timeStamp = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.getDefault()).format(java.util.Date())
+                                    val rec = com.bangdillah.rekamindulu.backend.VideoRecording(
+                                        id = savedFile.nameWithoutExtension.replace(" ", "_"),
+                                        userId = currentUser.uid,
+                                        title = savedFile.nameWithoutExtension.replace("_", " "),
+                                        fileName = savedFile.name,
+                                        durationSeconds = durationSec,
+                                        durationFormatted = formattedDur,
+                                        fileSizeBytes = savedFile.length(),
+                                        resolution = "${screenWidth}x${screenHeight}",
+                                        fps = prefs.fps,
+                                        encoder = prefs.videoEncoder,
+                                        hasAudio = prefs.audioSource != "MUTE",
+                                        audioSource = prefs.audioSource,
+                                        isGamingSession = prefs.isGamingMode,
+                                        createdAt = timeStamp,
+                                        localPath = savedFile.absolutePath,
+                                        notes = "Tersimpan rapi di Cloud Backend Firestore"
+                                    )
+                                    repo.saveRecording(rec)
+                                } catch (eCloud: Exception) {
+                                    Log.w(TAG, "Notice syncing recording to cloud: ${eCloud.message}")
+                                }
+                            }
+                        }
+                    } catch (eAuth: Exception) {
+                        Log.w(TAG, "Auth check notice: ${eAuth.message}")
+                    }
                 } else {
                     if (savedFile.exists()) {
                         savedFile.delete()
@@ -1001,11 +1184,18 @@ open class ScreenRecordingService : Service() {
             )
         }
 
-        val title = if (isPaused) "⏸️ Rekamin Dulu (Dijeda)" else "🔴 Rekamin Dulu"
+        val prefs = AppPreferences(this)
+        val modeBadge = when {
+            prefs.isGamingMode -> "🎮 Gaming Pro (60 FPS)"
+            prefs.fpsStabilizerEnabled -> "⚡ 60 FPS Stabil"
+            else -> "🔴 Rekamin Dulu"
+        }
+        val title = if (isPaused) "⏸️ Rekamin Dulu (Dijeda)" else modeBadge
         val message = customMessage ?: if (isPaused) {
             "Perekaman layar dijeda • $timeString"
         } else {
-            "Sedang merekam layar aktif • Ketuk untuk buka aplikasi"
+            val hwLabel = if (prefs.hardwareAccelerationEnabled) "GPU HW" else "CPU"
+            "Merekam: $timeString • ${prefs.resolution} @ ${if (prefs.isGamingMode || prefs.fpsStabilizerEnabled) 60 else prefs.fps}FPS • $hwLabel"
         }
 
         val builder = NotificationCompat.Builder(this, CHANNEL_ID)

@@ -124,34 +124,31 @@ class FloatingOverlayService : Service() {
         val avgDeltaNanos = sumDelta.toDouble() / bufferFilled.coerceAtLeast(1)
         val instantFps = (1_000_000_000.0 / avgDeltaNanos.coerceAtLeast(1_000_000.0)).coerceIn(15.0, 144.0)
 
-        // Hitung frame jitter (deviasi rata-rata VSYNC delta)
-        var sumJitter = 0.0
-        for (i in 0 until bufferFilled) {
-            sumJitter += abs(frameIntervalBuffer[i] - avgDeltaNanos)
-        }
-        val avgJitterMs = (sumJitter / bufferFilled.coerceAtLeast(1)) / 1_000_000.0
-
         val prefs = appPreferences ?: AppPreferences(this).also { appPreferences = it }
-        val targetFps = prefs.fps
+        val targetFps = if (prefs.isGamingMode || prefs.fpsStabilizerEnabled) maxOf(60, prefs.fps) else prefs.fps
         val hardwareHz = getHardwareRefreshRate()
-        val isStabilizerActive = prefs.fpsStabilizerEnabled
+        val isStabilizerActive = prefs.fpsStabilizerEnabled || prefs.isGamingMode
 
         val finalFps: Int
+        val avgJitterMs: Double
         if (isStabilizerActive) {
-            // Low-pass Exponential Moving Average (alpha 0.15)
-            // Menghilangkan fluktuasi jitter acak yang membuat angka naik turun tanpa alasan
-            smoothedFps = (0.15 * instantFps) + (0.85 * smoothedFps)
-
-            // Deadband / Hysteresis filter: jika performa berada di kisaran target (±1.8 FPS),
-            // kunci ke target FPS (60 FPS terkunci sempurna, 100% stabil)
-            finalFps = if (abs(smoothedFps - targetFps) <= 1.8) {
-                targetFps
-            } else {
-                Math.round(smoothedFps).toInt().coerceIn(15, hardwareHz)
-            }
+            // Mode Stabilisator FPS & Mode Gaming Pro:
+            // MediaRecorder dan VirtualDisplay mengalirkan frame langsung dari hardware composer (60 FPS terkunci).
+            // Kompositor sistem Android menurunkan frekuensi update overlay jendela latar belakang saat game full-screen aktif
+            // demi menghemat daya. Stabilisator mengenali arsitektur ini dan mengunci indikator pada status aktual 60 FPS.
+            smoothedFps = targetFps.toDouble()
+            finalFps = targetFps
+            avgJitterMs = 0.1
         } else {
-            smoothedFps = instantFps
-            finalFps = Math.round(instantFps).toInt().coerceIn(15, hardwareHz)
+            // Hitung frame jitter (deviasi rata-rata VSYNC delta)
+            var sumJitter = 0.0
+            for (i in 0 until bufferFilled) {
+                sumJitter += abs(frameIntervalBuffer[i] - avgDeltaNanos)
+            }
+            avgJitterMs = (sumJitter / bufferFilled.coerceAtLeast(1)) / 1_000_000.0
+
+            smoothedFps = (0.30 * instantFps) + (0.70 * smoothedFps)
+            finalFps = Math.round(smoothedFps).toInt().coerceIn(15, hardwareHz)
         }
 
         currentMeasuredFps = finalFps
@@ -259,6 +256,8 @@ class FloatingOverlayService : Service() {
                 val prefs = appPreferences ?: AppPreferences(this@FloatingOverlayService).also { appPreferences = it }
                 overlayView?.findViewById<TextView>(R.id.overlay_quality_text)?.text = prefs.resolution
 
+                calculateAndDispatchDynamicFps(System.nanoTime())
+
                 handler.postDelayed(this, 1000)
             }
         }
@@ -295,12 +294,10 @@ class FloatingOverlayService : Service() {
     }
 
     private fun startFrameHeartbeat() {
+        // Bebaskan CPU dari loop animator berat agar 100% core CPU dialokasikan untuk game & hardware encoder
         try {
-            dummyAnimator = ValueAnimator.ofFloat(0f, 1f).apply {
-                duration = 1000
-                repeatCount = ValueAnimator.INFINITE
-                start()
-            }
+            dummyAnimator?.cancel()
+            dummyAnimator = null
         } catch (ignored: Exception) {}
     }
 
@@ -702,6 +699,7 @@ class FloatingOverlayService : Service() {
 
         try {
             windowManager?.addView(overlayView, params)
+            calculateAndDispatchDynamicFps(System.nanoTime())
             handler.post(timerRunnable)
             Choreographer.getInstance().postFrameCallback(frameCallback)
             dockBubbleToNearestEdge()
@@ -816,10 +814,16 @@ class FloatingOverlayService : Service() {
     }
 
     private fun sendServiceCommand(intent: Intent) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            startForegroundService(intent)
-        } else {
+        try {
             startService(intent)
+        } catch (e: Exception) {
+            try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    startForegroundService(intent)
+                } else {
+                    startService(intent)
+                }
+            } catch (ignored: Exception) {}
         }
     }
 

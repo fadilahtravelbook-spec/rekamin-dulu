@@ -180,7 +180,6 @@ class PlayerActivity : AppCompatActivity() {
         seekBar?.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(sb: SeekBar?, progress: Int, fromUser: Boolean) {
                 if (fromUser) {
-                    videoView?.seekTo(progress)
                     currentTimeText?.text = formatTime(progress)
                 }
             }
@@ -190,6 +189,7 @@ class PlayerActivity : AppCompatActivity() {
             }
 
             override fun onStopTrackingTouch(sb: SeekBar?) {
+                sb?.let { videoView?.seekTo(it.progress) }
                 scheduleControlsAutoHide()
             }
         })

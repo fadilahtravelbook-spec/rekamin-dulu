@@ -39,7 +39,7 @@
     <string name="settings">Settings</string>
     <string name="siap_merekam">Siap merekam</string>
     <string name="mulai_rekam">MULAI REKAM</string>
-    <string name="resolusi_info">1080p • 30 FPS</string>
+    <string name="resolusi_info">1080p • 60 FPS</string>
 
     <!-- ========== PERMISSION DIALOG ========== -->
     <string name="izin_ditolak">Izin Ditolak</string>
@@ -109,9 +109,6 @@
     <string name="rekam_dihentikan">Rekaman dihentikan.</string>
     <string name="penyimpanan_penuh">Penyimpanan penuh.</string>
 
-    <!-- ========== EDGE CASES ========== -->
-    <string name="rotasi_tidak_ikut">Rotasi layar tidak mempengaruhi rekaman.</string>
-    <string name="battery_rendah">Battery rendah, rekaman akan dihentikan otomatis.</string>
-    <string name="stop_sekarang">Stop sekarang</string>
+    <string name="default_web_client_id" translatable="false">741572459061-3bvvrt9b8mpus3u8jesdv0s19106l2rj.apps.googleusercontent.com</string>
 
 </resources>

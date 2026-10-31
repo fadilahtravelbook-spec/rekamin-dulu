@@ -19,7 +19,7 @@
             android:layout_height="wrap_content"
             app:cardBackgroundColor="@color/colorSurface"
             app:cardCornerRadius="24dp"
-            app:cardElevation="10dp"
+            app:cardElevation="12dp"
             app:strokeColor="@color/colorBorder"
             app:strokeWidth="1.2dp">
 
@@ -35,7 +35,7 @@
                 <RelativeLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginBottom="12dp">
+                    android:layout_marginBottom="14dp">
 
                     <LinearLayout
                         android:layout_width="wrap_content"
@@ -52,8 +52,8 @@
                             android:orientation="horizontal">
 
                             <ImageView
-                                android:layout_width="20dp"
-                                android:layout_height="20dp"
+                                android:layout_width="22dp"
+                                android:layout_height="22dp"
                                 android:contentDescription="Ikon Kesiapan"
                                 android:src="@drawable/ic_device"
                                 app:tint="@color/colorPrimary" />
@@ -71,7 +71,7 @@
                         <TextView
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:layout_marginTop="2dp"
+                            android:layout_marginTop="3dp"
                             android:text="Diagnostik Performa &amp; Benchmark Rekam Layar HP"
                             android:textColor="@color/textCaption"
                             android:textSize="11.5sp" />
@@ -97,11 +97,11 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginBottom="14dp"
-                    app:cardBackgroundColor="@color/colorBackground"
+                    app:cardBackgroundColor="@color/colorCardBackground"
                     app:cardCornerRadius="18dp"
                     app:cardElevation="0dp"
                     app:strokeColor="@color/colorBorder"
-                    app:strokeWidth="1dp">
+                    app:strokeWidth="1.2dp">
 
                     <LinearLayout
                         android:layout_width="match_parent"
@@ -114,19 +114,20 @@
                         <TextView
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:letterSpacing="0.06"
+                            android:letterSpacing="0.08"
                             android:text="SKOR KELAYAKAN HARDWARE"
                             android:textColor="@color/textCaption"
-                            android:textSize="10sp"
+                            android:textSize="11sp"
                             android:textStyle="bold" />
 
                         <TextView
                             android:id="@+id/text_dialog_score"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:layout_marginTop="2dp"
+                            android:layout_marginTop="4dp"
+                            android:letterSpacing="-0.02"
                             android:text="95 / 100"
-                            android:textColor="@color/colorPrimary"
+                            android:textColor="@color/colorPrimaryLight"
                             android:textSize="36sp"
                             android:textStyle="bold" />
 
@@ -134,11 +135,11 @@
                             android:id="@+id/text_dialog_status_badge"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:layout_marginTop="4dp"
+                            android:layout_marginTop="6dp"
                             android:background="@drawable/bg_chip_pill"
                             android:backgroundTint="@color/colorSuccess"
-                            android:paddingHorizontal="12dp"
-                            android:paddingVertical="4dp"
+                            android:paddingHorizontal="14dp"
+                            android:paddingVertical="5dp"
                             android:text="S+ ESPORTS READY (OPTIMAL)"
                             android:textColor="@color/colorOnPrimary"
                             android:textSize="11.5sp"
@@ -154,18 +155,27 @@
                             android:progress="95"
                             android:progressTint="@color/colorPrimary" />
 
-                        <TextView
-                            android:id="@+id/text_dialog_recommendation"
+                        <!-- High-Contrast Recommendation Box -->
+                        <LinearLayout
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:layout_marginTop="12dp"
                             android:background="@drawable/bg_telemetry_box"
-                            android:lineSpacingExtra="2dp"
-                            android:padding="10dp"
-                            android:text="💡 Rekomendasi: 1080p FHD @ 60 FPS dengan audio game jernih dan mulus."
-                            android:textColor="@color/colorPrimary"
-                            android:textSize="11.5sp"
-                            android:textStyle="bold" />
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal"
+                            android:padding="12dp">
+
+                            <TextView
+                                android:id="@+id/text_dialog_recommendation"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:lineSpacingExtra="3dp"
+                                android:text="💡 Rekomendasi: 1080p FHD @ 60 FPS dengan audio game jernih dan mulus."
+                                android:textColor="@color/textTitle"
+                                android:textSize="12sp"
+                                android:textStyle="bold" />
+                        </LinearLayout>
+
                     </LinearLayout>
                 </com.google.android.material.card.MaterialCardView>
 
@@ -175,9 +185,11 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginBottom="14dp"
-                    app:cardBackgroundColor="@color/colorPrimaryContainer"
+                    app:cardBackgroundColor="@color/colorSurfaceVariant"
                     app:cardCornerRadius="16dp"
-                    app:cardElevation="0dp">
+                    app:cardElevation="0dp"
+                    app:strokeColor="@color/colorBorder"
+                    app:strokeWidth="1dp">
 
                     <LinearLayout
                         android:layout_width="match_parent"
@@ -216,6 +228,7 @@
                                 <TextView
                                     android:layout_width="wrap_content"
                                     android:layout_height="wrap_content"
+                                    android:layout_marginTop="2dp"
                                     android:text="Uji latensi riil chip video HP Anda (stress test 2 detik)"
                                     android:textColor="@color/textCaption"
                                     android:textSize="11sp" />
@@ -226,11 +239,11 @@
                         <com.google.android.material.button.MaterialButton
                             android:id="@+id/btn_run_benchmark"
                             android:layout_width="match_parent"
-                            android:layout_height="44dp"
+                            android:layout_height="46dp"
                             android:layout_marginTop="10dp"
                             android:text="⚡ JALANKAN TES BENCHMARK ENCODER"
                             android:textColor="@color/colorOnPrimary"
-                            android:textSize="11sp"
+                            android:textSize="11.5sp"
                             android:textStyle="bold"
                             app:backgroundTint="@color/colorPrimary"
                             app:cornerRadius="12dp"
@@ -258,8 +271,8 @@
                             android:background="@drawable/bg_telemetry_box"
                             android:gravity="center_vertical"
                             android:orientation="horizontal"
-                            android:paddingHorizontal="10dp"
-                            android:paddingVertical="8dp"
+                            android:paddingHorizontal="12dp"
+                            android:paddingVertical="10dp"
                             android:visibility="gone">
 
                             <ImageView
@@ -277,7 +290,7 @@
                                 android:layout_weight="1"
                                 android:text="Lolos: Encoder HW responsif (60 FPS • Latensi 8.2ms)"
                                 android:textColor="@color/colorSuccess"
-                                android:textSize="11sp"
+                                android:textSize="11.5sp"
                                 android:textStyle="bold" />
                         </LinearLayout>
 
@@ -285,59 +298,83 @@
                 </com.google.android.material.card.MaterialCardView>
 
                 <!-- 4. THREE PRESET RECOMMENDATIONS -->
-                <TextView
-                    android:layout_width="wrap_content"
+                <LinearLayout
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginBottom="8dp"
-                    android:text="Pilihan Preset Siap Pakai (1-Klik Terapkan)"
-                    android:textColor="@color/textTitle"
-                    android:textSize="13sp"
-                    android:textStyle="bold" />
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:layout_marginBottom="10dp">
 
-                <!-- Preset 1: Mode Gaming Pro -->
+                    <ImageView
+                        android:layout_width="18dp"
+                        android:layout_height="18dp"
+                        android:contentDescription="Preset"
+                        android:src="@drawable/ic_tune"
+                        app:tint="@color/colorPrimary" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="8dp"
+                        android:text="Pilihan Preset Siap Pakai (1-Klik Terapkan)"
+                        android:textColor="@color/textTitle"
+                        android:textSize="13sp"
+                        android:textStyle="bold" />
+                </LinearLayout>
+
+                <!-- Preset 1: Mode Gaming Pro (Flagship) -->
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/btn_preset_gaming"
                     style="@style/Widget.Material3.Button.TonalButton"
                     android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginBottom="6dp"
+                    android:layout_height="50dp"
+                    android:layout_marginBottom="8dp"
                     android:gravity="start|center_vertical"
                     android:paddingHorizontal="14dp"
-                    android:paddingVertical="10dp"
                     android:text="🎮 Mode Gaming Pro • 1080p 60 FPS (12 Mbps)"
-                    android:textSize="11.5sp"
+                    android:textColor="@color/textTitle"
+                    android:textSize="12sp"
                     android:textStyle="bold"
-                    app:cornerRadius="12dp" />
+                    app:backgroundTint="@color/colorSurfaceVariant"
+                    app:cornerRadius="12dp"
+                    app:strokeColor="@color/colorPrimary"
+                    app:strokeWidth="1.2dp" />
 
                 <!-- Preset 2: Mode Seimbang -->
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/btn_preset_balanced"
                     style="@style/Widget.Material3.Button.TonalButton"
                     android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginBottom="6dp"
+                    android:layout_height="50dp"
+                    android:layout_marginBottom="8dp"
                     android:gravity="start|center_vertical"
                     android:paddingHorizontal="14dp"
-                    android:paddingVertical="10dp"
                     android:text="⚡ Mode Seimbang • 720p 60 FPS (8 Mbps)"
-                    android:textSize="11.5sp"
+                    android:textColor="@color/textTitle"
+                    android:textSize="12sp"
                     android:textStyle="bold"
-                    app:cornerRadius="12dp" />
+                    app:backgroundTint="@color/colorSurfaceVariant"
+                    app:cornerRadius="12dp"
+                    app:strokeColor="@color/colorBorder"
+                    app:strokeWidth="1dp" />
 
                 <!-- Preset 3: Mode Hemat Baterai -->
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/btn_preset_battery"
                     style="@style/Widget.Material3.Button.TonalButton"
                     android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
+                    android:layout_height="50dp"
                     android:layout_marginBottom="14dp"
                     android:gravity="start|center_vertical"
                     android:paddingHorizontal="14dp"
-                    android:paddingVertical="10dp"
                     android:text="🔋 Mode Hemat Baterai • 720p 30 FPS (4 Mbps)"
-                    android:textSize="11.5sp"
+                    android:textColor="@color/textTitle"
+                    android:textSize="12sp"
                     android:textStyle="bold"
-                    app:cornerRadius="12dp" />
+                    app:backgroundTint="@color/colorSurfaceVariant"
+                    app:cornerRadius="12dp"
+                    app:strokeColor="@color/colorBorder"
+                    app:strokeWidth="1dp" />
 
                 <!-- Legacy apply button for backward compatibility -->
                 <Button
@@ -346,56 +383,82 @@
                     android:layout_height="0dp"
                     android:visibility="gone" />
 
-                <!-- 5. DETAILED SPECS CARD -->
+                <!-- 5. DETAILED SPECS CARD (NO OVERLAPS: WEIGHTED HORIZONTAL COLUMNS) -->
                 <com.google.android.material.card.MaterialCardView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginBottom="14dp"
-                    app:cardBackgroundColor="@color/colorBackground"
-                    app:cardCornerRadius="16dp"
+                    android:layout_marginBottom="16dp"
+                    app:cardBackgroundColor="@color/colorCardBackground"
+                    app:cardCornerRadius="18dp"
                     app:cardElevation="0dp"
                     app:strokeColor="@color/colorBorder"
-                    app:strokeWidth="1dp">
+                    app:strokeWidth="1.2dp">
 
                     <LinearLayout
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:orientation="vertical"
-                        android:padding="14dp">
+                        android:padding="16dp">
 
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:layout_marginBottom="10dp"
-                            android:text="Rincian Komponen &amp; Sensor Lengkap"
-                            android:textColor="@color/textTitle"
-                            android:textSize="13sp"
-                            android:textStyle="bold" />
-
-                        <!-- 1. Perangkat -->
-                        <RelativeLayout
+                        <LinearLayout
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:paddingVertical="4dp">
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal"
+                            android:layout_marginBottom="12dp">
+
+                            <ImageView
+                                android:layout_width="18dp"
+                                android:layout_height="18dp"
+                                android:contentDescription="Ikon Sensor"
+                                android:src="@drawable/ic_device"
+                                app:tint="@color/colorPrimary" />
 
                             <TextView
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:layout_alignParentStart="true"
+                                android:layout_marginStart="8dp"
+                                android:text="Rincian Komponen &amp; Sensor Lengkap"
+                                android:textColor="@color/textTitle"
+                                android:textSize="13sp"
+                                android:textStyle="bold" />
+                        </LinearLayout>
+
+                        <!-- 1. Perangkat -->
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal"
+                            android:paddingVertical="6dp">
+
+                            <ImageView
+                                android:layout_width="16dp"
+                                android:layout_height="16dp"
+                                android:contentDescription="Model"
+                                android:src="@drawable/ic_device"
+                                app:tint="@color/colorPrimary" />
+
+                            <TextView
+                                android:layout_width="118dp"
+                                android:layout_height="wrap_content"
+                                android:layout_marginStart="8dp"
                                 android:text="Model Perangkat"
                                 android:textColor="@color/textCaption"
-                                android:textSize="11.5sp" />
+                                android:textSize="12sp" />
 
                             <TextView
                                 android:id="@+id/text_diag_device"
-                                android:layout_width="wrap_content"
+                                android:layout_width="0dp"
                                 android:layout_height="wrap_content"
-                                android:layout_alignParentEnd="true"
+                                android:layout_marginStart="8dp"
+                                android:layout_weight="1"
+                                android:gravity="end"
                                 android:text="Google Pixel (Android 14)"
                                 android:textColor="@color/textTitle"
-                                android:textSize="11.5sp"
+                                android:textSize="12sp"
                                 android:textStyle="bold" />
-                        </RelativeLayout>
+                        </LinearLayout>
 
                         <View
                             android:layout_width="match_parent"
@@ -404,29 +467,40 @@
                             android:background="@color/colorBorder" />
 
                         <!-- 2. CPU / SoC -->
-                        <RelativeLayout
+                        <LinearLayout
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:paddingVertical="4dp">
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal"
+                            android:paddingVertical="6dp">
+
+                            <ImageView
+                                android:layout_width="16dp"
+                                android:layout_height="16dp"
+                                android:contentDescription="CPU"
+                                android:src="@drawable/ic_cpu"
+                                app:tint="@color/colorPrimary" />
 
                             <TextView
-                                android:layout_width="wrap_content"
+                                android:layout_width="118dp"
                                 android:layout_height="wrap_content"
-                                android:layout_alignParentStart="true"
+                                android:layout_marginStart="8dp"
                                 android:text="Chipset / CPU"
                                 android:textColor="@color/textCaption"
-                                android:textSize="11.5sp" />
+                                android:textSize="12sp" />
 
                             <TextView
                                 android:id="@+id/text_diag_cpu"
-                                android:layout_width="wrap_content"
+                                android:layout_width="0dp"
                                 android:layout_height="wrap_content"
-                                android:layout_alignParentEnd="true"
+                                android:layout_marginStart="8dp"
+                                android:layout_weight="1"
+                                android:gravity="end"
                                 android:text="Octa-Core ARM64 (8 Inti)"
                                 android:textColor="@color/textTitle"
-                                android:textSize="11.5sp"
+                                android:textSize="12sp"
                                 android:textStyle="bold" />
-                        </RelativeLayout>
+                        </LinearLayout>
 
                         <View
                             android:layout_width="match_parent"
@@ -435,29 +509,40 @@
                             android:background="@color/colorBorder" />
 
                         <!-- 3. RAM -->
-                        <RelativeLayout
+                        <LinearLayout
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:paddingVertical="4dp">
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal"
+                            android:paddingVertical="6dp">
+
+                            <ImageView
+                                android:layout_width="16dp"
+                                android:layout_height="16dp"
+                                android:contentDescription="RAM"
+                                android:src="@drawable/ic_ram"
+                                app:tint="@color/colorPrimary" />
 
                             <TextView
-                                android:layout_width="wrap_content"
+                                android:layout_width="118dp"
                                 android:layout_height="wrap_content"
-                                android:layout_alignParentStart="true"
+                                android:layout_marginStart="8dp"
                                 android:text="Kapasitas RAM"
                                 android:textColor="@color/textCaption"
-                                android:textSize="11.5sp" />
+                                android:textSize="12sp" />
 
                             <TextView
                                 android:id="@+id/text_diag_ram"
-                                android:layout_width="wrap_content"
+                                android:layout_width="0dp"
                                 android:layout_height="wrap_content"
-                                android:layout_alignParentEnd="true"
+                                android:layout_marginStart="8dp"
+                                android:layout_weight="1"
+                                android:gravity="end"
                                 android:text="4.0 GB (2.1 GB Bebas)"
                                 android:textColor="@color/textTitle"
-                                android:textSize="11.5sp"
+                                android:textSize="12sp"
                                 android:textStyle="bold" />
-                        </RelativeLayout>
+                        </LinearLayout>
 
                         <View
                             android:layout_width="match_parent"
@@ -466,29 +551,40 @@
                             android:background="@color/colorBorder" />
 
                         <!-- 4. Storage & Estimation -->
-                        <RelativeLayout
+                        <LinearLayout
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:paddingVertical="4dp">
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal"
+                            android:paddingVertical="6dp">
+
+                            <ImageView
+                                android:layout_width="16dp"
+                                android:layout_height="16dp"
+                                android:contentDescription="Storage"
+                                android:src="@drawable/ic_storage"
+                                app:tint="@color/colorPrimary" />
 
                             <TextView
-                                android:layout_width="wrap_content"
+                                android:layout_width="118dp"
                                 android:layout_height="wrap_content"
-                                android:layout_alignParentStart="true"
-                                android:text="Sisa Ruang &amp; Durasi"
+                                android:layout_marginStart="8dp"
+                                android:text="Sisa Ruang"
                                 android:textColor="@color/textCaption"
-                                android:textSize="11.5sp" />
+                                android:textSize="12sp" />
 
                             <TextView
                                 android:id="@+id/text_diag_storage"
-                                android:layout_width="wrap_content"
+                                android:layout_width="0dp"
                                 android:layout_height="wrap_content"
-                                android:layout_alignParentEnd="true"
+                                android:layout_marginStart="8dp"
+                                android:layout_weight="1"
+                                android:gravity="end"
                                 android:text="28.4 GB (~5.2 Jam Rekam)"
                                 android:textColor="@color/colorSuccess"
-                                android:textSize="11.5sp"
+                                android:textSize="12sp"
                                 android:textStyle="bold" />
-                        </RelativeLayout>
+                        </LinearLayout>
 
                         <View
                             android:layout_width="match_parent"
@@ -497,29 +593,40 @@
                             android:background="@color/colorBorder" />
 
                         <!-- 5. Layar Fisik & Hz -->
-                        <RelativeLayout
+                        <LinearLayout
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:paddingVertical="4dp">
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal"
+                            android:paddingVertical="6dp">
+
+                            <ImageView
+                                android:layout_width="16dp"
+                                android:layout_height="16dp"
+                                android:contentDescription="Layar"
+                                android:src="@drawable/ic_video"
+                                app:tint="@color/colorPrimary" />
 
                             <TextView
-                                android:layout_width="wrap_content"
+                                android:layout_width="118dp"
                                 android:layout_height="wrap_content"
-                                android:layout_alignParentStart="true"
-                                android:text="Layar &amp; Refresh Rate"
+                                android:layout_marginStart="8dp"
+                                android:text="Layar &amp; Refresh"
                                 android:textColor="@color/textCaption"
-                                android:textSize="11.5sp" />
+                                android:textSize="12sp" />
 
                             <TextView
                                 android:id="@+id/text_diag_screen"
-                                android:layout_width="wrap_content"
+                                android:layout_width="0dp"
                                 android:layout_height="wrap_content"
-                                android:layout_alignParentEnd="true"
+                                android:layout_marginStart="8dp"
+                                android:layout_weight="1"
+                                android:gravity="end"
                                 android:text="1080 x 2400 (60 Hz)"
                                 android:textColor="@color/textTitle"
-                                android:textSize="11.5sp"
+                                android:textSize="12sp"
                                 android:textStyle="bold" />
-                        </RelativeLayout>
+                        </LinearLayout>
 
                         <View
                             android:layout_width="match_parent"
@@ -528,29 +635,40 @@
                             android:background="@color/colorBorder" />
 
                         <!-- 6. Codec Hardware -->
-                        <RelativeLayout
+                        <LinearLayout
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:paddingVertical="4dp">
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal"
+                            android:paddingVertical="6dp">
+
+                            <ImageView
+                                android:layout_width="16dp"
+                                android:layout_height="16dp"
+                                android:contentDescription="Codec"
+                                android:src="@drawable/ic_codec"
+                                app:tint="@color/colorPrimary" />
 
                             <TextView
-                                android:layout_width="wrap_content"
+                                android:layout_width="118dp"
                                 android:layout_height="wrap_content"
-                                android:layout_alignParentStart="true"
+                                android:layout_marginStart="8dp"
                                 android:text="Encoder Hardware"
                                 android:textColor="@color/textCaption"
-                                android:textSize="11.5sp" />
+                                android:textSize="12sp" />
 
                             <TextView
                                 android:id="@+id/text_diag_codec"
-                                android:layout_width="wrap_content"
+                                android:layout_width="0dp"
                                 android:layout_height="wrap_content"
-                                android:layout_alignParentEnd="true"
+                                android:layout_marginStart="8dp"
+                                android:layout_weight="1"
+                                android:gravity="end"
                                 android:text="H.264 AVC (Akselerasi HW)"
                                 android:textColor="@color/textTitle"
-                                android:textSize="11.5sp"
+                                android:textSize="12sp"
                                 android:textStyle="bold" />
-                        </RelativeLayout>
+                        </LinearLayout>
 
                         <View
                             android:layout_width="match_parent"
@@ -559,29 +677,40 @@
                             android:background="@color/colorBorder" />
 
                         <!-- 7. Audio System -->
-                        <RelativeLayout
+                        <LinearLayout
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:paddingVertical="4dp">
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal"
+                            android:paddingVertical="6dp">
+
+                            <ImageView
+                                android:layout_width="16dp"
+                                android:layout_height="16dp"
+                                android:contentDescription="Audio"
+                                android:src="@drawable/ic_mic"
+                                app:tint="@color/colorPrimary" />
 
                             <TextView
-                                android:layout_width="wrap_content"
+                                android:layout_width="118dp"
                                 android:layout_height="wrap_content"
-                                android:layout_alignParentStart="true"
-                                android:text="Audio Internal Game"
+                                android:layout_marginStart="8dp"
+                                android:text="Audio Internal"
                                 android:textColor="@color/textCaption"
-                                android:textSize="11.5sp" />
+                                android:textSize="12sp" />
 
                             <TextView
                                 android:id="@+id/text_diag_audio"
-                                android:layout_width="wrap_content"
+                                android:layout_width="0dp"
                                 android:layout_height="wrap_content"
-                                android:layout_alignParentEnd="true"
+                                android:layout_marginStart="8dp"
+                                android:layout_weight="1"
+                                android:gravity="end"
                                 android:text="Didukung (Playback Capture)"
                                 android:textColor="@color/colorSuccess"
-                                android:textSize="11.5sp"
+                                android:textSize="12sp"
                                 android:textStyle="bold" />
-                        </RelativeLayout>
+                        </LinearLayout>
 
                         <View
                             android:layout_width="match_parent"
@@ -590,29 +719,40 @@
                             android:background="@color/colorBorder" />
 
                         <!-- 8. Baterai & Suhu -->
-                        <RelativeLayout
+                        <LinearLayout
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:paddingVertical="4dp">
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal"
+                            android:paddingVertical="6dp">
+
+                            <ImageView
+                                android:layout_width="16dp"
+                                android:layout_height="16dp"
+                                android:contentDescription="Baterai"
+                                android:src="@drawable/ic_battery"
+                                app:tint="@color/colorPrimary" />
 
                             <TextView
-                                android:layout_width="wrap_content"
+                                android:layout_width="118dp"
                                 android:layout_height="wrap_content"
-                                android:layout_alignParentStart="true"
-                                android:text="Status &amp; Suhu Baterai"
+                                android:layout_marginStart="8dp"
+                                android:text="Status Baterai"
                                 android:textColor="@color/textCaption"
-                                android:textSize="11.5sp" />
+                                android:textSize="12sp" />
 
                             <TextView
                                 android:id="@+id/text_diag_battery"
-                                android:layout_width="wrap_content"
+                                android:layout_width="0dp"
                                 android:layout_height="wrap_content"
-                                android:layout_alignParentEnd="true"
+                                android:layout_marginStart="8dp"
+                                android:layout_weight="1"
+                                android:gravity="end"
                                 android:text="85% • Suhu 30.2°C (Aman)"
                                 android:textColor="@color/textTitle"
-                                android:textSize="11.5sp"
+                                android:textSize="12sp"
                                 android:textStyle="bold" />
-                        </RelativeLayout>
+                        </LinearLayout>
 
                     </LinearLayout>
                 </com.google.android.material.card.MaterialCardView>
@@ -622,11 +762,12 @@
                     android:id="@+id/btn_dismiss_dialog"
                     style="@style/Widget.Material3.Button.TonalButton"
                     android:layout_width="match_parent"
-                    android:layout_height="48dp"
+                    android:layout_height="50dp"
                     android:text="TUTUP LAPORAN DIAGNOSTIK"
                     android:textColor="@color/textTitle"
                     android:textSize="12sp"
                     android:textStyle="bold"
+                    app:backgroundTint="@color/colorSurfaceVariant"
                     app:cornerRadius="14dp" />
 
             </LinearLayout>

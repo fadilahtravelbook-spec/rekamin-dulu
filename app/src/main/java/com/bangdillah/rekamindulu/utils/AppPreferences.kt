@@ -40,11 +40,11 @@ class AppPreferences(context: Context) {
         set(value) = prefs.edit().putString(KEY_RESOLUTION, value).apply()
 
     var fps: Int
-        get() = prefs.getInt(KEY_FPS, 30)
+        get() = prefs.getInt(KEY_FPS, 60)
         set(value) = prefs.edit().putInt(KEY_FPS, value).apply()
 
     var bitrateMbps: Int
-        get() = prefs.getInt(KEY_BITRATE, 8)
+        get() = prefs.getInt(KEY_BITRATE, 10)
         set(value) = prefs.edit().putInt(KEY_BITRATE, value).apply()
 
     var audioSource: String
@@ -138,8 +138,8 @@ class AppPreferences(context: Context) {
     fun resetToDefaults() {
         prefs.edit()
             .putString(KEY_RESOLUTION, "1080p")
-            .putInt(KEY_FPS, 30)
-            .putInt(KEY_BITRATE, 8)
+            .putInt(KEY_FPS, 60)
+            .putInt(KEY_BITRATE, 12)
             .putString(KEY_AUDIO_SOURCE, "BOTH")
             .putString(KEY_MIC_TYPE, "default")
             .putString(KEY_FACECAM, "OFF")

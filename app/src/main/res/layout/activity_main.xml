@@ -157,6 +157,133 @@
                 </LinearLayout>
             </RelativeLayout>
 
+            <!-- CLOUD BACKEND & ACCOUNT SYNC CARD -->
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/card_cloud_backend_sync"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="16dp"
+                app:cardBackgroundColor="@color/colorSurface"
+                app:cardCornerRadius="18dp"
+                app:cardElevation="2dp"
+                app:strokeColor="@color/colorBorder"
+                app:strokeWidth="1dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="14dp">
+
+                    <RelativeLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content">
+
+                        <LinearLayout
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_alignParentStart="true"
+                            android:layout_centerVertical="true"
+                            android:layout_toStartOf="@id/btn_cloud_auth_action"
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal">
+
+                            <FrameLayout
+                                android:layout_width="38dp"
+                                android:layout_height="38dp"
+                                android:background="@drawable/bg_setting_icon_box">
+
+                                <ImageView
+                                    android:id="@+id/img_cloud_user_avatar"
+                                    android:layout_width="22dp"
+                                    android:layout_height="22dp"
+                                    android:layout_gravity="center"
+                                    android:contentDescription="Akun Cloud"
+                                    android:src="@drawable/ic_storage"
+                                    app:tint="@color/colorPrimary" />
+                            </FrameLayout>
+
+                            <LinearLayout
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginStart="10dp"
+                                android:orientation="vertical">
+
+                                <TextView
+                                    android:id="@+id/text_cloud_account_name"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="Google Cloud Firestore"
+                                    android:textColor="@color/textTitle"
+                                    android:textSize="13sp"
+                                    android:textStyle="bold" />
+
+                                <TextView
+                                    android:id="@+id/text_cloud_account_subtitle"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:layout_marginTop="2dp"
+                                    android:text="☁️ Database Terhubung &amp; Siap Sinkron"
+                                    android:textColor="@color/colorSuccess"
+                                    android:textSize="11sp" />
+                            </LinearLayout>
+                        </LinearLayout>
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/btn_cloud_auth_action"
+                            style="?attr/materialButtonOutlinedStyle"
+                            android:layout_width="wrap_content"
+                            android:layout_height="36dp"
+                            android:layout_alignParentEnd="true"
+                            android:layout_centerVertical="true"
+                            android:minHeight="36dp"
+                            android:paddingHorizontal="12dp"
+                            android:text="Login Google"
+                            android:textColor="@color/colorPrimary"
+                            android:textSize="11sp"
+                            android:textStyle="bold"
+                            app:cornerRadius="12dp"
+                            app:strokeColor="@color/colorPrimary"
+                            app:strokeWidth="1dp" />
+                    </RelativeLayout>
+
+                    <!-- Cloud Sync Action Row -->
+                    <LinearLayout
+                        android:id="@+id/layout_cloud_sync_row"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="10dp"
+                        android:background="@drawable/bg_telemetry_box"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal"
+                        android:paddingHorizontal="10dp"
+                        android:paddingVertical="8dp">
+
+                        <TextView
+                            android:id="@+id/text_cloud_sync_detail"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="Katalog video otomatis dicatat di backend cloud"
+                            android:textColor="@color/textSecondary"
+                            android:textSize="11sp" />
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/btn_trigger_sync_cloud"
+                            style="@style/Widget.Material3.Button.TonalButton"
+                            android:layout_width="wrap_content"
+                            android:layout_height="30dp"
+                            android:layout_marginStart="8dp"
+                            android:minHeight="30dp"
+                            android:paddingHorizontal="10dp"
+                            android:text="🔄 Sinkron Cloud"
+                            android:textSize="10sp"
+                            android:textStyle="bold"
+                            app:cornerRadius="10dp" />
+                    </LinearLayout>
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
             <!-- ACTIVE RECORDING TOP ALERT BANNER (IF RECORDING) -->
             <com.google.android.material.card.MaterialCardView
                 android:id="@+id/card_active_recording_banner"
@@ -657,6 +784,84 @@
                     </LinearLayout>
                 </com.google.android.material.card.MaterialCardView>
             </LinearLayout>
+
+            <!-- FPS STABILIZER & ANTI-DROP TURBO CARD -->
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/card_fps_stabilizer_toggle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="14dp"
+                android:clickable="true"
+                android:focusable="true"
+                android:foreground="?attr/selectableItemBackground"
+                app:cardBackgroundColor="@color/colorSurface"
+                app:cardCornerRadius="16dp"
+                app:cardElevation="1dp"
+                app:strokeColor="@color/colorSuccess"
+                app:strokeWidth="1.5dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:paddingHorizontal="16dp"
+                    android:paddingVertical="14dp">
+
+                    <FrameLayout
+                        android:id="@+id/icon_box_fps_stabilizer"
+                        android:layout_width="40dp"
+                        android:layout_height="40dp"
+                        android:background="@drawable/bg_chip_pill"
+                        android:backgroundTint="@color/colorSuccessContainer">
+
+                        <ImageView
+                            android:layout_width="22dp"
+                            android:layout_height="22dp"
+                            android:layout_gravity="center"
+                            android:contentDescription="Stabilisator FPS"
+                            android:src="@drawable/ic_speed"
+                            app:tint="@color/colorSuccess" />
+                    </FrameLayout>
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="14dp"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="⚡ Stabilisator FPS 60 FPS (Anti-Drop)"
+                            android:textColor="@color/textTitle"
+                            android:textSize="13sp"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:id="@+id/text_fps_stabilizer_status"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="2dp"
+                            android:text="Terkunci Stabil 60 FPS • Offload GPU Aktif"
+                            android:textColor="@color/colorSuccess"
+                            android:textSize="12sp"
+                            android:textStyle="bold" />
+                    </LinearLayout>
+
+                    <Button
+                        android:id="@+id/btn_home_toggle_fps_stabilizer"
+                        style="@style/Widget.Material3.Button.TonalButton"
+                        android:layout_width="wrap_content"
+                        android:layout_height="36dp"
+                        android:paddingHorizontal="12dp"
+                        android:text="✓ AKTIF"
+                        android:textSize="11sp"
+                        android:textStyle="bold"
+                        app:cornerRadius="18dp" />
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
 
             <!-- RESOLUTION & QUALITY SELECTOR BADGE -->
             <com.google.android.material.card.MaterialCardView

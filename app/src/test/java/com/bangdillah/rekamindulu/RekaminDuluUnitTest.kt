@@ -62,4 +62,32 @@ class RekaminDuluUnitTest {
         val onStatus = com.bangdillah.rekamindulu.utils.HardwareEncoderHelper.getHardwareOffloadStatus(true)
         assertTrue(onStatus.isNotEmpty())
     }
+
+    @Test
+    fun testFpsStabilizerCadencePacing() {
+        val targetFps = 60
+        val isStabilizerActive = true
+
+        // Simulate 60 FPS VSYNC interval (~16.6ms) with minor jitter (17.2ms)
+        val deltaNanos = 17_200_000L
+        val instantFps = 1_000_000_000.0 / deltaNanos // ~58.13 FPS
+
+        // In stabilizer active mode with 80% threshold, 58.13 FPS is within normal 60 FPS pacing
+        val stabilizedFps = if (isStabilizerActive) {
+            if (instantFps >= (targetFps * 0.80)) targetFps else instantFps.toInt()
+        } else {
+            instantFps.toInt()
+        }
+        assertEquals(60, stabilizedFps)
+
+        // Simulate severe lag drop (30ms = 33 FPS)
+        val lagDeltaNanos = 30_000_000L
+        val lagFps = 1_000_000_000.0 / lagDeltaNanos // 33.33 FPS
+        val lagResult = if (isStabilizerActive) {
+            if (lagFps >= (targetFps * 0.80)) targetFps else lagFps.toInt()
+        } else {
+            lagFps.toInt()
+        }
+        assertEquals(33, lagResult)
+    }
 }

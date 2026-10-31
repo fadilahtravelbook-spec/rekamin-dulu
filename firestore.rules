@@ -1,0 +1,30 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // Profil pengguna: Hanya pemilik akun yang dapat membaca & menulis datanya
+    match /users/{userId} {
+      allow read, update, delete: if isOwner(userId);
+      allow create: if isAuthenticated() && request.auth.uid == userId;
+
+      // Katalog & riwayat rekaman video milik pengguna
+      match /recordings/{recordingId} {
+        allow read, update, delete: if isOwner(userId);
+        allow create: if isOwner(userId) && request.resource.data.userId == userId;
+      }
+    }
+
+    // Blokir seluruh akses ke koleksi yang tidak terdaftar
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

@@ -1,0 +1,56 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Profil pengguna Rekamin Dulu dan statistik sesi perekaman",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "ID unik pengguna dari Firebase Auth" },
+        "displayName": { "type": "string", "description": "Nama tampilan pengguna" },
+        "email": { "type": "string", "description": "Alamat email Google" },
+        "photoUrl": { "type": "string", "description": "URL foto avatar pengguna" },
+        "createdAt": { "type": "string", "description": "Waktu pendaftaran akun ISO8601" },
+        "totalRecordings": { "type": "number", "description": "Total jumlah video yang telah direkam" },
+        "totalDurationSeconds": { "type": "number", "description": "Total akumulasi durasi rekaman dalam detik" },
+        "preferredResolution": { "type": "string", "description": "Resolusi rekaman bawaan (misal 1080p, 720p)" },
+        "preferredFps": { "type": "number", "description": "Target FPS bawaan (misal 60)" },
+        "gamingModeEnabled": { "type": "boolean", "description": "Status Mode Gaming Pro aktif" }
+      },
+      "required": ["uid", "displayName", "email"]
+    },
+    "VideoRecording": {
+      "title": "VideoRecording",
+      "description": "Metadata katalog dan riwayat video rekaman layar",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "ID unik rekaman video" },
+        "userId": { "type": "string", "description": "ID pemilik rekaman" },
+        "title": { "type": "string", "description": "Judul rekaman video" },
+        "fileName": { "type": "string", "description": "Nama file MP4 lokal di perangkat" },
+        "durationSeconds": { "type": "number", "description": "Durasi rekaman dalam detik" },
+        "durationFormatted": { "type": "string", "description": "Durasi dalam format mm:ss" },
+        "fileSizeBytes": { "type": "number", "description": "Ukuran file video dalam byte" },
+        "resolution": { "type": "string", "description": "Dimensi video (misal 1080x2400)" },
+        "fps": { "type": "number", "description": "Frame rate target (misal 60 FPS)" },
+        "encoder": { "type": "string", "description": "Tipe codec encoder (H264 / H265)" },
+        "hasAudio": { "type": "boolean", "description": "Apakah rekaman memiliki suara" },
+        "audioSource": { "type": "string", "description": "Sumber audio (MIC / INTERNAL / MUTE)" },
+        "isGamingSession": { "type": "boolean", "description": "Apakah direkam dengan Mode Gaming Pro" },
+        "createdAt": { "type": "string", "description": "Waktu rekaman dibuat ISO8601" },
+        "localPath": { "type": "string", "description": "Path lokal file di direktori aplikasi" },
+        "notes": { "type": "string", "description": "Catatan tambahan atau deskripsi video" }
+      },
+      "required": ["id", "userId", "title", "fileName", "durationSeconds", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "UserProfile",
+      "description": "Menyimpan data profil akun pengguna dan statistik rekaman layar"
+    },
+    "/users/{userId}/recordings/{recordingId}": {
+      "schema": "VideoRecording",
+      "description": "Menyimpan katalog metadata dan histori rekaman video tiap pengguna"
+    }
+  }
+}

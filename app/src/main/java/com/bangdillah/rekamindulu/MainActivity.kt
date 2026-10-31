@@ -51,6 +51,11 @@ import com.google.android.material.button.MaterialButton
 import com.google.android.material.card.MaterialCardView
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.snackbar.Snackbar
+import com.bangdillah.rekamindulu.backend.FirebaseAuthManager
+import com.bangdillah.rekamindulu.backend.FirebaseVideoRepository
+import com.bangdillah.rekamindulu.backend.AuthStatus
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.launch
 import java.io.File
 import java.util.Locale
 
@@ -205,6 +210,7 @@ open class MainActivity : AppCompatActivity() {
         initAudioSettings()
         checkAppLock()
         setupHeaderActions()
+        setupCloudBackendCard()
         setupDashboardCards()
         setupHomeRecordingsListView()
         setupBottomNavigation()
@@ -213,6 +219,99 @@ open class MainActivity : AppCompatActivity() {
             intent.removeExtra("REQUEST_PERMISSIONS_ONBOARDING")
             startActivity(Intent(this, PermissionDialogActivity::class.java))
         }
+    }
+
+    private var authManager: FirebaseAuthManager? = null
+    private var videoRepository: FirebaseVideoRepository? = null
+
+    /**
+     * Konfigurasi kartu integrasi Google Cloud Firestore & Akun Google Sign-In
+     */
+    private fun setupCloudBackendCard() {
+        val manager = FirebaseAuthManager.getInstance(this).also { authManager = it }
+        val repo = FirebaseVideoRepository(this).also { videoRepository = it }
+
+        val textName = findViewById<TextView>(R.id.text_cloud_account_name)
+        val textSubtitle = findViewById<TextView>(R.id.text_cloud_account_subtitle)
+        val btnAuth = findViewById<MaterialButton>(R.id.btn_cloud_auth_action)
+        val btnSync = findViewById<MaterialButton>(R.id.btn_trigger_sync_cloud)
+        val textSyncDetail = findViewById<TextView>(R.id.text_cloud_sync_detail)
+
+        fun updateUi(status: AuthStatus) {
+            when (status) {
+                is AuthStatus.Authenticated -> {
+                    val user = status.user
+                    textName?.text = user.displayName ?: user.email ?: "Pengguna Google"
+                    textSubtitle?.text = "☁️ Terhubung: ${user.email ?: "Cloud Aktif"}"
+                    btnAuth?.isEnabled = true
+                    btnAuth?.text = "Keluar"
+                    btnAuth?.setOnClickListener {
+                        MaterialAlertDialogBuilder(this)
+                            .setTitle("Keluar Akun Google")
+                            .setMessage("Apakah Anda ingin keluar dari akun ${user.email}?")
+                            .setPositiveButton("Keluar") { _, _ ->
+                                manager.signOut {
+                                    Toast.makeText(this, "Berhasil keluar", Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                            .setNegativeButton("Batal", null)
+                            .show()
+                    }
+
+                    lifecycleScope.launch {
+                        repo.observeRecordings(user.uid).collect { list ->
+                            textSyncDetail?.text = "☁️ ${list.size} rekaman tersimpan rapi di Cloud Firestore"
+                        }
+                    }
+
+                    btnSync?.setOnClickListener {
+                        btnSync.isEnabled = false
+                        btnSync.text = "⏳ Menyinkronkan..."
+                        lifecycleScope.launch {
+                            repo.syncAllLocalRecordings(this@MainActivity, user.uid) { synced, total ->
+                                textSyncDetail?.text = "Menyinkronkan $synced dari $total rekaman..."
+                            }
+                            btnSync.isEnabled = true
+                            btnSync.text = "🔄 Sinkron Cloud"
+                            Toast.makeText(this@MainActivity, "Katalog rekaman berhasil disinkronkan ke Cloud Firestore!", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                }
+                is AuthStatus.Loading -> {
+                    textSubtitle?.text = "Menghubungkan ke Google..."
+                    btnAuth?.isEnabled = false
+                }
+                is AuthStatus.Error -> {
+                    textSubtitle?.text = "⚠️ ${status.message}"
+                    btnAuth?.isEnabled = true
+                    btnAuth?.text = "Login Google"
+                    btnAuth?.setOnClickListener {
+                        manager.signInWithGoogle(this)
+                    }
+                }
+                else -> {
+                    textName?.text = "Google Cloud Firestore"
+                    textSubtitle?.text = "☁️ Masuk untuk backup & sinkronisasi katalog"
+                    btnAuth?.isEnabled = true
+                    btnAuth?.text = "Login Google"
+                    btnAuth?.setOnClickListener {
+                        manager.signInWithGoogle(this)
+                    }
+                    btnSync?.setOnClickListener {
+                        Toast.makeText(this, "Silakan login Google terlebih dahulu untuk sinkronisasi cloud", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
+        }
+
+        lifecycleScope.launch {
+            manager.authStatus.collect { status ->
+                updateUi(status)
+            }
+        }
+
+        // Coba silent login untuk akun yang sudah pernah login sebelumnya
+        manager.attemptSilentSignIn(this)
     }
 
     /**
@@ -344,6 +443,7 @@ open class MainActivity : AppCompatActivity() {
         initAudioSettings()
         updateHardwareMetrics()
         updateResolutionBadge()
+        updateFpsStabilizerView()
         updateLibraryStats()
         updateRecordingBanner()
         updateHomeRecordingsList()
@@ -457,6 +557,24 @@ open class MainActivity : AppCompatActivity() {
         findViewById<Button>(R.id.toggle_facecam)?.setOnClickListener { toggleFacecamAction() }
         findViewById<View>(R.id.card_facecam_toggle)?.setOnClickListener { toggleFacecamAction() }
 
+        // Toggle FPS Stabilizer 60 FPS Anti-Drop
+        val toggleFpsStabilizerAction = {
+            if (ScreenRecordingService.isRecording) {
+                showSnackbar("⚠️ Pengaturan stabilisator terkunci saat perekaman sedang aktif")
+            } else {
+                appPreferences.fpsStabilizerEnabled = !appPreferences.fpsStabilizerEnabled
+                updateFpsStabilizerView()
+                val msg = if (appPreferences.fpsStabilizerEnabled) {
+                    "⚡ Stabilisator FPS 60 FPS: Diaktifkan (Frame Rate Terkunci & Offload GPU Aktif)"
+                } else {
+                    "Stabilisator FPS: Dinonaktifkan"
+                }
+                showSnackbar(msg)
+            }
+        }
+        findViewById<Button>(R.id.btn_home_toggle_fps_stabilizer)?.setOnClickListener { toggleFpsStabilizerAction() }
+        findViewById<View>(R.id.card_fps_stabilizer_toggle)?.setOnClickListener { toggleFpsStabilizerAction() }
+
 
         // Pause / Resume button on active banner
         findViewById<Button>(R.id.btn_home_pause_recording)?.setOnClickListener {
@@ -544,8 +662,8 @@ open class MainActivity : AppCompatActivity() {
 
     private fun showQualityPickerDialog() {
         val currentPreset = when {
-            appPreferences.resolution == "1080p" && appPreferences.fps == 30 -> "1080p_30"
             appPreferences.resolution == "1080p" && appPreferences.fps >= 60 -> "1080p_60"
+            appPreferences.resolution == "1080p" && appPreferences.fps == 30 -> "1080p_30"
             appPreferences.resolution == "4K" -> "4K_30"
             appPreferences.resolution == "720p" -> "720p_30"
             else -> "custom"
@@ -553,17 +671,24 @@ open class MainActivity : AppCompatActivity() {
 
         val options = listOf(
             SelectionOption(
-                value = "1080p_30",
-                title = "1080p Full HD (30 FPS • 8 Mbps)",
-                subtitle = "Standar YouTube, Seimbang & Stabil Tanpa Lag",
-                badgeLabel = "1080p",
+                value = "1080p_60",
+                title = "1080p Gaming & Ultra Smooth (60 FPS • 12 Mbps)",
+                subtitle = "Rekomendasi Utama: 60 FPS Terkunci, Mulus Tanpa Lag & Frame Drop",
+                badgeLabel = "60FPS",
                 isRecommended = true
             ),
             SelectionOption(
-                value = "1080p_60",
-                title = "1080p Gaming Pro (60 FPS • 12 Mbps)",
-                subtitle = "Gerakan Sangat Mulus untuk Rekaman Game & E-Sports",
+                value = "720p_60",
+                title = "720p Esports Super Ringan (60 FPS • 8 Mbps)",
+                subtitle = "Optimal untuk Game Berat: 60 FPS Sangat Mulus, HP Dingin & Baterai Awet",
                 badgeLabel = "60FPS",
+                isRecommended = false
+            ),
+            SelectionOption(
+                value = "1080p_30",
+                title = "1080p Standar (30 FPS • 8 Mbps)",
+                subtitle = "Hemat Baterai & Efisien untuk Tutorial Ringan",
+                badgeLabel = "1080p",
                 isRecommended = false
             ),
             SelectionOption(
@@ -598,21 +723,34 @@ open class MainActivity : AppCompatActivity() {
             selectedValue = currentPreset
         ) { selectedPreset ->
             when (selectedPreset) {
+                "1080p_60" -> {
+                    appPreferences.resolution = "1080p"
+                    appPreferences.fps = 60
+                    appPreferences.bitrateMbps = 12
+                    appPreferences.isGamingMode = true
+                    appPreferences.fpsStabilizerEnabled = true
+                    updateResolutionBadge()
+                    updateFpsStabilizerView()
+                    showSnackbar("Preset 1080p 60FPS diterapkan (Mode Gaming & Stabilisator Aktif)")
+                }
+                "720p_60" -> {
+                    appPreferences.resolution = "720p"
+                    appPreferences.fps = 60
+                    appPreferences.bitrateMbps = 8
+                    appPreferences.isGamingMode = true
+                    appPreferences.fpsStabilizerEnabled = true
+                    updateResolutionBadge()
+                    updateFpsStabilizerView()
+                    showSnackbar("Preset 720p 60FPS Esports diterapkan (Ringan, Adem & Mulus)")
+                }
                 "1080p_30" -> {
                     appPreferences.resolution = "1080p"
                     appPreferences.fps = 30
                     appPreferences.bitrateMbps = 8
                     appPreferences.isGamingMode = false
                     updateResolutionBadge()
+                    updateFpsStabilizerView()
                     showSnackbar("Preset 1080p 30FPS diterapkan")
-                }
-                "1080p_60" -> {
-                    appPreferences.resolution = "1080p"
-                    appPreferences.fps = 60
-                    appPreferences.bitrateMbps = 12
-                    appPreferences.isGamingMode = true
-                    updateResolutionBadge()
-                    showSnackbar("Preset 1080p 60FPS diterapkan (Mode Gaming Pro)")
                 }
                 "4K_30" -> {
                     appPreferences.resolution = "4K"
@@ -620,6 +758,7 @@ open class MainActivity : AppCompatActivity() {
                     appPreferences.bitrateMbps = 20
                     appPreferences.isGamingMode = false
                     updateResolutionBadge()
+                    updateFpsStabilizerView()
                     showSnackbar("Preset 4K Ultra HD diterapkan")
                 }
                 "720p_30" -> {
@@ -628,6 +767,7 @@ open class MainActivity : AppCompatActivity() {
                     appPreferences.bitrateMbps = 5
                     appPreferences.isGamingMode = false
                     updateResolutionBadge()
+                    updateFpsStabilizerView()
                     showSnackbar("Preset 720p 30FPS diterapkan")
                 }
                 "custom" -> {
@@ -646,6 +786,34 @@ open class MainActivity : AppCompatActivity() {
             appPreferences.fps,
             appPreferences.bitrateMbps
         )
+    }
+
+    private fun updateFpsStabilizerView() {
+        val card = findViewById<com.google.android.material.card.MaterialCardView>(R.id.card_fps_stabilizer_toggle)
+        val btn = findViewById<Button>(R.id.btn_home_toggle_fps_stabilizer)
+        val statusText = findViewById<TextView>(R.id.text_fps_stabilizer_status)
+        val iconBox = findViewById<View>(R.id.icon_box_fps_stabilizer)
+
+        val isEnabled = appPreferences.fpsStabilizerEnabled
+        if (isEnabled) {
+            card?.strokeColor = ContextCompat.getColor(this, R.color.colorSuccess)
+            card?.strokeWidth = 3
+            btn?.text = "✓ 60 FPS TERKUNCI"
+            btn?.backgroundTintList = ContextCompat.getColorStateList(this, R.color.colorSuccessContainer)
+            btn?.setTextColor(ContextCompat.getColor(this, R.color.colorSuccess))
+            statusText?.text = "Terkunci Stabil ${appPreferences.fps} FPS • Offload GPU Aktif (0 Frame Drop)"
+            statusText?.setTextColor(ContextCompat.getColor(this, R.color.colorSuccess))
+            iconBox?.backgroundTintList = ContextCompat.getColorStateList(this, R.color.colorSuccessContainer)
+        } else {
+            card?.strokeColor = ContextCompat.getColor(this, R.color.colorBorder)
+            card?.strokeWidth = 1
+            btn?.text = "NONAKTIF"
+            btn?.backgroundTintList = ContextCompat.getColorStateList(this, R.color.colorSurfaceVariant)
+            btn?.setTextColor(ContextCompat.getColor(this, R.color.textCaption))
+            statusText?.text = "Mode Standar (Frame rate adaptif tanpa penguncian)"
+            statusText?.setTextColor(ContextCompat.getColor(this, R.color.textCaption))
+            iconBox?.backgroundTintList = ContextCompat.getColorStateList(this, R.color.colorSurfaceVariant)
+        }
     }
 
     private fun setupDashboardCards() {

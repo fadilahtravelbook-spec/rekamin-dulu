@@ -33,6 +33,7 @@
     <color name="textBody">#34374A</color>
     <color name="textCaption">#72778E</color>
     <color name="textCaptionDark">#9E9EA6</color>
+    <color name="textSecondary">#72778E</color>
 
     <!-- ========== VARIANTS & ACCENTS ========== -->
     <color name="colorSurfaceVariant">#EEF0F6</color>

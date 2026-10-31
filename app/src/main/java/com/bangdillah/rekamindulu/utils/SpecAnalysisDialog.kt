@@ -44,17 +44,20 @@ object SpecAnalysisDialog {
 
         val report = DeviceAnalyzer.analyze(context)
 
-        // 1. Bind Score & Status Badge
-        view.findViewById<TextView>(R.id.text_dialog_score)?.text = "${report.readinessScore} / 100"
-        val badgeView = view.findViewById<TextView>(R.id.text_dialog_status_badge)
-        badgeView?.text = report.readinessStatus.uppercase(Locale.getDefault())
-
         val badgeColor = when {
             report.readinessScore >= 85 -> ContextCompat.getColor(context, R.color.colorSuccess)
-            report.readinessScore >= 70 -> ContextCompat.getColor(context, R.color.colorPrimary)
+            report.readinessScore >= 70 -> ContextCompat.getColor(context, R.color.colorPrimaryLight)
             report.readinessScore >= 50 -> ContextCompat.getColor(context, R.color.colorWarning)
             else -> ContextCompat.getColor(context, R.color.colorError)
         }
+
+        // 1. Bind Score & Status Badge
+        view.findViewById<TextView>(R.id.text_dialog_score)?.apply {
+            text = "${report.readinessScore} / 100"
+            setTextColor(badgeColor)
+        }
+        val badgeView = view.findViewById<TextView>(R.id.text_dialog_status_badge)
+        badgeView?.text = report.readinessStatus.uppercase(Locale.getDefault())
         badgeView?.backgroundTintList = ColorStateList.valueOf(badgeColor)
 
         view.findViewById<ProgressBar>(R.id.progress_dialog_score)?.apply {
@@ -187,6 +190,13 @@ object SpecAnalysisDialog {
         prefs.resolution = resolution
         prefs.fps = fps
         prefs.bitrateMbps = bitrateMbps
+
+        if (fps >= 60) {
+            prefs.isGamingMode = true
+            prefs.fpsStabilizerEnabled = true
+            prefs.gamingTurboBoost = true
+            prefs.hardwareAccelerationEnabled = true
+        }
 
         Toast.makeText(
             context,
