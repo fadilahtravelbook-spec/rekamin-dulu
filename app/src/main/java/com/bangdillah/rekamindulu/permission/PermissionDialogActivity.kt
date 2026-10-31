@@ -7,6 +7,8 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
+import android.view.Gravity
+import android.view.WindowManager
 import android.widget.Button
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
@@ -31,6 +33,8 @@ class PermissionDialogActivity : AppCompatActivity() {
         window.setBackgroundDrawableResource(android.R.color.transparent)
         setContentView(R.layout.permission_dialog)
 
+        applyDialogWindowBounds()
+
         appPreferences = AppPreferences(this)
 
         val btnTambahIzin = findViewById<Button>(R.id.btn_tambah_izin)
@@ -43,6 +47,21 @@ class PermissionDialogActivity : AppCompatActivity() {
         btnTidakKeluar?.setOnClickListener {
             finish()
         }
+    }
+
+    override fun onStart() {
+        super.onStart()
+        applyDialogWindowBounds()
+    }
+
+    private fun applyDialogWindowBounds() {
+        val dm = resources.displayMetrics
+        val maxWidthPx = (400 * dm.density).toInt()
+        val targetWidth = (dm.widthPixels * 0.90f).toInt().coerceAtMost(maxWidthPx)
+        val maxHeightPx = (dm.heightPixels * 0.90f).toInt()
+
+        window.setLayout(targetWidth, WindowManager.LayoutParams.WRAP_CONTENT)
+        window.setGravity(Gravity.CENTER)
     }
 
     private fun checkAndRequestPermissions() {

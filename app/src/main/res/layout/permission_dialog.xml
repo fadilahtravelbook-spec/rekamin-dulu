@@ -1,242 +1,251 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:layout_gravity="center"
-    android:gravity="center"
-    android:orientation="vertical"
-    android:padding="20dp">
+    android:fillViewport="true"
+    android:overScrollMode="never"
+    android:scrollbars="none">
 
-    <androidx.cardview.widget.CardView
+    <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        app:cardBackgroundColor="@color/colorSurface"
-        app:cardCornerRadius="24dp"
-        app:cardElevation="12dp">
+        android:gravity="center"
+        android:padding="16dp">
 
-        <LinearLayout
+        <com.google.android.material.card.MaterialCardView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:gravity="center_horizontal"
-            android:orientation="vertical"
-            android:paddingHorizontal="24dp"
-            android:paddingVertical="26dp">
+            app:cardBackgroundColor="@color/colorSurface"
+            app:cardCornerRadius="24dp"
+            app:cardElevation="8dp"
+            app:strokeColor="@color/colorBorder"
+            app:strokeWidth="1dp">
 
-            <!-- ICON BADGE -->
-            <FrameLayout
-                android:layout_width="64dp"
-                android:layout_height="64dp"
-                android:layout_marginBottom="16dp"
-                android:background="@drawable/ic_play_circle_bg"
-                android:backgroundTint="#1F6C5CE7">
-
-                <ImageView
-                    android:layout_width="32dp"
-                    android:layout_height="32dp"
-                    android:layout_gravity="center"
-                    android:contentDescription="Ikon Izin Akses"
-                    android:src="@drawable/ic_permission"
-                    app:tint="@color/colorPrimary" />
-            </FrameLayout>
-
-            <!-- TITLE -->
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Izin Akses Perekaman"
-                android:textColor="@color/textTitle"
-                android:textSize="20sp"
-                android:textStyle="bold" />
-
-            <!-- SUBTITLE DESCRIPTION -->
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:gravity="center"
-                android:lineSpacingExtra="3dp"
-                android:text="Rekamin Dulu memerlukan izin untuk merekam layar dan merekam audio game/mikrofon dengan jernih."
-                android:textColor="@color/textCaption"
-                android:textSize="13sp" />
-
-            <!-- PERMISSION DETAILS LIST -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="18dp"
-                android:background="@drawable/ic_play_circle_bg"
-                android:backgroundTint="@color/colorSurfaceVariant"
+                android:gravity="center_horizontal"
                 android:orientation="vertical"
-                android:paddingHorizontal="14dp"
-                android:paddingVertical="14dp">
+                android:paddingHorizontal="20dp"
+                android:paddingTop="22dp"
+                android:paddingBottom="18dp">
 
-                <!-- 1. Microphone -->
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:gravity="center_vertical"
-                    android:orientation="horizontal">
-
-                    <ImageView
-                        android:layout_width="22dp"
-                        android:layout_height="22dp"
-                        android:contentDescription="Mikrofon"
-                        android:src="@drawable/ic_mic"
-                        app:tint="@color/colorPrimary" />
-
-                    <LinearLayout
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_marginStart="10dp"
-                        android:layout_weight="1"
-                        android:orientation="vertical">
-
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="Mikrofon &amp; Audio Suara"
-                            android:textColor="@color/textTitle"
-                            android:textSize="13sp"
-                            android:textStyle="bold" />
-
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="Rekam audio game dan suara Anda saat merekam"
-                            android:textColor="@color/textCaption"
-                            android:textSize="11sp" />
-                    </LinearLayout>
-                </LinearLayout>
-
-                <View
-                    android:layout_width="match_parent"
-                    android:layout_height="1dp"
-                    android:layout_marginVertical="10dp"
-                    android:background="#15000000" />
-
-                <!-- 2. Screen Capture -->
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:gravity="center_vertical"
-                    android:orientation="horizontal">
+                <!-- 1. ICON BADGE -->
+                <FrameLayout
+                    android:layout_width="54dp"
+                    android:layout_height="54dp"
+                    android:layout_marginBottom="12dp"
+                    android:background="@drawable/bg_chip_pill"
+                    android:backgroundTint="#1F6C5CE7">
 
                     <ImageView
-                        android:layout_width="22dp"
-                        android:layout_height="22dp"
-                        android:contentDescription="Layar"
-                        android:src="@drawable/ic_video"
+                        android:layout_width="26dp"
+                        android:layout_height="26dp"
+                        android:layout_gravity="center"
+                        android:contentDescription="Ikon Izin Akses"
+                        android:src="@drawable/ic_lock"
                         app:tint="@color/colorPrimary" />
+                </FrameLayout>
 
-                    <LinearLayout
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_marginStart="10dp"
-                        android:layout_weight="1"
-                        android:orientation="vertical">
+                <!-- 2. TITLE -->
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:gravity="center"
+                    android:text="Izin Akses Perekaman"
+                    android:textColor="@color/textTitle"
+                    android:textSize="19sp"
+                    android:textStyle="bold" />
 
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="Tangkap Layar HP"
-                            android:textColor="@color/textTitle"
-                            android:textSize="13sp"
-                            android:textStyle="bold" />
-
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="Merekam aktivitas visual layar tanpa watermark"
-                            android:textColor="@color/textCaption"
-                            android:textSize="11sp" />
-                    </LinearLayout>
-                </LinearLayout>
-
-                <View
-                    android:layout_width="match_parent"
-                    android:layout_height="1dp"
-                    android:layout_marginVertical="10dp"
-                    android:background="#15000000" />
-
-                <!-- 3. Notifications -->
-                <LinearLayout
+                <!-- 3. SUBTITLE DESCRIPTION -->
+                <TextView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:gravity="center_vertical"
-                    android:orientation="horizontal">
-
-                    <ImageView
-                        android:layout_width="22dp"
-                        android:layout_height="22dp"
-                        android:contentDescription="Notifikasi"
-                        android:src="@drawable/ic_check_circle"
-                        app:tint="@color/colorPrimary" />
-
-                    <LinearLayout
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_marginStart="10dp"
-                        android:layout_weight="1"
-                        android:orientation="vertical">
-
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="Notifikasi Kontrol"
-                            android:textColor="@color/textTitle"
-                            android:textSize="13sp"
-                            android:textStyle="bold" />
-
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="Akses cepat tombol jeda &amp; simpan di status bar"
-                            android:textColor="@color/textCaption"
-                            android:textSize="11sp" />
-                    </LinearLayout>
-                </LinearLayout>
-
-            </LinearLayout>
-
-            <!-- ACTION BUTTONS -->
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="22dp"
-                android:orientation="vertical">
-
-                <!-- Primary Grant Button -->
-                <Button
-                    android:id="@+id/btn_tambah_izin"
-                    android:layout_width="match_parent"
-                    android:layout_height="52dp"
-                    android:text="Izinkan Sekarang"
-                    android:textColor="@color/colorOnPrimary"
-                    android:textSize="14sp"
-                    android:textStyle="bold"
-                    app:backgroundTint="@color/colorPrimary"
-                    app:cornerRadius="16dp"
-                    app:icon="@drawable/ic_check_circle"
-                    app:iconGravity="textStart"
-                    app:iconPadding="8dp"
-                    app:iconTint="@color/colorOnPrimary" />
-
-                <!-- Dismiss Button -->
-                <Button
-                    android:id="@+id/btn_tidak_keluar"
-                    style="@style/Widget.Material3.Button.TextButton"
-                    android:layout_width="match_parent"
-                    android:layout_height="44dp"
                     android:layout_marginTop="6dp"
-                    android:text="Nanti Saja"
+                    android:gravity="center"
+                    android:lineSpacingExtra="2dp"
+                    android:text="Rekamin Dulu memerlukan izin untuk merekam layar dan merekam audio game/mikrofon dengan jernih."
                     android:textColor="@color/textCaption"
-                    android:textSize="13sp"
-                    android:textStyle="bold"
-                    app:cornerRadius="14dp" />
+                    android:textSize="12.5sp" />
+
+                <!-- 4. PERMISSION DETAILS LIST (Clean Rounded Container) -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="14dp"
+                    android:background="@drawable/bg_telemetry_box"
+                    android:orientation="vertical"
+                    android:paddingHorizontal="14dp"
+                    android:paddingVertical="12dp">
+
+                    <!-- 1. Microphone -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal">
+
+                        <ImageView
+                            android:layout_width="20dp"
+                            android:layout_height="20dp"
+                            android:contentDescription="Mikrofon"
+                            android:src="@drawable/ic_mic"
+                            app:tint="@color/colorPrimary" />
+
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="10dp"
+                            android:layout_weight="1"
+                            android:orientation="vertical">
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="Mikrofon &amp; Audio Suara"
+                                android:textColor="@color/textTitle"
+                                android:textSize="13sp"
+                                android:textStyle="bold" />
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="Rekam audio game dan suara Anda saat merekam"
+                                android:textColor="@color/textCaption"
+                                android:textSize="11sp" />
+                        </LinearLayout>
+                    </LinearLayout>
+
+                    <View
+                        android:layout_width="match_parent"
+                        android:layout_height="1dp"
+                        android:layout_marginVertical="8dp"
+                        android:background="@color/colorBorder" />
+
+                    <!-- 2. Screen Capture -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal">
+
+                        <ImageView
+                            android:layout_width="20dp"
+                            android:layout_height="20dp"
+                            android:contentDescription="Layar"
+                            android:src="@drawable/ic_video"
+                            app:tint="@color/colorPrimary" />
+
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="10dp"
+                            android:layout_weight="1"
+                            android:orientation="vertical">
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="Tangkap Layar HP"
+                                android:textColor="@color/textTitle"
+                                android:textSize="13sp"
+                                android:textStyle="bold" />
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="Merekam aktivitas visual layar tanpa watermark"
+                                android:textColor="@color/textCaption"
+                                android:textSize="11sp" />
+                        </LinearLayout>
+                    </LinearLayout>
+
+                    <View
+                        android:layout_width="match_parent"
+                        android:layout_height="1dp"
+                        android:layout_marginVertical="8dp"
+                        android:background="@color/colorBorder" />
+
+                    <!-- 3. Notifications -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal">
+
+                        <ImageView
+                            android:layout_width="20dp"
+                            android:layout_height="20dp"
+                            android:contentDescription="Notifikasi"
+                            android:src="@drawable/ic_check_circle"
+                            app:tint="@color/colorPrimary" />
+
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="10dp"
+                            android:layout_weight="1"
+                            android:orientation="vertical">
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="Notifikasi Kontrol"
+                                android:textColor="@color/textTitle"
+                                android:textSize="13sp"
+                                android:textStyle="bold" />
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="Akses cepat tombol jeda &amp; simpan di status bar"
+                                android:textColor="@color/textCaption"
+                                android:textSize="11sp" />
+                        </LinearLayout>
+                    </LinearLayout>
+
+                </LinearLayout>
+
+                <!-- 5. ACTION BUTTONS -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="16dp"
+                    android:orientation="vertical">
+
+                    <!-- Primary Grant Button -->
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btn_tambah_izin"
+                        android:layout_width="match_parent"
+                        android:layout_height="48dp"
+                        android:text="Izinkan Sekarang"
+                        android:textColor="@color/colorOnPrimary"
+                        android:textSize="14sp"
+                        android:textStyle="bold"
+                        app:backgroundTint="@color/colorPrimary"
+                        app:cornerRadius="14dp"
+                        app:icon="@drawable/ic_check_circle"
+                        app:iconGravity="textStart"
+                        app:iconPadding="8dp"
+                        app:iconTint="@color/colorOnPrimary" />
+
+                    <!-- Dismiss Button -->
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btn_tidak_keluar"
+                        style="@style/Widget.Material3.Button.TextButton"
+                        android:layout_width="match_parent"
+                        android:layout_height="42dp"
+                        android:layout_marginTop="4dp"
+                        android:text="Nanti Saja"
+                        android:textColor="@color/textCaption"
+                        android:textSize="13sp"
+                        android:textStyle="bold"
+                        app:cornerRadius="12dp" />
+                </LinearLayout>
+
             </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
 
-        </LinearLayout>
-    </androidx.cardview.widget.CardView>
-
-</LinearLayout>
+    </LinearLayout>
+</ScrollView>

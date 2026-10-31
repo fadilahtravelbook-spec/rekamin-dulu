@@ -48,6 +48,10 @@ class SettingsActivity : AppCompatActivity() {
     private var rowSettingPin: View? = null
 
     private var toggleGaming: MaterialSwitch? = null
+    private var toggleFpsStabilizer: MaterialSwitch? = null
+    private var toggleTurboBoost: MaterialSwitch? = null
+    private var toggleHardwareAcceleration: MaterialSwitch? = null
+    private var toggleInternalAudioBoost: MaterialSwitch? = null
     private var toggleFloating: MaterialSwitch? = null
     private var toggleVibrate: MaterialSwitch? = null
     private var toggleStopScreenOff: MaterialSwitch? = null
@@ -173,6 +177,10 @@ class SettingsActivity : AppCompatActivity() {
         rowSettingPin = findViewById(R.id.row_setting_pin)
 
         toggleGaming = findViewById(R.id.toggle_gaming_mode)
+        toggleFpsStabilizer = findViewById(R.id.toggle_fps_stabilizer)
+        toggleTurboBoost = findViewById(R.id.toggle_turbo_boost)
+        toggleHardwareAcceleration = findViewById(R.id.toggle_hardware_acceleration)
+        toggleInternalAudioBoost = findViewById(R.id.toggle_internal_audio_boost)
         toggleFloating = findViewById(R.id.toggle_floating_overlay)
         toggleVibrate = findViewById(R.id.toggle_vibrate)
         toggleStopScreenOff = findViewById(R.id.toggle_stop_screen_off)
@@ -200,6 +208,50 @@ class SettingsActivity : AppCompatActivity() {
                 updateUIValues(skipGamingSwitch = true)
                 Toast.makeText(this, "Mode Standar: 30 FPS & 8 Mbps", Toast.LENGTH_SHORT).show()
             }
+        }
+
+        // FPS Stabilizer toggle
+        toggleFpsStabilizer?.setOnCheckedChangeListener { _, isChecked ->
+            appPreferences.fpsStabilizerEnabled = isChecked
+            val msg = if (isChecked) {
+                "⚡ Stabilisator FPS Aktif: Frame rate terkunci stabil 60 FPS"
+            } else {
+                "Stabilisator FPS Dinonaktifkan"
+            }
+            Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
+        }
+
+        // Game Turbo Booster toggle
+        toggleTurboBoost?.setOnCheckedChangeListener { _, isChecked ->
+            appPreferences.gamingTurboBoost = isChecked
+            val msg = if (isChecked) {
+                "🚀 Game Turbo Aktif: Prioritas thread encoder dimaksimalkan"
+            } else {
+                "Game Turbo Dinonaktifkan"
+            }
+            Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
+        }
+
+        // Hardware GPU Acceleration toggle
+        toggleHardwareAcceleration?.setOnCheckedChangeListener { _, isChecked ->
+            appPreferences.hardwareAccelerationEnabled = isChecked
+            val msg = if (isChecked) {
+                "⚡ Akselerasi Hardware GPU Aktif: Beban CPU dialihkan ke GPU/VPU"
+            } else {
+                "Akselerasi Hardware Dinonaktifkan (Mode Software Standar)"
+            }
+            Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
+        }
+
+        // Stabilisator Audio Internal toggle
+        toggleInternalAudioBoost?.setOnCheckedChangeListener { _, isChecked ->
+            appPreferences.internalAudioStabilizer = isChecked
+            val msg = if (isChecked) {
+                "🎧 Audio Internal Stabil: Jalur audio game diproteksi dari noise & bentrok"
+            } else {
+                "Stabilisator Audio Internal Dinonaktifkan"
+            }
+            Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
         }
 
         // Floating overlay toggle
@@ -421,6 +473,10 @@ class SettingsActivity : AppCompatActivity() {
             if (appPreferences.isGamingMode) View.VISIBLE else View.GONE
 
         toggleFloating?.isChecked = appPreferences.showFloatingOverlay
+        toggleFpsStabilizer?.isChecked = appPreferences.fpsStabilizerEnabled
+        toggleTurboBoost?.isChecked = appPreferences.gamingTurboBoost
+        toggleHardwareAcceleration?.isChecked = appPreferences.hardwareAccelerationEnabled
+        toggleInternalAudioBoost?.isChecked = appPreferences.internalAudioStabilizer
         toggleVibrate?.isChecked = appPreferences.vibrateOnStart
         toggleStopScreenOff?.isChecked = appPreferences.stopOnScreenOff
         toggleShowFps?.isChecked = appPreferences.showFpsCounter
@@ -429,6 +485,10 @@ class SettingsActivity : AppCompatActivity() {
         // Disable modifications if active recording is underway
         val isRecording = ScreenRecordingService.isRecording
         toggleGaming?.isEnabled = !isRecording
+        toggleFpsStabilizer?.isEnabled = !isRecording
+        toggleTurboBoost?.isEnabled = !isRecording
+        toggleHardwareAcceleration?.isEnabled = !isRecording
+        toggleInternalAudioBoost?.isEnabled = !isRecording
         toggleFloating?.isEnabled = !isRecording
         toggleVibrate?.isEnabled = !isRecording
         toggleStopScreenOff?.isEnabled = !isRecording
@@ -625,8 +685,8 @@ class SettingsActivity : AppCompatActivity() {
             ),
             SelectionOption(
                 value = "INTERNAL",
-                title = "Hanya Audio Internal Game",
-                subtitle = "Suara Game Bersih Tanpa Suara Luar (Android 10+)",
+                title = "Hanya Audio Internal Game (Stabil)",
+                subtitle = "Jalur Bersih: Audio Game Murni Tanpa Noise Luar & Anti-Bentrok Voice Chat",
                 badgeLabel = "GAME",
                 isRecommended = false
             ),

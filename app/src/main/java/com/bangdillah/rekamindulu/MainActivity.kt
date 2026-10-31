@@ -1284,13 +1284,18 @@ open class MainActivity : AppCompatActivity() {
             putExtra(ScreenRecordingService.EXTRA_RESULT_CODE, resultCode)
             putExtra(ScreenRecordingService.EXTRA_RESULT_DATA, data)
         }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            startForegroundService(serviceIntent)
-        } else {
-            startService(serviceIntent)
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                startForegroundService(serviceIntent)
+            } else {
+                startService(serviceIntent)
+            }
+            updateRecordingBanner()
+            showSnackbar("🔴 Perekaman layar aktif • Video otomatis disimpan saat selesai")
+        } catch (e: Exception) {
+            Log.e(TAG, "Gagal memulai ScreenRecordingService", e)
+            Toast.makeText(this, "Gagal memulai perekaman layar: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
         }
-        updateRecordingBanner()
-        showSnackbar("🔴 Perekaman layar aktif • Video otomatis disimpan saat selesai")
     }
 
     open fun onScreenCapturePermissionDenied() {
@@ -1298,10 +1303,14 @@ open class MainActivity : AppCompatActivity() {
     }
 
     fun sendServiceCommand(intent: Intent) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            startForegroundService(intent)
-        } else {
-            startService(intent)
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                startForegroundService(intent)
+            } else {
+                startService(intent)
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "sendServiceCommand failed", e)
         }
     }
 

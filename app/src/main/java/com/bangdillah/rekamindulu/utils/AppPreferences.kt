@@ -29,6 +29,10 @@ class AppPreferences(context: Context) {
         private const val KEY_THEME_MODE = "KEY_THEME_MODE"
         private const val KEY_SHOW_FPS = "KEY_SHOW_FPS"
         private const val KEY_STORAGE_WARNING = "KEY_STORAGE_WARNING"
+        private const val KEY_FPS_STABILIZER = "KEY_FPS_STABILIZER"
+        private const val KEY_GAMING_TURBO = "KEY_GAMING_TURBO"
+        private const val KEY_HARDWARE_ACCELERATION = "KEY_HARDWARE_ACCELERATION"
+        private const val KEY_INTERNAL_AUDIO_STABILIZER = "KEY_INTERNAL_AUDIO_STABILIZER"
     }
 
     var resolution: String
@@ -107,6 +111,22 @@ class AppPreferences(context: Context) {
         get() = prefs.getBoolean(KEY_STORAGE_WARNING, true)
         set(value) = prefs.edit().putBoolean(KEY_STORAGE_WARNING, value).apply()
 
+    var fpsStabilizerEnabled: Boolean
+        get() = prefs.getBoolean(KEY_FPS_STABILIZER, true)
+        set(value) = prefs.edit().putBoolean(KEY_FPS_STABILIZER, value).apply()
+
+    var gamingTurboBoost: Boolean
+        get() = prefs.getBoolean(KEY_GAMING_TURBO, true)
+        set(value) = prefs.edit().putBoolean(KEY_GAMING_TURBO, value).apply()
+
+    var hardwareAccelerationEnabled: Boolean
+        get() = prefs.getBoolean(KEY_HARDWARE_ACCELERATION, true)
+        set(value) = prefs.edit().putBoolean(KEY_HARDWARE_ACCELERATION, value).apply()
+
+    var internalAudioStabilizer: Boolean
+        get() = prefs.getBoolean(KEY_INTERNAL_AUDIO_STABILIZER, true)
+        set(value) = prefs.edit().putBoolean(KEY_INTERNAL_AUDIO_STABILIZER, value).apply()
+
     fun applyTheme() {
         when (themeMode) {
             "LIGHT" -> AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_NO)
@@ -124,6 +144,10 @@ class AppPreferences(context: Context) {
             .putString(KEY_MIC_TYPE, "default")
             .putString(KEY_FACECAM, "OFF")
             .putBoolean(KEY_GAMING_MODE, true)
+            .putBoolean(KEY_FPS_STABILIZER, true)
+            .putBoolean(KEY_GAMING_TURBO, true)
+            .putBoolean(KEY_HARDWARE_ACCELERATION, true)
+            .putBoolean(KEY_INTERNAL_AUDIO_STABILIZER, true)
             .putInt(KEY_COUNTDOWN, 3)
             .putBoolean(KEY_VIBRATE, true)
             .putBoolean(KEY_STOP_SCREEN_OFF, true)

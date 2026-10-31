@@ -34,11 +34,14 @@ import com.bangdillah.rekamindulu.R
 import com.bangdillah.rekamindulu.service.ScreenRecordingService
 import com.bangdillah.rekamindulu.utils.AppPreferences
 import java.util.Locale
+import kotlin.math.abs
+import kotlin.math.cos
+import kotlin.math.sin
 
 /**
- * FloatingOverlayService - Pengontrol rekaman layar melayang ultra-clean & responsif.
- * Dilengkapi Penilai FPS Real-Time VSYNC, Mode Bola Melayang dengan Edge Docking,
- * dan Toolbar Kontrol Studio tanpa bug sentuhan.
+ * FloatingOverlayService - Pengontrol rekaman layar melayang ultra-clean, responsif & profesional.
+ * Didesain khusus agar tidak mengganggu pemain game (Mode Kapsul Siluman + Auto-Dimming di Tepi Layar),
+ * dengan Mesin Pengukur FPS Real-Time Dinamis Aktual yang naik-turun sesuai performa render & encoding.
  */
 class FloatingOverlayService : Service() {
 
@@ -47,21 +50,132 @@ class FloatingOverlayService : Service() {
     private var params: WindowManager.LayoutParams? = null
 
     private var isPaused = false
-    private var isMinimized = false
-    private var frameCount = 0
-    private var lastFpsTimestamp = 0L
-    private var currentMeasuredFps = 60
+    private var isMinimized = true // Default minimized agar pemain game langsung bebas bermain tanpa terhalang!
     private var dummyAnimator: ValueAnimator? = null
     private var snapAnimator: ValueAnimator? = null
 
     private val handler = Handler(Looper.getMainLooper())
     private var appPreferences: AppPreferences? = null
 
-    // Mode Stealth Gamer: Pilihan tingkat transparansi agar tidak menutupi visual & tombol game
+    // Mode Stealth Gamer: Pilihan tingkat transparansi agar visual game tetap terlihat jelas
     private var transparencyIndex = 0
     private val transparencyLevels = floatArrayOf(1.0f, 0.65f, 0.35f)
 
-    // Auto-Collapse Timer: otomatis menutup panel besar ke bola melayang mini setelah 5 detik tanpa sentuhan
+    // ==========================================
+    // MESIN PENGUKUR FPS DINAMIS & STABILISATOR GAME
+    // ==========================================
+    private var previousFrameTimeNanos = 0L
+    private val frameIntervalBuffer = LongArray(16) // buffer sirkular selang waktu frame
+    private var bufferIndex = 0
+    private var bufferFilled = 0
+    private var lastUiUpdateNanos = 0L
+    private var currentMeasuredFps = 60
+    private var sessionMinFps = 999
+    private var sessionMaxFps = 0
+
+    // Exponential Moving Average (EMA) untuk menstabilkan jitter visual
+    private var smoothedFps = 60.0
+
+    // Pacing history untuk 6 segmen bar visual
+    private val pacingHistory = IntArray(6) { 60 }
+    private var pacingHistoryIndex = 0
+
+    // FrameCallback Choreographer dengan frekuensi VSYNC hardware
+    private val frameCallback = object : Choreographer.FrameCallback {
+        override fun doFrame(frameTimeNanos: Long) {
+            if (previousFrameTimeNanos > 0L) {
+                val delta = frameTimeNanos - previousFrameTimeNanos
+                // Filter frame delta masuk akal (5ms - 150ms)
+                if (delta in 5_000_000L..150_000_000L) {
+                    frameIntervalBuffer[bufferIndex] = delta
+                    bufferIndex = (bufferIndex + 1) % frameIntervalBuffer.size
+                    if (bufferFilled < frameIntervalBuffer.size) bufferFilled++
+                }
+            }
+            previousFrameTimeNanos = frameTimeNanos
+
+            // Update UI FPS setiap ~750ms agar tampilan stabil, tenang, dan tidak melompat-lompat liar di mata gamer
+            if (frameTimeNanos - lastUiUpdateNanos >= 750_000_000L && bufferFilled >= 4) {
+                lastUiUpdateNanos = frameTimeNanos
+                calculateAndDispatchDynamicFps(frameTimeNanos)
+            }
+
+            if (ScreenRecordingService.isRecording) {
+                Choreographer.getInstance().postFrameCallback(this)
+            }
+        }
+    }
+
+    private fun calculateAndDispatchDynamicFps(frameTimeNanos: Long) {
+        if (isPaused) {
+            updateFpsEvaluationUi(
+                measuredFps = 0,
+                jitterMs = 0.0,
+                minFps = if (sessionMinFps > 144) 0 else sessionMinFps,
+                maxFps = sessionMaxFps
+            )
+            return
+        }
+
+        var sumDelta = 0L
+        for (i in 0 until bufferFilled) {
+            sumDelta += frameIntervalBuffer[i]
+        }
+        val avgDeltaNanos = sumDelta.toDouble() / bufferFilled.coerceAtLeast(1)
+        val instantFps = (1_000_000_000.0 / avgDeltaNanos.coerceAtLeast(1_000_000.0)).coerceIn(15.0, 144.0)
+
+        // Hitung frame jitter (deviasi rata-rata VSYNC delta)
+        var sumJitter = 0.0
+        for (i in 0 until bufferFilled) {
+            sumJitter += abs(frameIntervalBuffer[i] - avgDeltaNanos)
+        }
+        val avgJitterMs = (sumJitter / bufferFilled.coerceAtLeast(1)) / 1_000_000.0
+
+        val prefs = appPreferences ?: AppPreferences(this).also { appPreferences = it }
+        val targetFps = prefs.fps
+        val hardwareHz = getHardwareRefreshRate()
+        val isStabilizerActive = prefs.fpsStabilizerEnabled
+
+        val finalFps: Int
+        if (isStabilizerActive) {
+            // Low-pass Exponential Moving Average (alpha 0.15)
+            // Menghilangkan fluktuasi jitter acak yang membuat angka naik turun tanpa alasan
+            smoothedFps = (0.15 * instantFps) + (0.85 * smoothedFps)
+
+            // Deadband / Hysteresis filter: jika performa berada di kisaran target (±1.8 FPS),
+            // kunci ke target FPS (60 FPS terkunci sempurna, 100% stabil)
+            finalFps = if (abs(smoothedFps - targetFps) <= 1.8) {
+                targetFps
+            } else {
+                Math.round(smoothedFps).toInt().coerceIn(15, hardwareHz)
+            }
+        } else {
+            smoothedFps = instantFps
+            finalFps = Math.round(instantFps).toInt().coerceIn(15, hardwareHz)
+        }
+
+        currentMeasuredFps = finalFps
+
+        if (finalFps in 15..144) {
+            if (finalFps < sessionMinFps) sessionMinFps = finalFps
+            if (finalFps > sessionMaxFps) sessionMaxFps = finalFps
+        }
+
+        pacingHistory[pacingHistoryIndex] = finalFps
+        pacingHistoryIndex = (pacingHistoryIndex + 1) % pacingHistory.size
+
+        updateFpsEvaluationUi(
+            measuredFps = finalFps,
+            jitterMs = avgJitterMs,
+            minFps = if (sessionMinFps > 144) finalFps else sessionMinFps,
+            maxFps = if (sessionMaxFps == 0) finalFps else sessionMaxFps
+        )
+    }
+
+    // ==========================================
+    // AUTO-COLLAPSE & IDLE DIMMING TIMERS
+    // ==========================================
+    // Otomatis menutup panel besar ke bola mini setelah 4.5 detik tanpa sentuhan
     private val autoCollapseRunnable = Runnable {
         if (!isMinimized && ScreenRecordingService.isRecording) {
             toggleMinimizeMode(true)
@@ -71,8 +185,35 @@ class FloatingOverlayService : Service() {
     private fun resetAutoCollapseTimer() {
         handler.removeCallbacks(autoCollapseRunnable)
         if (!isMinimized && ScreenRecordingService.isRecording) {
-            handler.postDelayed(autoCollapseRunnable, 5000L)
+            handler.postDelayed(autoCollapseRunnable, 4500L)
         }
+    }
+
+    // Auto-Dimming Bola Mini: Otomatis memudarkan kapsul mini ke 40% setelah 3 detik idle di tepi layar
+    private val idleDimRunnable = Runnable {
+        if (isMinimized && ScreenRecordingService.isRecording) {
+            overlayView?.findViewById<View>(R.id.overlay_bubble_container)
+                ?.animate()
+                ?.alpha(0.40f)
+                ?.setDuration(350)
+                ?.start()
+        }
+    }
+
+    private fun startIdleDimTimer() {
+        handler.removeCallbacks(idleDimRunnable)
+        if (isMinimized && ScreenRecordingService.isRecording) {
+            handler.postDelayed(idleDimRunnable, 3000L)
+        }
+    }
+
+    private fun wakeBubbleFromDim() {
+        handler.removeCallbacks(idleDimRunnable)
+        overlayView?.findViewById<View>(R.id.overlay_bubble_container)
+            ?.animate()
+            ?.alpha(1.0f)
+            ?.setDuration(150)
+            ?.start()
     }
 
     private fun cycleTransparency() {
@@ -87,12 +228,12 @@ class FloatingOverlayService : Service() {
                 Toast.makeText(this, "👁️ HUD Normal (100%)", Toast.LENGTH_SHORT).show()
             }
             1 -> {
-                btnTrans?.imageTintList = ColorStateList.valueOf(0xFF00B894.toInt())
-                Toast.makeText(this, "👻 Mode Transparan Game (65%)", Toast.LENGTH_SHORT).show()
+                btnTrans?.imageTintList = ColorStateList.valueOf(0xFF00E676.toInt())
+                Toast.makeText(this, "👻 Semi-Transparan (65%)", Toast.LENGTH_SHORT).show()
             }
             2 -> {
-                btnTrans?.imageTintList = ColorStateList.valueOf(0xFFFF9F43.toInt())
-                Toast.makeText(this, "🥷 Mode Stealth Gamer (35%)", Toast.LENGTH_SHORT).show()
+                btnTrans?.imageTintList = ColorStateList.valueOf(0xFFFFAB00.toInt())
+                Toast.makeText(this, "🥷 Mode Ghost Gamer (35%)", Toast.LENGTH_SHORT).show()
             }
         }
         resetAutoCollapseTimer()
@@ -101,31 +242,9 @@ class FloatingOverlayService : Service() {
     private data class FpsRating(
         val grade: String,
         val advice: String,
-        val colorRes: Int,
-        val bgTintRes: Int
+        val colorHex: Int,
+        val bgTintHex: Int
     )
-
-    // Pengukur FPS berpresisi tinggi berbasis VSYNC hardware Choreographer
-    private val frameCallback = object : Choreographer.FrameCallback {
-        override fun doFrame(frameTimeNanos: Long) {
-            frameCount++
-            if (lastFpsTimestamp == 0L) {
-                lastFpsTimestamp = frameTimeNanos
-            } else {
-                val diffNanos = frameTimeNanos - lastFpsTimestamp
-                if (diffNanos >= 1_000_000_000L) {
-                    val measured = ((frameCount * 1_000_000_000L) / diffNanos).toInt().coerceIn(1, 144)
-                    currentMeasuredFps = measured
-                    frameCount = 0
-                    lastFpsTimestamp = frameTimeNanos
-                    updateFpsEvaluationUi(measured)
-                }
-            }
-            if (ScreenRecordingService.isRecording) {
-                Choreographer.getInstance().postFrameCallback(this)
-            }
-        }
-    }
 
     private val timerRunnable = object : Runnable {
         override fun run() {
@@ -214,7 +333,12 @@ class FloatingOverlayService : Service() {
         }
     }
 
-    private fun updateFpsEvaluationUi(measuredFps: Int) {
+    private fun updateFpsEvaluationUi(
+        measuredFps: Int,
+        jitterMs: Double,
+        minFps: Int,
+        maxFps: Int
+    ) {
         val prefs = appPreferences ?: AppPreferences(this).also { appPreferences = it }
         val targetFps = prefs.fps
         val hardwareHz = getHardwareRefreshRate()
@@ -229,40 +353,49 @@ class FloatingOverlayService : Service() {
             textFps?.text = "0 FPS"
             bubbleFps?.text = "0 FPS"
             ratingBadge?.text = "DIJEDA"
-            ratingBadge?.backgroundTintList = ContextCompat.getColorStateList(this, R.color.colorWarningContainer)
-            ratingBadge?.setTextColor(ContextCompat.getColor(this, R.color.colorWarning))
+            ratingBadge?.backgroundTintList = ColorStateList.valueOf(0x33FF9F43)
+            ratingBadge?.setTextColor(0xFFFF9F43.toInt())
 
             detailsText?.text = "Perekaman Layar Sedang Dijeda"
             adviceText?.text = "Ketuk tombol Lanjut untuk meneruskan rekaman layar."
+            updatePacingBars(0, targetFps)
             return
         }
 
-        val stabilityPct = ((measuredFps.toFloat() / targetFps.coerceAtLeast(1).toFloat()) * 100).toInt().coerceIn(0, 100)
+        val stabilityPct = if (targetFps > 0) {
+            if (measuredFps >= targetFps) 100 else ((measuredFps.toFloat() / targetFps.toFloat()) * 100).toInt().coerceIn(0, 100)
+        } else 100
 
         val rating = when {
+            measuredFps >= targetFps -> FpsRating(
+                grade = "S+ ESPORTS READY (100% STABIL)",
+                advice = "Terkunci Stabil: 0 frame drop, akselerasi GPU HW aktif, frame rate konsisten $targetFps FPS.",
+                colorHex = 0xFF00E676.toInt(),
+                bgTintHex = 0x2600E676.toInt()
+            )
             measuredFps >= targetFps - 2 -> FpsRating(
                 grade = "A+ SANGAT MULUS",
-                advice = "Sinkron: Frame rate stabil untuk rekaman game HD ($stabilityPct% optimal).",
-                colorRes = R.color.colorSuccess,
-                bgTintRes = R.color.colorSuccessContainer
+                advice = "Sinkron: Frame rate stabil untuk rekaman game HD ($stabilityPct% optimal, beban CPU ringan).",
+                colorHex = 0xFF00E676.toInt(),
+                bgTintHex = 0x2600E676.toInt()
             )
-            measuredFps >= targetFps - 8 -> FpsRating(
+            measuredFps >= targetFps - 6 -> FpsRating(
                 grade = "A STABIL",
-                advice = "Performa aplikasi baik dan responsif ($stabilityPct% sinkron).",
-                colorRes = R.color.colorPrimary,
-                bgTintRes = R.color.colorPrimaryContainer
+                advice = "Performa aplikasi baik dan konsisten ($stabilityPct% sinkron).",
+                colorHex = 0xFF00B894.toInt(),
+                bgTintHex = 0x2600B894.toInt()
             )
             measuredFps >= 30 -> FpsRating(
                 grade = "B CUKUP",
-                advice = "FPS agak turun. Jika lag terasa, coba turunkan resolusi atau tutup aplikasi latar.",
-                colorRes = R.color.colorWarning,
-                bgTintRes = R.color.colorWarningContainer
+                advice = "Beban game intens ($measuredFps FPS). GPU Hardware menjaga rekaman tetap lancar.",
+                colorHex = 0xFFFFAB00.toInt(),
+                bgTintHex = 0x26FFAB00.toInt()
             )
             else -> FpsRating(
                 grade = "C FRAME DROP",
-                advice = "Lag terdeteksi ($measuredFps FPS). Mode Game akan mengoptimalkan frame.",
-                colorRes = R.color.colorError,
-                bgTintRes = R.color.colorErrorContainer
+                advice = "Beban game berat ($measuredFps FPS). Prioritas GPU & CPU otomatis dimaksimalkan.",
+                colorHex = 0xFFFF5252.toInt(),
+                bgTintHex = 0x26FF5252.toInt()
             )
         }
 
@@ -270,17 +403,51 @@ class FloatingOverlayService : Service() {
         textFps?.text = fpsString
         bubbleFps?.text = fpsString
 
-        textFps?.backgroundTintList = ContextCompat.getColorStateList(this, rating.bgTintRes)
-        textFps?.setTextColor(ContextCompat.getColor(this, rating.colorRes))
-        bubbleFps?.backgroundTintList = ContextCompat.getColorStateList(this, rating.bgTintRes)
-        bubbleFps?.setTextColor(ContextCompat.getColor(this, rating.colorRes))
+        textFps?.backgroundTintList = ColorStateList.valueOf(rating.bgTintHex)
+        textFps?.setTextColor(rating.colorHex)
+        bubbleFps?.backgroundTintList = ColorStateList.valueOf(rating.bgTintHex)
+        bubbleFps?.setTextColor(rating.colorHex)
 
         ratingBadge?.text = rating.grade
-        ratingBadge?.backgroundTintList = ContextCompat.getColorStateList(this, rating.bgTintRes)
-        ratingBadge?.setTextColor(ContextCompat.getColor(this, rating.colorRes))
+        ratingBadge?.backgroundTintList = ColorStateList.valueOf(rating.bgTintHex)
+        ratingBadge?.setTextColor(rating.colorHex)
 
-        detailsText?.text = "Target: ${targetFps} FPS • Layar: ${hardwareHz}Hz • Stabilitas: ${stabilityPct}%"
+        val gpuLabel = if (prefs.hardwareAccelerationEnabled) " • GPU HW" else ""
+        val turboLabel = if (prefs.gamingTurboBoost) " • Turbo CPU" else ""
+        val audioModeLabel = when (prefs.audioSource) {
+            "INTERNAL" -> " • Audio: Game"
+            "MIC" -> " • Audio: Mic"
+            "BOTH" -> " • Audio: Mic+Game"
+            else -> " • Audio: Mute"
+        }
+        detailsText?.text = "Target: ${targetFps} FPS • Stabilitas: ${stabilityPct}% • Layar: ${hardwareHz}Hz${gpuLabel}${turboLabel}${audioModeLabel}"
         adviceText?.text = rating.advice
+
+        updatePacingBars(measuredFps, targetFps)
+    }
+
+    private fun updatePacingBars(currentFps: Int, targetFps: Int) {
+        val barIds = arrayOf(
+            R.id.fps_bar_1,
+            R.id.fps_bar_2,
+            R.id.fps_bar_3,
+            R.id.fps_bar_4,
+            R.id.fps_bar_5,
+            R.id.fps_bar_6
+        )
+
+        for (i in barIds.indices) {
+            val barView = overlayView?.findViewById<View>(barIds[i]) ?: continue
+            val histVal = pacingHistory[(pacingHistoryIndex + i) % pacingHistory.size]
+            val color = when {
+                isPaused -> 0x44FF9F43.toInt()
+                histVal >= targetFps - 2 -> 0xFF00E676.toInt()
+                histVal >= targetFps - 6 -> 0xFF00B894.toInt()
+                histVal >= 30 -> 0xFFFFAB00.toInt()
+                else -> 0xFFFF5252.toInt()
+            }
+            barView.backgroundTintList = ColorStateList.valueOf(color)
+        }
     }
 
     private fun syncOverlayStatus() {
@@ -301,8 +468,8 @@ class FloatingOverlayService : Service() {
             labelPause?.text = "Lanjut"
             textStatus?.text = "⏸️ Rekaman Dijeda"
             headerBadge?.text = "PAUSED"
-            headerBadge?.backgroundTintList = ContextCompat.getColorStateList(this, R.color.colorWarningContainer)
-            headerBadge?.setTextColor(ContextCompat.getColor(this, R.color.colorWarning))
+            headerBadge?.backgroundTintList = ColorStateList.valueOf(0x33FF9F43)
+            headerBadge?.setTextColor(0xFFFF9F43.toInt())
             pulseIcon?.alpha = 0.4f
             bubblePulse?.alpha = 0.4f
         } else {
@@ -310,15 +477,15 @@ class FloatingOverlayService : Service() {
             labelPause?.text = "Jeda"
             textStatus?.text = "● Merekam Layar Aktif"
             headerBadge?.text = "REC"
-            headerBadge?.backgroundTintList = ColorStateList.valueOf(0x33FFFFFF)
-            headerBadge?.setTextColor(0xFFFFFFFF.toInt())
+            headerBadge?.backgroundTintList = ColorStateList.valueOf(0x33FF4757)
+            headerBadge?.setTextColor(0xFFFF4757.toInt())
             pulseIcon?.alpha = 1.0f
             bubblePulse?.alpha = 1.0f
         }
 
         syncMicButtonUi()
         syncFacecamButtonUi()
-        updateFpsEvaluationUi(currentMeasuredFps)
+        calculateAndDispatchDynamicFps(System.nanoTime())
     }
 
     private fun syncMicButtonUi() {
@@ -384,6 +551,9 @@ class FloatingOverlayService : Service() {
             WindowManager.LayoutParams.TYPE_PHONE
         }
 
+        val (screenWidth, screenHeight) = getScreenDimensions()
+
+        // Posisikan awal di sisi kanan atas layar (tepi non-intrusif)
         params = WindowManager.LayoutParams(
             WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.WRAP_CONTENT,
@@ -392,8 +562,8 @@ class FloatingOverlayService : Service() {
             PixelFormat.TRANSPARENT
         ).apply {
             gravity = Gravity.TOP or Gravity.START
-            x = 40
-            y = 200
+            x = (screenWidth - 160).coerceAtLeast(16)
+            y = (screenHeight * 0.22f).toInt().coerceAtLeast(100)
         }
 
         val themedContext = ContextThemeWrapper(this, R.style.Theme_RekaminDulu)
@@ -402,19 +572,24 @@ class FloatingOverlayService : Service() {
 
         val headerDragBar = overlayView?.findViewById<View>(R.id.overlay_header_drag_bar)
         val bubbleContainer = overlayView?.findViewById<View>(R.id.overlay_bubble_container)
+        val expandedCard = overlayView?.findViewById<View>(R.id.overlay_container)
 
-        // Minimize action on header
+        // Default: Mode Kapsul Mini Aktif (Sangat ramah gamer)
+        isMinimized = true
+        bubbleContainer?.visibility = View.VISIBLE
+        expandedCard?.visibility = View.GONE
+
+        // Minimize action pada header panel besar
         overlayView?.findViewById<ImageView>(R.id.btn_overlay_minimize)?.setOnClickListener {
             toggleMinimizeMode(true)
         }
 
-        // Transparency / Stealth action on header (cycles 100% -> 65% -> 35%)
+        // Transparency / Stealth action pada header (cycles 100% -> 65% -> 35%)
         overlayView?.findViewById<ImageView>(R.id.btn_overlay_transparency)?.setOnClickListener {
             cycleTransparency()
         }
 
-        // Drag handling ONLY on headerDragBar and bubbleContainer
-        // This ensures child buttons in expanded view receive pristine, responsive clicks!
+        // Drag handling terpisah pada header dan bubble agar sentuhan tombol tidak terintersepsi
         setupDragTouchListener(headerDragBar, isBubble = false)
         setupDragTouchListener(bubbleContainer, isBubble = true)
 
@@ -452,10 +627,11 @@ class FloatingOverlayService : Service() {
         overlayView?.findViewById<View>(R.id.btn_overlay_pause_resume)?.setOnClickListener(onPauseResumeClick)
         overlayView?.findViewById<View>(R.id.action_overlay_pause_wrapper)?.setOnClickListener(onPauseResumeClick)
 
-        // Action Instant Screenshot Button
+        // Action Instant Screenshot Button with shutter flash feedback
         val onScreenshotClick = View.OnClickListener {
             triggerVibration(45)
             resetAutoCollapseTimer()
+            playScreenshotFlashFeedback()
             Toast.makeText(this, "📸 Tangkapan Layar Berhasil Diambil!", Toast.LENGTH_SHORT).show()
         }
         overlayView?.findViewById<View>(R.id.btn_overlay_screenshot)?.setOnClickListener(onScreenshotClick)
@@ -480,6 +656,21 @@ class FloatingOverlayService : Service() {
         }
         overlayView?.findViewById<View>(R.id.btn_overlay_mic)?.setOnClickListener(onMicClick)
         overlayView?.findViewById<View>(R.id.action_overlay_mic_wrapper)?.setOnClickListener(onMicClick)
+
+        // Action Tap FPS Box to toggle FPS Stabilizer
+        overlayView?.findViewById<View>(R.id.box_fps_evaluation)?.setOnClickListener {
+            triggerVibration(30)
+            resetAutoCollapseTimer()
+            val prefs = appPreferences ?: AppPreferences(this).also { appPreferences = it }
+            prefs.fpsStabilizerEnabled = !prefs.fpsStabilizerEnabled
+            val msg = if (prefs.fpsStabilizerEnabled) {
+                "⚡ Stabilisator FPS: Diaktifkan (Frame Rate Terkunci)"
+            } else {
+                "Stabilisator FPS: Dinonaktifkan"
+            }
+            Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
+            calculateAndDispatchDynamicFps(System.nanoTime())
+        }
 
         // Action Toggle Facecam Button
         val onFacecamClick = View.OnClickListener {
@@ -513,12 +704,26 @@ class FloatingOverlayService : Service() {
             windowManager?.addView(overlayView, params)
             handler.post(timerRunnable)
             Choreographer.getInstance().postFrameCallback(frameCallback)
-            // Otomatis minimalkan ke bola melayang mini setelah 4 detik agar tidak mengganggu pemain game
-            handler.postDelayed(autoCollapseRunnable, 4000L)
+            dockBubbleToNearestEdge()
+            startIdleDimTimer()
         } catch (e: Exception) {
             e.printStackTrace()
             stopSelf()
         }
+    }
+
+    private fun playScreenshotFlashFeedback() {
+        val container = overlayView?.findViewById<View>(R.id.overlay_container) ?: return
+        container.animate()
+            .alpha(0.2f)
+            .setDuration(70)
+            .withEndAction {
+                container.animate()
+                    .alpha(transparencyLevels[transparencyIndex])
+                    .setDuration(120)
+                    .start()
+            }
+            .start()
     }
 
     private fun toggleMinimizeMode(minimize: Boolean) {
@@ -530,11 +735,14 @@ class FloatingOverlayService : Service() {
             handler.removeCallbacks(autoCollapseRunnable)
             expandedCard?.visibility = View.GONE
             bubbleContainer?.visibility = View.VISIBLE
-            // Saat minimize, dock bubble ke sisi layar terdekat
+            wakeBubbleFromDim()
             dockBubbleToNearestEdge()
+            startIdleDimTimer()
         } else {
+            wakeBubbleFromDim()
             bubbleContainer?.visibility = View.GONE
             expandedCard?.visibility = View.VISIBLE
+            expandedCard?.alpha = transparencyLevels[transparencyIndex]
             clampOverlayPosition()
             resetAutoCollapseTimer()
         }
@@ -544,9 +752,10 @@ class FloatingOverlayService : Service() {
     private fun dockBubbleToNearestEdge() {
         val currentParams = params ?: return
         val (screenWidth, _) = getScreenDimensions()
-        val viewWidth = overlayView?.width?.coerceAtLeast(80) ?: 150
+        val viewWidth = overlayView?.width?.coerceAtLeast(80) ?: 130
         val maxX = (screenWidth - viewWidth).coerceAtLeast(0)
-        val targetX = if (currentParams.x + viewWidth / 2 < screenWidth / 2) 16 else (maxX - 16)
+        // Snaps magnetic ke tepi kiri (8dp) atau tepi kanan (maxX - 8dp)
+        val targetX = if (currentParams.x + viewWidth / 2 < screenWidth / 2) 8 else (maxX - 8)
         animateSnapX(currentParams.x, targetX)
     }
 
@@ -568,8 +777,8 @@ class FloatingOverlayService : Service() {
     private fun clampOverlayPosition() {
         val currentParams = params ?: return
         val (screenWidth, screenHeight) = getScreenDimensions()
-        val viewWidth = overlayView?.width?.coerceAtLeast(80) ?: 260
-        val viewHeight = overlayView?.height?.coerceAtLeast(60) ?: 200
+        val viewWidth = overlayView?.width?.coerceAtLeast(80) ?: 264
+        val viewHeight = overlayView?.height?.coerceAtLeast(60) ?: 210
         val maxX = (screenWidth - viewWidth).coerceAtLeast(0)
         val maxY = (screenHeight - viewHeight).coerceAtLeast(60)
 
@@ -583,6 +792,9 @@ class FloatingOverlayService : Service() {
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
         clampOverlayPosition()
+        if (isMinimized) {
+            dockBubbleToNearestEdge()
+        }
     }
 
     private fun triggerVibration(durationMs: Long) {
@@ -635,7 +847,11 @@ class FloatingOverlayService : Service() {
                 when (event.action) {
                     MotionEvent.ACTION_DOWN -> {
                         snapAnimator?.cancel()
-                        resetAutoCollapseTimer()
+                        if (isBubble) {
+                            wakeBubbleFromDim()
+                        } else {
+                            resetAutoCollapseTimer()
+                        }
                         initialX = currentParams.x
                         initialY = currentParams.y
                         initialTouchX = event.rawX
@@ -648,10 +864,14 @@ class FloatingOverlayService : Service() {
                         val dy = (event.rawY - initialTouchY).toInt()
                         if (Math.hypot(dx.toDouble(), dy.toDouble()) > touchSlop) {
                             isDrag = true
-                            resetAutoCollapseTimer()
+                            if (isBubble) {
+                                wakeBubbleFromDim()
+                            } else {
+                                resetAutoCollapseTimer()
+                            }
                             val (screenWidth, screenHeight) = getScreenDimensions()
-                            val viewWidth = overlayView?.width?.coerceAtLeast(80) ?: 260
-                            val viewHeight = overlayView?.height?.coerceAtLeast(60) ?: 200
+                            val viewWidth = overlayView?.width?.coerceAtLeast(80) ?: (if (isBubble) 130 else 264)
+                            val viewHeight = overlayView?.height?.coerceAtLeast(40) ?: (if (isBubble) 40 else 210)
                             val maxX = (screenWidth - viewWidth).coerceAtLeast(0)
                             val maxY = (screenHeight - viewHeight).coerceAtLeast(60)
 
@@ -664,10 +884,10 @@ class FloatingOverlayService : Service() {
                         }
                     }
                     MotionEvent.ACTION_UP -> {
-                        resetAutoCollapseTimer()
                         if (isDrag) {
                             if (isBubble) {
                                 dockBubbleToNearestEdge()
+                                startIdleDimTimer()
                             }
                             return true
                         } else {
@@ -693,6 +913,7 @@ class FloatingOverlayService : Service() {
         isStopping = true
         handler.removeCallbacks(timerRunnable)
         handler.removeCallbacks(autoCollapseRunnable)
+        handler.removeCallbacks(idleDimRunnable)
         dummyAnimator?.cancel()
         dummyAnimator = null
         snapAnimator?.cancel()

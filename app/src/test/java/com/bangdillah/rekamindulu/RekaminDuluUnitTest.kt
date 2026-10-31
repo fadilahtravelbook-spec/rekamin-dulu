@@ -38,4 +38,28 @@ class RekaminDuluUnitTest {
         val hasIllegalClean = cleanName.any { it in illegalChars }
         assertTrue("Nama bersih tidak boleh memiliki karakter ilegal", !hasIllegalClean)
     }
+
+    @Test
+    fun testHardwareEncoderVendorIdentification() {
+        val qcomDesc = com.bangdillah.rekamindulu.utils.HardwareEncoderHelper.identifyVendor("c2.qti.avc.encoder")
+        assertTrue(qcomDesc.contains("Qualcomm", ignoreCase = true))
+
+        val mtkDesc = com.bangdillah.rekamindulu.utils.HardwareEncoderHelper.identifyVendor("OMX.MTK.VIDEO.ENCODER.AVC")
+        assertTrue(mtkDesc.contains("MediaTek", ignoreCase = true))
+
+        val exynosDesc = com.bangdillah.rekamindulu.utils.HardwareEncoderHelper.identifyVendor("c2.exynos.avc.encoder")
+        assertTrue(exynosDesc.contains("Samsung", ignoreCase = true))
+
+        val swDesc = com.bangdillah.rekamindulu.utils.HardwareEncoderHelper.identifyVendor("c2.android.avc.encoder")
+        assertTrue(swDesc.contains("Software", ignoreCase = true))
+    }
+
+    @Test
+    fun testHardwareOffloadStatus() {
+        val offStatus = com.bangdillah.rekamindulu.utils.HardwareEncoderHelper.getHardwareOffloadStatus(false)
+        assertEquals("Mode Standar CPU", offStatus)
+
+        val onStatus = com.bangdillah.rekamindulu.utils.HardwareEncoderHelper.getHardwareOffloadStatus(true)
+        assertTrue(onStatus.isNotEmpty())
+    }
 }

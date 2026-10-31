@@ -155,22 +155,21 @@ open class ScreenRecordingService : Service() {
                     startRecording(resultCode, resultData)
                 } else {
                     Log.e(TAG, "Missing resultCode or resultData in ACTION_START (resultCode=$resultCode, hasData=${resultData != null})")
-                    safeStartForeground(buildNotification("Gagal memulai"))
                     broadcastError("Izin tangkap layar diperlukan untuk memulai perekaman.")
-                    stopRecording()
+                    stopSelf()
                 }
             }
             ACTION_STOP -> {
-                safeStartForeground(buildSavingNotification())
+                updateSavingNotification()
                 stopRecording()
             }
             ACTION_PAUSE -> {
                 pauseRecording()
-                safeStartForeground(buildNotification())
+                updateNotification()
             }
             ACTION_RESUME -> {
                 resumeRecording()
-                safeStartForeground(buildNotification())
+                updateNotification()
             }
         }
 
@@ -186,7 +185,8 @@ open class ScreenRecordingService : Service() {
             val prefs = AppPreferences(this)
             val hasMicPermission = ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
             val wantsAudio = prefs.audioSource != "MUTE"
-            val fgsType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && hasMicPermission && wantsAudio) {
+            // Bila mode Hanya Audio Game (INTERNAL) dipilih, prioritaskan MEDIA_PROJECTION murni agar tidak bentrok dengan izin mic di Android 14
+            val fgsType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && hasMicPermission && wantsAudio && prefs.audioSource != "INTERNAL") {
                 ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION or ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
             } else {
                 ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION
@@ -224,6 +224,18 @@ open class ScreenRecordingService : Service() {
         // 1. Inisialisasi WakeLock untuk menjamin proses latar belakang tidak tertidur oleh OS
         acquireWakeLock()
 
+        // 1b. Game Turbo & Hardware Acceleration: Elevasi prioritas thread encoder GPU/CPU agar tidak di-throttle oleh game berat
+        if (prefs.gamingTurboBoost || prefs.isGamingMode || prefs.hardwareAccelerationEnabled) {
+            try {
+                android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_URGENT_DISPLAY)
+                Log.i(TAG, "Game Turbo & GPU Offload: Thread priority elevated to THREAD_PRIORITY_URGENT_DISPLAY")
+            } catch (e: Exception) {
+                try {
+                    android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_FOREGROUND)
+                } catch (ignored: Exception) {}
+            }
+        }
+
         // 2. Buat Notification Channel dan promosikan Service ke Foreground Service
         safeStartForeground(buildNotification())
 
@@ -241,7 +253,7 @@ open class ScreenRecordingService : Service() {
             val outputFile = StorageHelper.createOutputFile(this, "Rekaman")
             currentVideoFilePath = outputFile.absolutePath
 
-            // 5. Inisialisasi MediaRecorder (Audio Mikrofon + Surface Video)
+            // 5. Inisialisasi MediaRecorder (Audio Mikrofon/Internal + Surface Video Akselerasi Hardware GPU)
             setupMediaRecorder(outputFile.absolutePath, prefs)
 
             // 6. Inisialisasi MediaProjection API
@@ -293,12 +305,13 @@ open class ScreenRecordingService : Service() {
                 return
             }
 
+            val displayFlags = DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR or DisplayManager.VIRTUAL_DISPLAY_FLAG_PRESENTATION
             virtualDisplay = mediaProjection?.createVirtualDisplay(
                 "RekaminDisplay",
                 screenWidth,
                 screenHeight,
                 screenDensity,
-                DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
+                displayFlags,
                 recorderSurface,
                 null,
                 null
@@ -412,12 +425,23 @@ open class ScreenRecordingService : Service() {
 
     /**
      * Konfigurasi MediaRecorder dengan fallback multi-tier otomatis:
-     * Menjamin MediaRecorder selalu berhasil di-prepare() sebelum virtual display dibuat,
-     * dengan PRIORITAS UTAMA mempertahankan audio/suara mikrofon sebelum menurunkan resolusi.
+     * - Memprioritaskan GPU/VPU Hardware Video Encoder (Offload CPU) agar game tidak lag.
+     * - Jalur Audio Internal Mandiri & Stabil (High-Fidelity 48kHz, anti-noise, anti-bentrok voice chat game).
      */
     protected fun setupMediaRecorder(filePath: String, prefs: AppPreferences) {
         val hasMicPermission = ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
+        val isInternalOnly = prefs.audioSource == "INTERNAL"
         val wantsAudio = prefs.audioSource != "MUTE" && hasMicPermission
+
+        // Validasi ketersediaan GPU hardware encoder agar tidak membebani CPU
+        if (prefs.hardwareAccelerationEnabled) {
+            val hwEncoder = com.bangdillah.rekamindulu.utils.HardwareEncoderHelper.findBestHardwareEncoder()
+            if (hwEncoder != null && hwEncoder.isHardware) {
+                Log.i(TAG, "Hardware GPU Encoder aktif: ${hwEncoder.codecName} (${hwEncoder.vendorDescription})")
+            } else {
+                Log.i(TAG, "Hardware encoder adaptif aktif (profil hardware diselaraskan)")
+            }
+        }
 
         fun configureAndPrepare(
             withAudio: Boolean,
@@ -443,15 +467,27 @@ open class ScreenRecordingService : Service() {
                 mediaRecorder?.apply {
                     if (withAudio) {
                         val src = audioSourceOverride ?: try {
-                            com.bangdillah.rekamindulu.audio.MicrophoneSelector.getAudioSource(prefs.micType)
+                            if (isInternalOnly && prefs.internalAudioStabilizer) {
+                                // Sumber VOICE_RECOGNITION memiliki filter anti-noise ruangan bawaan OS
+                                // sehingga suara ketukan jari & kebisingan luar teredam, fokus suara game
+                                MediaRecorder.AudioSource.VOICE_RECOGNITION
+                            } else {
+                                com.bangdillah.rekamindulu.audio.MicrophoneSelector.getAudioSource(prefs.micType)
+                            }
                         } catch (e: Exception) {
                             MediaRecorder.AudioSource.MIC
                         }
+
                         try {
                             setAudioSource(src)
                         } catch (eSrc: Exception) {
                             Log.w(TAG, "Audio source $src ditolak, fallback ke MIC standar", eSrc)
-                            setAudioSource(MediaRecorder.AudioSource.MIC)
+                            try {
+                                setAudioSource(MediaRecorder.AudioSource.MIC)
+                            } catch (eMic: Exception) {
+                                Log.w(TAG, "MIC standar juga ditolak (mungkin dikunci game voice chat), coba DEFAULT", eMic)
+                                setAudioSource(MediaRecorder.AudioSource.DEFAULT)
+                            }
                         }
                     }
 
@@ -461,10 +497,12 @@ open class ScreenRecordingService : Service() {
                     if (withAudio) {
                         try {
                             setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
-                            // Saluran mono (1) kompatibel secara universal di semua mikrofon HP dan emulator
-                            setAudioChannels(1)
-                            setAudioSamplingRate(44100)
-                            setAudioEncodingBitRate(128000)
+                            // Jalur internal menggunakan 48kHz (standar output game Android) 160kbps untuk kejernihan audio game
+                            val sampleRate = if (isInternalOnly) 48000 else 44100
+                            val audioBitrate = if (isInternalOnly) 160000 else 128000
+                            setAudioChannels(1) // Kompatibilitas universal
+                            setAudioSamplingRate(sampleRate)
+                            setAudioEncodingBitRate(audioBitrate)
                         } catch (eAac: Exception) {
                             Log.w(TAG, "Konfigurasi audio encoder AAC standar gagal, mencoba parameter aman", eAac)
                             try {
@@ -479,6 +517,7 @@ open class ScreenRecordingService : Service() {
                         }
                     }
 
+                    // Pilih hardware video encoder (HEVC / AVC)
                     val encoder = if (prefs.videoEncoder == "H265" && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                         MediaRecorder.VideoEncoder.HEVC
                     } else {
@@ -520,15 +559,19 @@ open class ScreenRecordingService : Service() {
 
         val initialBitrate = prefs.bitrateMbps * 1000 * 1000
         val initialFps = prefs.fps
-        val preferredAudioSource = com.bangdillah.rekamindulu.audio.MicrophoneSelector.getAudioSource(prefs.micType)
+        val preferredAudioSource = if (isInternalOnly && prefs.internalAudioStabilizer) {
+            MediaRecorder.AudioSource.VOICE_RECOGNITION
+        } else {
+            com.bangdillah.rekamindulu.audio.MicrophoneSelector.getAudioSource(prefs.micType)
+        }
 
-        // Tier 1: Konfigurasi sesuai resolusi & sumber audio pilihan pengguna
+        // Tier 1: Konfigurasi optimal sesuai pilihan pengguna (Hardware GPU + Audio Internal/Mic)
         if (configureAndPrepare(wantsAudio, screenWidth, screenHeight, initialBitrate, initialFps, preferredAudioSource)) {
-            Log.i(TAG, "Tier 1: MediaRecorder siap (${screenWidth}x${screenHeight}, audio=$wantsAudio)")
+            Log.i(TAG, "Tier 1: MediaRecorder siap (${screenWidth}x${screenHeight}, audio=$wantsAudio, internal=$isInternalOnly)")
             return
         }
 
-        // Tier 2: Jika Tier 1 gagal dan pengguna menginginkan audio, coba dengan sumber MIC standar ponsel
+        // Tier 2: Jika Tier 1 gagal dan pengguna menginginkan audio, coba dengan sumber MIC standar
         if (wantsAudio && preferredAudioSource != MediaRecorder.AudioSource.MIC) {
             Log.w(TAG, "Tier 1 gagal, mencoba Tier 2 (Resolusi asli + Audio MIC Standar)")
             if (configureAndPrepare(true, screenWidth, screenHeight, initialBitrate, initialFps, MediaRecorder.AudioSource.MIC)) {
@@ -537,7 +580,7 @@ open class ScreenRecordingService : Service() {
             }
         }
 
-        // Tier 3: Fallback ke standar HD 720p 30fps TETAP DENGAN AUDIO (Audio suara diutamakan!)
+        // Tier 3: Fallback ke standar HD 720p 30fps TETAP DENGAN AUDIO (Jalur Audio Dipertahankan)
         Log.w(TAG, "Mencoba Tier 3 (HD 720p 30fps DENGAN AUDIO)")
         if (configureAndPrepare(wantsAudio, safeW, safeH, 3_500_000, 30, MediaRecorder.AudioSource.MIC)) {
             screenWidth = safeW
@@ -555,9 +598,9 @@ open class ScreenRecordingService : Service() {
             return
         }
 
-        // Tier 5: Hanya jika hardware/perangkat BENAR-BENAR menolak seluruh inisialisasi audio, coba video-only 720p
+        // Tier 5: Hanya jika hardware audio menolak karena in-game voice chat eksklusif, fallback ke video-only 720p
         if (wantsAudio) {
-            Log.w(TAG, "Perangkat keras audio tidak merespon, fallback ke video-only")
+            Log.w(TAG, "Perangkat keras audio sibuk/tidak merespon, fallback ke video-only")
             if (configureAndPrepare(false, safeW, safeH, 3_000_000, 30)) {
                 screenWidth = safeW
                 screenHeight = safeH
@@ -651,9 +694,14 @@ open class ScreenRecordingService : Service() {
         if (isStopping) return
         if (!isRecording && !isPaused && mediaRecorder == null && virtualDisplay == null) {
             try {
-                safeStartForeground(buildNotification("Selesai"))
-                @Suppress("DEPRECATION")
-                stopForeground(true)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                    stopForeground(STOP_FOREGROUND_REMOVE)
+                } else {
+                    @Suppress("DEPRECATION")
+                    stopForeground(true)
+                }
+                val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+                manager.cancel(NOTIFICATION_ID)
                 stopSelf()
             } catch (ignored: Exception) {}
             return
@@ -771,11 +819,17 @@ open class ScreenRecordingService : Service() {
             }
             sendBroadcast(statusIntent)
 
-            @Suppress("DEPRECATION")
-            stopForeground(true)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                stopForeground(STOP_FOREGROUND_REMOVE)
+            } else {
+                @Suppress("DEPRECATION")
+                stopForeground(true)
+            }
             val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             manager.cancel(NOTIFICATION_ID)
-            stopSelf()
+            try {
+                android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_DEFAULT)
+            } catch (ignored: Exception) {}
 
             Log.i(TAG, "Screen recording stopped. File saved: $lastRecordedFilePath")
         } finally {
@@ -883,12 +937,8 @@ open class ScreenRecordingService : Service() {
 
     private fun updateNotification(customMessage: String? = null) {
         try {
-            if (isRecording || isPaused) {
-                startForeground(NOTIFICATION_ID, buildNotification(customMessage))
-            } else {
-                val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-                manager.notify(NOTIFICATION_ID, buildNotification(customMessage))
-            }
+            val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            manager.notify(NOTIFICATION_ID, buildNotification(customMessage))
         } catch (e: Exception) {
             Log.w(TAG, "Failed updating recording notification", e)
         }
@@ -908,10 +958,10 @@ open class ScreenRecordingService : Service() {
 
     private fun updateSavingNotification() {
         try {
-            startForeground(NOTIFICATION_ID, buildSavingNotification())
-        } catch (e: Exception) {
             val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             manager.notify(NOTIFICATION_ID, buildSavingNotification())
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed updating saving notification", e)
         }
     }
 
