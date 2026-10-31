@@ -130,8 +130,8 @@ open class ScreenRecordingService : Service() {
                     stopRecording()
                     return
                 }
-                // Cek kapasitas storage setiap 10 detik
-                if (elapsedSeconds % 10 == 0) {
+                // Cek kapasitas storage setiap 10 detik hanya saat perekaman aktif berjalan
+                if (!isPaused && elapsedSeconds % 10 == 0) {
                     val report = DeviceAnalyzer.analyze(this@ScreenRecordingService)
                     if (report.freeStorageGb < 0.1) {
                         Log.e(TAG, "Storage critically low (<100MB), auto-stopping recording")
@@ -153,6 +153,20 @@ open class ScreenRecordingService : Service() {
 
         when (action) {
             ACTION_START -> {
+                val audioSourceExtra = intent.getStringExtra("EXTRA_AUDIO_SOURCE")
+                if (!audioSourceExtra.isNullOrEmpty()) {
+                    AppPreferences(this).audioSource = audioSourceExtra
+                } else if (intent.hasExtra("EXTRA_MIC_ENABLED") || intent.hasExtra("EXTRA_GAME_AUDIO_ENABLED")) {
+                    val micOn = intent.getBooleanExtra("EXTRA_MIC_ENABLED", true)
+                    val gameOn = intent.getBooleanExtra("EXTRA_GAME_AUDIO_ENABLED", true)
+                    AppPreferences(this).audioSource = when {
+                        micOn && gameOn -> "BOTH"
+                        micOn -> "MIC"
+                        gameOn -> "INTERNAL"
+                        else -> "MUTE"
+                    }
+                }
+
                 safeStartForeground(buildNotification())
                 val resultCode = intent.getIntExtra(EXTRA_RESULT_CODE, Activity.RESULT_OK)
                 val resultData = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -164,10 +178,6 @@ open class ScreenRecordingService : Service() {
                 }
                 val isResultCodeValid = (resultCode == Activity.RESULT_OK) || (intent.hasExtra(EXTRA_RESULT_CODE) && resultCode != Activity.RESULT_CANCELED)
                 if (isResultCodeValid && resultData != null) {
-                    val audioSourceExtra = intent.getStringExtra("EXTRA_AUDIO_SOURCE")
-                    if (!audioSourceExtra.isNullOrEmpty()) {
-                        AppPreferences(this).audioSource = audioSourceExtra
-                    }
                     startRecording(resultCode, resultData)
                 } else {
                     Log.e(TAG, "Missing resultCode or resultData in ACTION_START (resultCode=$resultCode, hasData=${resultData != null})")
@@ -514,8 +524,8 @@ open class ScreenRecordingService : Service() {
         val finalW = if (isPortrait) alignedShort else alignedLong
         val finalH = if (isPortrait) alignedLong else alignedShort
 
-        screenWidth = finalW.coerceAtLeast(320)
-        screenHeight = finalH.coerceAtLeast(480)
+        screenWidth = (finalW.coerceAtLeast(320) / 2) * 2
+        screenHeight = (finalH.coerceAtLeast(480) / 2) * 2
     }
 
     /**
@@ -815,7 +825,14 @@ open class ScreenRecordingService : Service() {
                 Log.w(TAG, "Fallback dengan audio gagal, mencoba video-only", e)
                 try {
                     mediaRecorder?.reset()
+                    mediaRecorder?.release()
                 } catch (ignored: Exception) {}
+                mediaRecorder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    MediaRecorder(this)
+                } else {
+                    @Suppress("DEPRECATION")
+                    MediaRecorder()
+                }
             }
         }
 
@@ -1062,6 +1079,7 @@ open class ScreenRecordingService : Service() {
             } catch (ignored: Exception) {}
 
             Log.i(TAG, "Screen recording stopped. File saved: $lastRecordedFilePath")
+            stopSelf()
         } finally {
             isStopping = false
         }

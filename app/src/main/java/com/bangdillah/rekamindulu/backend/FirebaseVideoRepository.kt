@@ -34,9 +34,12 @@ class FirebaseVideoRepository(private val db: FirebaseFirestore) {
      * mengambil database ID kustom dari firebase_applet_config.xml.
      */
     constructor(context: Context) : this(
-        FirebaseFirestore.getInstance(
-            context.applicationContext.getString(R.string.firestore_database_id)
-        )
+        try {
+            val dbId = context.applicationContext.getString(R.string.firestore_database_id)
+            if (dbId.isNotBlank()) FirebaseFirestore.getInstance(dbId) else FirebaseFirestore.getInstance()
+        } catch (e: Exception) {
+            FirebaseFirestore.getInstance()
+        }
     )
 
     /**

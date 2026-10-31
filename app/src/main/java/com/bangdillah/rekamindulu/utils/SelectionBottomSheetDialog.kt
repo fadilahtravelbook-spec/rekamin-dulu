@@ -110,6 +110,13 @@ object SelectionBottomSheetDialog {
             containerOptions.addView(itemView)
         }
 
-        dialog.show()
+        try {
+            if (context is android.app.Activity && (context.isFinishing || context.isDestroyed)) {
+                return
+            }
+            dialog.show()
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
     }
 }

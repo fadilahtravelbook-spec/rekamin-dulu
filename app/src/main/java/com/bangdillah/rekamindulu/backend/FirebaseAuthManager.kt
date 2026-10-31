@@ -208,8 +208,12 @@ class FirebaseAuthManager private constructor(private val appContext: Context) {
     private fun syncUserProfile(user: FirebaseUser) {
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                val dbId = appContext.getString(R.string.firestore_database_id)
-                val db = FirebaseFirestore.getInstance(dbId)
+                val db = try {
+                    val dbId = appContext.getString(R.string.firestore_database_id)
+                    if (dbId.isNotBlank()) FirebaseFirestore.getInstance(dbId) else FirebaseFirestore.getInstance()
+                } catch (e: Exception) {
+                    FirebaseFirestore.getInstance()
+                }
                 val userDocRef = db.collection("users").document(user.uid)
                 val snapshot = userDocRef.get().await()
 
@@ -257,8 +261,12 @@ class FirebaseAuthManager private constructor(private val appContext: Context) {
         val user = auth.currentUser ?: return
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                val dbId = appContext.getString(R.string.firestore_database_id)
-                val db = FirebaseFirestore.getInstance(dbId)
+                val db = try {
+                    val dbId = appContext.getString(R.string.firestore_database_id)
+                    if (dbId.isNotBlank()) FirebaseFirestore.getInstance(dbId) else FirebaseFirestore.getInstance()
+                } catch (e: Exception) {
+                    FirebaseFirestore.getInstance()
+                }
                 val updates = mutableMapOf<String, Any>()
                 if (resolution != null) updates["preferredResolution"] = resolution
                 if (fps != null) updates["preferredFps"] = fps

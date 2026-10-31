@@ -312,24 +312,26 @@ class TrimActivity : AppCompatActivity() {
                         }
                     }
 
-                    MaterialAlertDialogBuilder(this@TrimActivity)
-                        .setIcon(R.drawable.ic_check_circle)
-                        .setTitle("Pemotongan Berhasil! 🎉")
-                        .setMessage("Klip video baru telah disimpan di galeri ponsel:\n${outputFile.name}")
-                        .setPositiveButton("Putar Video") { _, _ ->
-                            val intent = Intent(this@TrimActivity, PlayerActivity::class.java).apply {
-                                putExtra("VIDEO_PATH", outputFile.absolutePath)
+                    try {
+                        MaterialAlertDialogBuilder(this@TrimActivity)
+                            .setIcon(R.drawable.ic_check_circle)
+                            .setTitle("Pemotongan Berhasil! 🎉")
+                            .setMessage("Klip video baru telah disimpan di galeri ponsel:\n${outputFile.name}")
+                            .setPositiveButton("Putar Video") { _, _ ->
+                                val intent = Intent(this@TrimActivity, PlayerActivity::class.java).apply {
+                                    putExtra("VIDEO_PATH", outputFile.absolutePath)
+                                }
+                                startActivity(intent)
+                                finish()
                             }
-                            startActivity(intent)
-                            finish()
-                        }
-                        .setNeutralButton("Galeri") { _, _ ->
-                            val intent = Intent(this@TrimActivity, LibraryActivity::class.java)
-                            startActivity(intent)
-                            finish()
-                        }
-                        .setNegativeButton("Tutup", null)
-                        .show()
+                            .setNeutralButton("Galeri") { _, _ ->
+                                val intent = Intent(this@TrimActivity, LibraryActivity::class.java)
+                                startActivity(intent)
+                                finish()
+                            }
+                            .setNegativeButton("Tutup", null)
+                            .show()
+                    } catch (ignored: Exception) {}
                 } else {
                     Toast.makeText(this@TrimActivity, message, Toast.LENGTH_LONG).show()
                 }

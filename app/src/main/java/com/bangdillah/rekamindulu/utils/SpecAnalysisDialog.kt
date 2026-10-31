@@ -171,10 +171,14 @@ object SpecAnalysisDialog {
             dialog.dismiss()
         }
 
-        if (context is Activity && (context.isFinishing || context.isDestroyed)) {
-            return
+        try {
+            if (context is Activity && (context.isFinishing || context.isDestroyed)) {
+                return
+            }
+            dialog.show()
+        } catch (e: Exception) {
+            e.printStackTrace()
         }
-        dialog.show()
     }
 
     private fun applyPreset(

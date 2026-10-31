@@ -1122,6 +1122,7 @@ open class MainActivity : AppCompatActivity() {
                             videoRepository?.deleteRecording(currentUser.uid, docId)
                         }
                     }
+                    LibraryAdapter.invalidateCache(file.absolutePath)
                     StorageHelper.scanDeletedFile(this, file)
                     file.delete()
                     Toast.makeText(this, "Rekaman video berhasil dihapus", Toast.LENGTH_SHORT).show()
@@ -1621,11 +1622,14 @@ open class MainActivity : AppCompatActivity() {
     }
 
     fun showSnackbar(message: String, duration: Int = Snackbar.LENGTH_SHORT) {
-        val snackbar = Snackbar.make(
-            findViewById(android.R.id.content),
-            message,
-            duration
-        )
-        snackbar.show()
+        val view = findViewById<View>(android.R.id.content) ?: run {
+            Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
+            return
+        }
+        try {
+            Snackbar.make(view, message, duration).show()
+        } catch (e: Exception) {
+            Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
+        }
     }
 }

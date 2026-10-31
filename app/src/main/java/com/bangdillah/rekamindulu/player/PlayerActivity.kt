@@ -443,12 +443,17 @@ class PlayerActivity : AppCompatActivity() {
             return
         }
 
+        if (isFinishing || isDestroyed) return
         val progressDialog = MaterialAlertDialogBuilder(this)
             .setTitle("Mengekstrak Audio 🎵")
             .setMessage("Sedang memisahkan trek audio dari rekaman video ${file.name}...")
             .setCancelable(false)
             .create()
-        progressDialog.show()
+        try {
+            progressDialog.show()
+        } catch (e: Exception) {
+            // Ignore window token errors if activity is transitioning
+        }
 
         Thread {
             val (success, audioFile) = AudioExtractorHelper.extractAudio(this, file)
@@ -459,29 +464,31 @@ class PlayerActivity : AppCompatActivity() {
                     } catch (ignored: Exception) {}
 
                     if (success && audioFile != null && audioFile.exists()) {
-                        MaterialAlertDialogBuilder(this)
-                            .setTitle("Ekstrak Audio Berhasil! 🎉")
-                            .setIcon(R.drawable.ic_check_circle)
-                            .setMessage("Audio disimpan sebagai:\n${audioFile.name}\nUkuran: ${String.format(Locale.getDefault(), "%.1f MB", audioFile.length() / (1024.0 * 1024.0))}")
-                            .setPositiveButton("Bagikan") { _, _ ->
-                                try {
-                                    val uri = FileProvider.getUriForFile(
-                                        this,
-                                        "$packageName.fileprovider",
-                                        audioFile
-                                    )
-                                    val shareIntent = Intent(Intent.ACTION_SEND).apply {
-                                        type = "audio/*"
-                                        putExtra(Intent.EXTRA_STREAM, uri)
-                                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                        try {
+                            MaterialAlertDialogBuilder(this)
+                                .setTitle("Ekstrak Audio Berhasil! 🎉")
+                                .setIcon(R.drawable.ic_check_circle)
+                                .setMessage("Audio disimpan sebagai:\n${audioFile.name}\nUkuran: ${String.format(Locale.getDefault(), "%.1f MB", audioFile.length() / (1024.0 * 1024.0))}")
+                                .setPositiveButton("Bagikan") { _, _ ->
+                                    try {
+                                        val uri = FileProvider.getUriForFile(
+                                            this,
+                                            "$packageName.fileprovider",
+                                            audioFile
+                                        )
+                                        val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                                            type = "audio/*"
+                                            putExtra(Intent.EXTRA_STREAM, uri)
+                                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                        }
+                                        startActivity(Intent.createChooser(shareIntent, "Bagikan Audio"))
+                                    } catch (e: Exception) {
+                                        Toast.makeText(this, "Gagal membagikan: ${e.message}", Toast.LENGTH_SHORT).show()
                                     }
-                                    startActivity(Intent.createChooser(shareIntent, "Bagikan Audio"))
-                                } catch (e: Exception) {
-                                    Toast.makeText(this, "Gagal membagikan: ${e.message}", Toast.LENGTH_SHORT).show()
                                 }
-                            }
-                            .setNegativeButton("Tutup", null)
-                            .show()
+                                .setNegativeButton("Tutup", null)
+                                .show()
+                        } catch (ignored: Exception) {}
                     } else {
                         Toast.makeText(this, "Tidak dapat mengekstrak audio dari video ini", Toast.LENGTH_SHORT).show()
                     }

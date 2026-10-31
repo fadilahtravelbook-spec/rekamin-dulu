@@ -20,6 +20,7 @@ import androidx.core.content.ContextCompat
 import com.bangdillah.rekamindulu.HomeActivity
 import com.bangdillah.rekamindulu.R
 import com.bangdillah.rekamindulu.floating.FloatingOverlayService
+import com.bangdillah.rekamindulu.library.LibraryActivity
 import com.bangdillah.rekamindulu.service.ScreenRecordingService
 import com.bangdillah.rekamindulu.utils.AppPreferences
 import com.bangdillah.rekamindulu.utils.SaveTransitionDialog

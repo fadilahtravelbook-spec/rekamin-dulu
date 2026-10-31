@@ -72,6 +72,14 @@ class CountdownActivity : AppCompatActivity() {
                         action = ScreenRecordingService.ACTION_START
                         putExtra(ScreenRecordingService.EXTRA_RESULT_CODE, resultCode)
                         putExtra(ScreenRecordingService.EXTRA_RESULT_DATA, resultData)
+                        val audioSrc = intent.getStringExtra("EXTRA_AUDIO_SOURCE") ?: prefs.audioSource
+                        putExtra("EXTRA_AUDIO_SOURCE", audioSrc)
+                        if (intent.hasExtra("EXTRA_MIC_ENABLED")) {
+                            putExtra("EXTRA_MIC_ENABLED", intent.getBooleanExtra("EXTRA_MIC_ENABLED", true))
+                        }
+                        if (intent.hasExtra("EXTRA_GAME_AUDIO_ENABLED")) {
+                            putExtra("EXTRA_GAME_AUDIO_ENABLED", intent.getBooleanExtra("EXTRA_GAME_AUDIO_ENABLED", true))
+                        }
                     }
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                         startForegroundService(serviceIntent)

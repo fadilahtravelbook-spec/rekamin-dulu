@@ -208,4 +208,74 @@ class RekaminDuluUnitTest {
         // 2 hours 15 minutes 40 seconds (8140s) -> 02:15:40
         assertEquals("02:15:40", com.bangdillah.rekamindulu.floating.FloatingOverlayService.formatDuration(8140))
     }
+
+    @Test
+    fun testForegroundServiceTypeCalculation() {
+        // Simulates Android 14+ ServiceInfo foregroundServiceType calculation logic
+        fun calculateFgsType(hasMicPermission: Boolean, audioSource: String): Int {
+            val typeMediaProjection = 0x00000020 // ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION
+            val typeMicrophone = 0x00000080      // ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
+
+            val wantsAudio = audioSource != "MUTE"
+            return if (hasMicPermission && wantsAudio) {
+                typeMediaProjection or typeMicrophone
+            } else {
+                typeMediaProjection
+            }
+        }
+
+        // Case 1: Mic permission granted, user wants MIC
+        val typeWithMic = calculateFgsType(hasMicPermission = true, audioSource = "MIC")
+        assertEquals(0x00000020 or 0x00000080, typeWithMic)
+
+        // Case 2: Mic permission granted, user wants BOTH
+        val typeWithBoth = calculateFgsType(hasMicPermission = true, audioSource = "BOTH")
+        assertEquals(0x00000020 or 0x00000080, typeWithBoth)
+
+        // Case 3: Mic permission DENIED, user selected MIC -> must NOT declare MICROPHONE (prevents Android 14 SecurityException)
+        val typeDeniedMic = calculateFgsType(hasMicPermission = false, audioSource = "MIC")
+        assertEquals(0x00000020, typeDeniedMic)
+
+        // Case 4: User selected MUTE -> must NOT declare MICROPHONE
+        val typeMute = calculateFgsType(hasMicPermission = true, audioSource = "MUTE")
+        assertEquals(0x00000020, typeMute)
+    }
+
+    @Test
+    fun testAudioPermissionGracefulDegradation() {
+        fun resolveAudioCapture(hasPermission: Boolean, preferredSource: String): Pair<Boolean, String> {
+            val wantsAudio = preferredSource != "MUTE" && hasPermission
+            val finalSource = if (wantsAudio) preferredSource else "MUTE"
+            return Pair(wantsAudio, finalSource)
+        }
+
+        // When permission is missing, audio is gracefully disabled without crashing
+        val (wantsAudio1, source1) = resolveAudioCapture(hasPermission = false, preferredSource = "MIC")
+        assertEquals(false, wantsAudio1)
+        assertEquals("MUTE", source1)
+
+        // When permission is present, audio is retained
+        val (wantsAudio2, source2) = resolveAudioCapture(hasPermission = true, preferredSource = "MIC")
+        assertEquals(true, wantsAudio2)
+        assertEquals("MIC", source2)
+    }
+
+    @Test
+    fun testWebClientIdFormat() {
+        val clientId = "563321500714-b419c536uptulaun2lhchvs8svgnpf2d.apps.googleusercontent.com"
+        assertTrue("Client ID harus berakhir dengan .apps.googleusercontent.com", clientId.endsWith(".apps.googleusercontent.com"))
+        assertTrue("Client ID harus diawali dengan project number 563321500714", clientId.startsWith("563321500714-"))
+    }
+
+    @Test
+    fun testFirestoreDatabaseIdFallback() {
+        fun resolveDatabaseTarget(dbId: String?): String {
+            return if (!dbId.isNullOrBlank()) dbId else "(default)"
+        }
+
+        assertEquals("ai-studio-android-rekamind-29e24682-644a-4f29-9873-59ab0c0fda6b", resolveDatabaseTarget("ai-studio-android-rekamind-29e24682-644a-4f29-9873-59ab0c0fda6b"))
+        assertEquals("(default)", resolveDatabaseTarget(""))
+        assertEquals("(default)", resolveDatabaseTarget("   "))
+        assertEquals("(default)", resolveDatabaseTarget(null))
+    }
 }

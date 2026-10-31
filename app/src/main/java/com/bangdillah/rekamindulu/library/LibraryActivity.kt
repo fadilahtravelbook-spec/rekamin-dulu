@@ -554,6 +554,7 @@ class LibraryActivity : AppCompatActivity() {
                             videoRepository?.deleteRecording(currentUser.uid, docId)
                         }
                     }
+                    LibraryAdapter.invalidateCache(file.absolutePath)
                     StorageHelper.scanDeletedFile(this, file)
                     file.delete()
                     Toast.makeText(this, "Rekaman video berhasil dihapus", Toast.LENGTH_SHORT).show()
@@ -570,12 +571,17 @@ class LibraryActivity : AppCompatActivity() {
             return
         }
 
+        if (isFinishing || isDestroyed) return
         val progressDialog = MaterialAlertDialogBuilder(this)
             .setTitle("Mengekstrak Audio 🎵")
             .setMessage("Sedang memisahkan trek audio dari rekaman video ${file.name}...")
             .setCancelable(false)
             .create()
-        progressDialog.show()
+        try {
+            progressDialog.show()
+        } catch (e: Exception) {
+            // Ignore window token errors if activity is transitioning
+        }
 
         Thread {
             val (success, audioFile) = AudioExtractorHelper.extractAudio(this, file)
@@ -586,18 +592,20 @@ class LibraryActivity : AppCompatActivity() {
                     } catch (ignored: Exception) {}
 
                     if (success && audioFile != null && audioFile.exists()) {
-                        MaterialAlertDialogBuilder(this)
-                            .setTitle("Ekstrak Audio Berhasil! 🎉")
-                            .setIcon(R.drawable.ic_check_circle)
-                            .setMessage("Audio disimpan sebagai:\n${audioFile.name}\nUkuran: ${String.format(Locale.getDefault(), "%.1f MB", audioFile.length() / (1024.0 * 1024.0))}")
-                            .setPositiveButton("Putar Audio") { _, _ ->
-                                playAudioFile(audioFile)
-                            }
-                            .setNeutralButton("Bagikan") { _, _ ->
-                                shareAudioFile(audioFile)
-                            }
-                            .setNegativeButton("Tutup", null)
-                            .show()
+                        try {
+                            MaterialAlertDialogBuilder(this)
+                                .setTitle("Ekstrak Audio Berhasil! 🎉")
+                                .setIcon(R.drawable.ic_check_circle)
+                                .setMessage("Audio disimpan sebagai:\n${audioFile.name}\nUkuran: ${String.format(Locale.getDefault(), "%.1f MB", audioFile.length() / (1024.0 * 1024.0))}")
+                                .setPositiveButton("Putar Audio") { _, _ ->
+                                    playAudioFile(audioFile)
+                                }
+                                .setNeutralButton("Bagikan") { _, _ ->
+                                    shareAudioFile(audioFile)
+                                }
+                                .setNegativeButton("Tutup", null)
+                                .show()
+                        } catch (ignored: Exception) {}
                     } else {
                         Toast.makeText(this, "Tidak dapat mengekstrak audio atau rekaman ini tidak memiliki audio.", Toast.LENGTH_LONG).show()
                     }

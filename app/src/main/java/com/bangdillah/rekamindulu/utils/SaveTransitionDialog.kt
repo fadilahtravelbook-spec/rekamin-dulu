@@ -161,8 +161,12 @@ object SaveTransitionDialog {
             onDismissed?.invoke()
         }
 
-        if (context is Activity && !context.isFinishing && !context.isDestroyed) {
-            dialog.show()
+        try {
+            if (context is Activity && !context.isFinishing && !context.isDestroyed) {
+                dialog.show()
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Cannot show SaveTransitionDialog: ${e.message}")
         }
     }
 }
