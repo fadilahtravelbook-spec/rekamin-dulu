@@ -412,13 +412,21 @@ open class ScreenRecordingService : Service() {
 
     /**
      * Konfigurasi MediaRecorder dengan fallback multi-tier otomatis:
-     * Menjamin MediaRecorder selalu berhasil di-prepare() sebelum virtual display dibuat.
+     * Menjamin MediaRecorder selalu berhasil di-prepare() sebelum virtual display dibuat,
+     * dengan PRIORITAS UTAMA mempertahankan audio/suara mikrofon sebelum menurunkan resolusi.
      */
     protected fun setupMediaRecorder(filePath: String, prefs: AppPreferences) {
         val hasMicPermission = ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
         val wantsAudio = prefs.audioSource != "MUTE" && hasMicPermission
 
-        fun configureAndPrepare(withAudio: Boolean, targetWidth: Int, targetHeight: Int, bitrate: Int, fps: Int): Boolean {
+        fun configureAndPrepare(
+            withAudio: Boolean,
+            targetWidth: Int,
+            targetHeight: Int,
+            bitrate: Int,
+            fps: Int,
+            audioSourceOverride: Int? = null
+        ): Boolean {
             try {
                 mediaRecorder?.reset()
                 mediaRecorder?.release()
@@ -434,16 +442,16 @@ open class ScreenRecordingService : Service() {
             return try {
                 mediaRecorder?.apply {
                     if (withAudio) {
+                        val src = audioSourceOverride ?: try {
+                            com.bangdillah.rekamindulu.audio.MicrophoneSelector.getAudioSource(prefs.micType)
+                        } catch (e: Exception) {
+                            MediaRecorder.AudioSource.MIC
+                        }
                         try {
-                            val audioSource = com.bangdillah.rekamindulu.audio.MicrophoneSelector.getAudioSource(prefs.micType)
-                            setAudioSource(audioSource)
-                        } catch (eMic1: Exception) {
-                            try {
-                                setAudioSource(MediaRecorder.AudioSource.MIC)
-                            } catch (eMic2: Exception) {
-                                Log.w(TAG, "Audio source MIC not available: ${eMic2.message}")
-                                return false
-                            }
+                            setAudioSource(src)
+                        } catch (eSrc: Exception) {
+                            Log.w(TAG, "Audio source $src ditolak, fallback ke MIC standar", eSrc)
+                            setAudioSource(MediaRecorder.AudioSource.MIC)
                         }
                     }
 
@@ -453,11 +461,21 @@ open class ScreenRecordingService : Service() {
                     if (withAudio) {
                         try {
                             setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
+                            // Saluran mono (1) kompatibel secara universal di semua mikrofon HP dan emulator
+                            setAudioChannels(1)
                             setAudioSamplingRate(44100)
                             setAudioEncodingBitRate(128000)
                         } catch (eAac: Exception) {
-                            Log.w(TAG, "Audio encoder AAC setup failed: ${eAac.message}")
-                            return false
+                            Log.w(TAG, "Konfigurasi audio encoder AAC standar gagal, mencoba parameter aman", eAac)
+                            try {
+                                setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
+                                setAudioChannels(1)
+                                setAudioSamplingRate(16000)
+                                setAudioEncodingBitRate(64000)
+                            } catch (eSafeAac: Exception) {
+                                Log.w(TAG, "Audio encoder tidak dapat diaktifkan: ${eSafeAac.message}")
+                                return false
+                            }
                         }
                     }
 
@@ -494,48 +512,61 @@ open class ScreenRecordingService : Service() {
             }
         }
 
-        // Tier 1: Konfigurasi sesuai preferensi pengguna
+        val isPortrait = screenHeight >= screenWidth
+        val safeW = if (isPortrait) 720 else 1280
+        val safeH = if (isPortrait) 1280 else 720
+        val ultraSafeW = if (isPortrait) 480 else 848
+        val ultraSafeH = if (isPortrait) 848 else 480
+
         val initialBitrate = prefs.bitrateMbps * 1000 * 1000
         val initialFps = prefs.fps
-        if (configureAndPrepare(wantsAudio, screenWidth, screenHeight, initialBitrate, initialFps)) {
+        val preferredAudioSource = com.bangdillah.rekamindulu.audio.MicrophoneSelector.getAudioSource(prefs.micType)
+
+        // Tier 1: Konfigurasi sesuai resolusi & sumber audio pilihan pengguna
+        if (configureAndPrepare(wantsAudio, screenWidth, screenHeight, initialBitrate, initialFps, preferredAudioSource)) {
             Log.i(TAG, "Tier 1: MediaRecorder siap (${screenWidth}x${screenHeight}, audio=$wantsAudio)")
             return
         }
 
-        // Tier 2: Jika gagal karena audio mikrofon, coba video-only resolusi asli
-        if (wantsAudio) {
-            Log.w(TAG, "Tier 1 gagal, mencoba Tier 2 (Video-only resolusi asli)")
-            if (configureAndPrepare(false, screenWidth, screenHeight, initialBitrate, initialFps)) {
-                Log.i(TAG, "Tier 2: MediaRecorder siap tanpa audio")
+        // Tier 2: Jika Tier 1 gagal dan pengguna menginginkan audio, coba dengan sumber MIC standar ponsel
+        if (wantsAudio && preferredAudioSource != MediaRecorder.AudioSource.MIC) {
+            Log.w(TAG, "Tier 1 gagal, mencoba Tier 2 (Resolusi asli + Audio MIC Standar)")
+            if (configureAndPrepare(true, screenWidth, screenHeight, initialBitrate, initialFps, MediaRecorder.AudioSource.MIC)) {
+                Log.i(TAG, "Tier 2: MediaRecorder siap dengan audio MIC standar")
                 return
             }
         }
 
-        // Tier 3: Fallback ke standar HD 720p (720x1280) dengan H.264
-        val isPortrait = screenHeight >= screenWidth
-        val safeW = if (isPortrait) 720 else 1280
-        val safeH = if (isPortrait) 1280 else 720
-        Log.w(TAG, "Tier 2 gagal, mencoba Tier 3 (HD 720p H.264)")
-        if (configureAndPrepare(wantsAudio, safeW, safeH, 3_500_000, 30)) {
+        // Tier 3: Fallback ke standar HD 720p 30fps TETAP DENGAN AUDIO (Audio suara diutamakan!)
+        Log.w(TAG, "Mencoba Tier 3 (HD 720p 30fps DENGAN AUDIO)")
+        if (configureAndPrepare(wantsAudio, safeW, safeH, 3_500_000, 30, MediaRecorder.AudioSource.MIC)) {
             screenWidth = safeW
             screenHeight = safeH
             Log.i(TAG, "Tier 3: MediaRecorder 720p siap (audio=$wantsAudio)")
             return
         }
 
-        // Tier 4: Fallback ke HD 720p video-only murni
-        Log.w(TAG, "Tier 3 gagal, mencoba Tier 4 (HD 720p video-only)")
-        if (configureAndPrepare(false, safeW, safeH, 3_000_000, 30)) {
-            screenWidth = safeW
-            screenHeight = safeH
-            Log.i(TAG, "Tier 4: MediaRecorder 720p video-only siap")
+        // Tier 4: Fallback ke 480p 30fps TETAP DENGAN AUDIO
+        Log.w(TAG, "Mencoba Tier 4 (480p 30fps DENGAN AUDIO)")
+        if (configureAndPrepare(wantsAudio, ultraSafeW, ultraSafeH, 1_500_000, 30, MediaRecorder.AudioSource.MIC)) {
+            screenWidth = ultraSafeW
+            screenHeight = ultraSafeH
+            Log.i(TAG, "Tier 4: MediaRecorder 480p siap (audio=$wantsAudio)")
             return
         }
 
-        // Tier 5: Fallback paling aman 480p universal video-only (848 divisible by 16)
-        val ultraSafeW = if (isPortrait) 480 else 848
-        val ultraSafeH = if (isPortrait) 848 else 480
-        Log.w(TAG, "Tier 4 gagal, mencoba Tier 5 (480p universal)")
+        // Tier 5: Hanya jika hardware/perangkat BENAR-BENAR menolak seluruh inisialisasi audio, coba video-only 720p
+        if (wantsAudio) {
+            Log.w(TAG, "Perangkat keras audio tidak merespon, fallback ke video-only")
+            if (configureAndPrepare(false, safeW, safeH, 3_000_000, 30)) {
+                screenWidth = safeW
+                screenHeight = safeH
+                Log.i(TAG, "Tier 5: MediaRecorder 720p video-only siap")
+                return
+            }
+        }
+
+        // Tier 6: Fallback terakhir universal 480p video-only
         if (!configureAndPrepare(false, ultraSafeW, ultraSafeH, 1_500_000, 30)) {
             throw RuntimeException("Perangkat tidak dapat menginisialisasi encoder video untuk perekaman layar.")
         }
@@ -545,8 +576,13 @@ open class ScreenRecordingService : Service() {
 
     /**
      * Fallback cepat jika mediaRecorder.start() gagal pada konfigurasi awal sebelum virtual display dibuat.
+     * Mengutamakan perekaman suara mikrofon dengan resolusi aman 720p.
      */
     protected fun setupMediaRecorderFallback(filePath: String) {
+        val prefs = AppPreferences(this)
+        val hasMicPermission = ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
+        val wantsAudio = prefs.audioSource != "MUTE" && hasMicPermission
+
         try {
             mediaRecorder?.reset()
             mediaRecorder?.release()
@@ -563,15 +599,45 @@ open class ScreenRecordingService : Service() {
         val safeW = if (isPortrait) 720 else 1280
         val safeH = if (isPortrait) 1280 else 720
 
-        mediaRecorder?.apply {
-            setVideoSource(MediaRecorder.VideoSource.SURFACE)
-            setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
-            setVideoEncoder(MediaRecorder.VideoEncoder.H264)
-            setOutputFile(filePath)
-            setVideoSize(safeW, safeH)
-            setVideoEncodingBitRate(3_000_000)
-            setVideoFrameRate(30)
-            prepare()
+        var preparedWithAudio = false
+        if (wantsAudio) {
+            try {
+                mediaRecorder?.apply {
+                    setAudioSource(MediaRecorder.AudioSource.MIC)
+                    setVideoSource(MediaRecorder.VideoSource.SURFACE)
+                    setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
+                    setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
+                    setAudioChannels(1)
+                    setAudioSamplingRate(44100)
+                    setAudioEncodingBitRate(128000)
+                    setVideoEncoder(MediaRecorder.VideoEncoder.H264)
+                    setOutputFile(filePath)
+                    setVideoSize(safeW, safeH)
+                    setVideoEncodingBitRate(3_000_000)
+                    setVideoFrameRate(30)
+                    prepare()
+                }
+                preparedWithAudio = true
+                Log.i(TAG, "Fallback MediaRecorder berhasil disiapkan DENGAN AUDIO mikrofon")
+            } catch (e: Exception) {
+                Log.w(TAG, "Fallback dengan audio gagal, mencoba video-only", e)
+                try {
+                    mediaRecorder?.reset()
+                } catch (ignored: Exception) {}
+            }
+        }
+
+        if (!preparedWithAudio) {
+            mediaRecorder?.apply {
+                setVideoSource(MediaRecorder.VideoSource.SURFACE)
+                setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
+                setVideoEncoder(MediaRecorder.VideoEncoder.H264)
+                setOutputFile(filePath)
+                setVideoSize(safeW, safeH)
+                setVideoEncodingBitRate(3_000_000)
+                setVideoFrameRate(30)
+                prepare()
+            }
         }
         screenWidth = safeW
         screenHeight = safeH

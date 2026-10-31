@@ -9,6 +9,7 @@ import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import com.bangdillah.rekamindulu.R
 import com.bangdillah.rekamindulu.utils.SpecAnalysisDialog
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 
 class AboutActivity : AppCompatActivity() {
 
@@ -54,7 +55,7 @@ class AboutActivity : AppCompatActivity() {
     }
 
     private fun showUpdateDialog() {
-        AlertDialog.Builder(this)
+        MaterialAlertDialogBuilder(this)
             .setTitle("Versi Terbaru Terpasang ✅")
             .setIcon(R.drawable.ic_check_circle)
             .setMessage(
@@ -76,7 +77,7 @@ class AboutActivity : AppCompatActivity() {
     }
 
     private fun showSupportDialog() {
-        AlertDialog.Builder(this)
+        MaterialAlertDialogBuilder(this)
             .setTitle("☕ Traktir Kopi Bangdillah210")
             .setMessage(
                 "Dukungan Anda sangat berarti untuk membantu pengembangan fitur-fitur baru di Rekamin Dulu!\n\n" +

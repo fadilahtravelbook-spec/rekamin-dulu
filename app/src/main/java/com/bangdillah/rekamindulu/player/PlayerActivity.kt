@@ -20,6 +20,9 @@ import androidx.core.content.FileProvider
 import com.bangdillah.rekamindulu.R
 import com.bangdillah.rekamindulu.audio.AudioExtractorHelper
 import com.bangdillah.rekamindulu.trim.TrimActivity
+import com.bangdillah.rekamindulu.utils.SelectionBottomSheetDialog
+import com.bangdillah.rekamindulu.utils.SelectionOption
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import java.io.File
 import java.util.Locale
 
@@ -233,18 +236,60 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     private fun showSpeedDialog() {
-        AlertDialog.Builder(this)
-            .setTitle("Kecepatan Pemutaran Video")
-            .setSingleChoiceItems(speedLabels, currentSpeedIndex) { dialog, which ->
-                currentSpeedIndex = which
-                val speed = speedValues[which]
-                applyPlaybackSpeed(speed)
-                btnSpeed?.text = "⚡ ${speedLabels[which].split(" ")[0]}"
-                dialog.dismiss()
-                scheduleControlsAutoHide()
-            }
-            .setNegativeButton("Batal", null)
-            .show()
+        val options = listOf(
+            SelectionOption(
+                value = 0,
+                title = "0.5x (Lambat)",
+                subtitle = "Setengah kecepatan normal untuk analisis detail gerakan",
+                badgeLabel = "0.5x"
+            ),
+            SelectionOption(
+                value = 1,
+                title = "0.75x",
+                subtitle = "Kecepatan sedikit lebih lambat",
+                badgeLabel = "0.75x"
+            ),
+            SelectionOption(
+                value = 2,
+                title = "1.0x (Normal)",
+                subtitle = "Kecepatan asli pemutaran video rekaman",
+                badgeLabel = "1.0x",
+                isRecommended = true
+            ),
+            SelectionOption(
+                value = 3,
+                title = "1.25x",
+                subtitle = "Sedikit lebih cepat",
+                badgeLabel = "1.25x"
+            ),
+            SelectionOption(
+                value = 4,
+                title = "1.5x",
+                subtitle = "Satu setengah kali lebih cepat",
+                badgeLabel = "1.5x"
+            ),
+            SelectionOption(
+                value = 5,
+                title = "2.0x (Cepat)",
+                subtitle = "Dua kali kecepatan normal untuk tinjauan kilat",
+                badgeLabel = "2.0x"
+            )
+        )
+
+        SelectionBottomSheetDialog.show(
+            context = this,
+            iconRes = R.drawable.ic_speed,
+            title = "Kecepatan Pemutaran Video",
+            subtitle = "Pilih kecepatan putar sesuai kebutuhan Anda",
+            options = options,
+            selectedValue = currentSpeedIndex
+        ) { selectedIndex ->
+            currentSpeedIndex = selectedIndex
+            val speed = speedValues[selectedIndex]
+            applyPlaybackSpeed(speed)
+            btnSpeed?.text = "⚡ ${speedLabels[selectedIndex].split(" ")[0]}"
+            scheduleControlsAutoHide()
+        }
     }
 
     private fun applyPlaybackSpeed(speed: Float) {
@@ -292,7 +337,8 @@ class PlayerActivity : AppCompatActivity() {
 
         videoView?.setOnErrorListener { _, what, extra ->
             if (!isFinishing && !isDestroyed) {
-                AlertDialog.Builder(this)
+                MaterialAlertDialogBuilder(this)
+                    .setIcon(R.drawable.ic_video_error)
                     .setTitle("Tidak Dapat Memutar Video")
                     .setMessage("Format file video tidak didukung atau file rekaman rusak (Error $what, $extra).")
                     .setPositiveButton("Kembali") { _, _ -> finish() }
@@ -339,7 +385,12 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     private fun extractAudioFromVideo(file: File) {
-        val progressDialog = AlertDialog.Builder(this)
+        if (!AudioExtractorHelper.hasAudioTrack(file)) {
+            Toast.makeText(this, "⚠️ Video ini tidak memiliki rekaman suara (direkam dalam mode Mute/tanpa suara).", Toast.LENGTH_LONG).show()
+            return
+        }
+
+        val progressDialog = MaterialAlertDialogBuilder(this)
             .setTitle("Mengekstrak Audio 🎵")
             .setMessage("Sedang memisahkan trek audio dari rekaman video ${file.name}...")
             .setCancelable(false)
@@ -355,7 +406,7 @@ class PlayerActivity : AppCompatActivity() {
                     } catch (ignored: Exception) {}
 
                     if (success && audioFile != null && audioFile.exists()) {
-                        AlertDialog.Builder(this)
+                        MaterialAlertDialogBuilder(this)
                             .setTitle("Ekstrak Audio Berhasil! 🎉")
                             .setIcon(R.drawable.ic_check_circle)
                             .setMessage("Audio disimpan sebagai:\n${audioFile.name}\nUkuran: ${String.format(Locale.getDefault(), "%.1f MB", audioFile.length() / (1024.0 * 1024.0))}")

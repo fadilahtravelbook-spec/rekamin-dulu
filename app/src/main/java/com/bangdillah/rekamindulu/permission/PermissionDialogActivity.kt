@@ -14,6 +14,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import com.bangdillah.rekamindulu.R
 import com.bangdillah.rekamindulu.utils.AppPreferences
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 
 class PermissionDialogActivity : AppCompatActivity() {
 
@@ -95,7 +96,8 @@ class PermissionDialogActivity : AppCompatActivity() {
 
         dismissSettingsDialog()
 
-        settingsDialog = AlertDialog.Builder(this)
+        settingsDialog = MaterialAlertDialogBuilder(this)
+            .setIcon(R.drawable.ic_permission)
             .setTitle("Izin Diperlukan")
             .setMessage("Izin mikrofon dibutuhkan untuk merekam suara game & bicara. Buka pengaturan aplikasi untuk mengaktifkannya?")
             .setPositiveButton("Buka Pengaturan") { dialog, _ ->

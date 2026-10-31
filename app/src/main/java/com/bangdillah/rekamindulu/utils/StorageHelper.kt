@@ -175,7 +175,7 @@ object StorageHelper {
     }
 
     /**
-     * Menghasilkan video demo MP4 valid secara langsung menggunakan MediaCodec & MediaMuxer,
+     * Menghasilkan video demo MP4 valid dengan trek video HD dan trek audio AAC jernih,
      * berguna agar pengguna/tester dapat langsung menguji Player, Trim, dan Audio Extractor.
      */
     fun generateDemoVideo(context: Context, onComplete: ((File?) -> Unit)? = null) {
@@ -201,10 +201,31 @@ object StorageHelper {
                 val inputSurface = encoder.createInputSurface()
                 encoder.start()
 
+                // Audio encoder setup (AAC 44.1kHz Mono)
+                val sampleRate = 44100
+                val audioMime = "audio/mp4a-latm"
+                val audioFormat = MediaFormat.createAudioFormat(audioMime, sampleRate, 1).apply {
+                    setInteger(MediaFormat.KEY_AAC_PROFILE, MediaCodecInfo.CodecProfileLevel.AACObjectLC)
+                    setInteger(MediaFormat.KEY_BIT_RATE, 64000)
+                    setInteger(MediaFormat.KEY_MAX_INPUT_SIZE, 16384)
+                }
+
+                var audioEncoder: MediaCodec? = null
+                var audioTrackIndex = -1
+                try {
+                    audioEncoder = MediaCodec.createEncoderByType(audioMime)
+                    audioEncoder.configure(audioFormat, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
+                    audioEncoder.start()
+                } catch (eAudio: Exception) {
+                    Log.w(TAG, "Audio encoder not supported for demo: ${eAudio.message}")
+                    audioEncoder = null
+                }
+
                 val muxer = MediaMuxer(outputFile.absolutePath, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
-                var trackIndex = -1
+                var videoTrackIndex = -1
                 var muxerStarted = false
                 val bufferInfo = MediaCodec.BufferInfo()
+                val audioBufferInfo = MediaCodec.BufferInfo()
 
                 val paintBg = android.graphics.Paint().apply { color = android.graphics.Color.parseColor("#161622") }
                 val paintHeader = android.graphics.Paint().apply { color = android.graphics.Color.parseColor("#6C5CE7") }
@@ -229,7 +250,132 @@ object StorageHelper {
                     isAntiAlias = true
                 }
 
-                for (i in 0 until numFrames) {
+                // Render first video frame to trigger output format
+                val canvas0 = inputSurface.lockHardwareCanvas()
+                canvas0.drawRect(0f, 0f, width.toFloat(), height.toFloat(), paintBg)
+                canvas0.drawRoundRect(40f, 120f, width - 40f, 300f, 24f, 24f, paintHeader)
+                canvas0.drawCircle(80f, 210f, 14f, paintDot)
+                canvas0.drawText("Rekamin Dulu • Demo HD", width / 2f + 16f, 195f, paintText)
+                canvas0.drawText("Rekam Layar & Audio Suara", width / 2f + 16f, 245f, paintSubtext)
+                inputSurface.unlockCanvasAndPost(canvas0)
+
+                // Feed audio samples if audioEncoder is active
+                var totalAudioSamplesFed = 0
+                val totalSamplesNeeded = sampleRate * durationSec
+                var audioEndOfStreamSent = false
+
+                fun feedAudioIfPossible() {
+                    val aEnc = audioEncoder ?: return
+                    if (audioEndOfStreamSent) return
+                    while (totalAudioSamplesFed < totalSamplesNeeded) {
+                        val inIndex = aEnc.dequeueInputBuffer(0)
+                        if (inIndex >= 0) {
+                            val inBuf = aEnc.getInputBuffer(inIndex) ?: break
+                            inBuf.clear()
+                            val samplesThisChunk = Math.min(1024, totalSamplesNeeded - totalAudioSamplesFed)
+                            for (s in 0 until samplesThisChunk) {
+                                val currentSample = totalAudioSamplesFed + s
+                                val angle = (currentSample.toDouble() / sampleRate) * 587.33 * 2.0 * Math.PI
+                                val decay = Math.max(0.2, 1.0 - (currentSample.toDouble() / totalSamplesNeeded))
+                                val sampleVal = (Math.sin(angle) * 12000.0 * decay).toInt().toShort()
+                                inBuf.putShort(sampleVal)
+                            }
+                            val bytesFed = samplesThisChunk * 2
+                            val ptsUs = (totalAudioSamplesFed * 1000000L / sampleRate)
+                            totalAudioSamplesFed += samplesThisChunk
+                            val isEos = totalAudioSamplesFed >= totalSamplesNeeded
+                            if (isEos) {
+                                audioEndOfStreamSent = true
+                            }
+                            aEnc.queueInputBuffer(
+                                inIndex,
+                                0,
+                                bytesFed,
+                                ptsUs,
+                                if (isEos) MediaCodec.BUFFER_FLAG_END_OF_STREAM else 0
+                            )
+                        } else {
+                            break
+                        }
+                    }
+                }
+
+                feedAudioIfPossible()
+
+                // Wait for format on both encoders before starting muxer
+                val pendingVideoBuffers = mutableListOf<Pair<java.nio.ByteBuffer, MediaCodec.BufferInfo>>()
+                val pendingAudioBuffers = mutableListOf<Pair<java.nio.ByteBuffer, MediaCodec.BufferInfo>>()
+
+                var videoFormatFound = false
+                var audioFormatFound = (audioEncoder == null)
+
+                var attempts = 0
+                while ((!videoFormatFound || !audioFormatFound) && attempts < 100) {
+                    attempts++
+                    feedAudioIfPossible()
+
+                    if (!videoFormatFound) {
+                        val outIdx = encoder.dequeueOutputBuffer(bufferInfo, 10000)
+                        if (outIdx == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) {
+                            videoTrackIndex = muxer.addTrack(encoder.outputFormat)
+                            videoFormatFound = true
+                        } else if (outIdx >= 0) {
+                            val buf = encoder.getOutputBuffer(outIdx)
+                            if (buf != null && bufferInfo.size > 0) {
+                                val clone = java.nio.ByteBuffer.allocate(bufferInfo.size)
+                                clone.put(buf)
+                                clone.flip()
+                                val infoClone = MediaCodec.BufferInfo()
+                                infoClone.set(0, bufferInfo.size, bufferInfo.presentationTimeUs, bufferInfo.flags)
+                                pendingVideoBuffers.add(Pair(clone, infoClone))
+                            }
+                            encoder.releaseOutputBuffer(outIdx, false)
+                        }
+                    }
+
+                    if (!audioFormatFound && audioEncoder != null) {
+                        val aOutIdx = audioEncoder.dequeueOutputBuffer(audioBufferInfo, 10000)
+                        if (aOutIdx == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) {
+                            audioTrackIndex = muxer.addTrack(audioEncoder.outputFormat)
+                            audioFormatFound = true
+                        } else if (aOutIdx >= 0) {
+                            val buf = audioEncoder.getOutputBuffer(aOutIdx)
+                            if (buf != null && audioBufferInfo.size > 0) {
+                                val clone = java.nio.ByteBuffer.allocate(audioBufferInfo.size)
+                                clone.put(buf)
+                                clone.flip()
+                                val infoClone = MediaCodec.BufferInfo()
+                                infoClone.set(0, audioBufferInfo.size, audioBufferInfo.presentationTimeUs, audioBufferInfo.flags)
+                                pendingAudioBuffers.add(Pair(clone, infoClone))
+                            }
+                            audioEncoder.releaseOutputBuffer(aOutIdx, false)
+                        }
+                    }
+                }
+
+                if (videoFormatFound) {
+                    muxer.start()
+                    muxerStarted = true
+
+                    // Flush pending video
+                    for ((buf, info) in pendingVideoBuffers) {
+                        muxer.writeSampleData(videoTrackIndex, buf, info)
+                    }
+                    pendingVideoBuffers.clear()
+
+                    // Flush pending audio
+                    if (audioTrackIndex >= 0) {
+                        for ((buf, info) in pendingAudioBuffers) {
+                            muxer.writeSampleData(audioTrackIndex, buf, info)
+                        }
+                        pendingAudioBuffers.clear()
+                    }
+                }
+
+                // Render remaining frames (1 to numFrames - 1)
+                for (i in 1 until numFrames) {
+                    feedAudioIfPossible()
+
                     val canvas = inputSurface.lockHardwareCanvas()
                     canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), paintBg)
 
@@ -237,7 +383,7 @@ object StorageHelper {
                     canvas.drawRoundRect(40f, 120f, width - 40f, 300f, 24f, 24f, paintHeader)
                     canvas.drawCircle(80f, 210f, 14f, paintDot)
                     canvas.drawText("Rekamin Dulu • Demo HD", width / 2f + 16f, 195f, paintText)
-                    canvas.drawText("Rekam Layar & Audio Game", width / 2f + 16f, 245f, paintSubtext)
+                    canvas.drawText("Rekam Layar & Audio Suara", width / 2f + 16f, 245f, paintSubtext)
 
                     // Draw moving pulse circle
                     val animY = 440f + (i * 7f) % 450f
@@ -245,23 +391,17 @@ object StorageHelper {
 
                     val sec = i / frameRate
                     canvas.drawText("Sample Rekaman Video 00:0$sec / 00:03", width / 2f, 1020f, paintText)
-                    canvas.drawText("1080p 60FPS • Siap Diputar & Dipotong", width / 2f, 1070f, paintSubtext)
+                    canvas.drawText("1080p 60FPS • Suara Jernih Aktif", width / 2f, 1070f, paintSubtext)
 
                     inputSurface.unlockCanvasAndPost(canvas)
 
                     while (true) {
-                        val outputBufferId = encoder.dequeueOutputBuffer(bufferInfo, 10000)
-                        if (outputBufferId == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) {
-                            if (!muxerStarted) {
-                                trackIndex = muxer.addTrack(encoder.outputFormat)
-                                muxer.start()
-                                muxerStarted = true
-                            }
-                        } else if (outputBufferId >= 0) {
+                        val outputBufferId = encoder.dequeueOutputBuffer(bufferInfo, 5000)
+                        if (outputBufferId >= 0) {
                             val outputBuffer = encoder.getOutputBuffer(outputBufferId)
                             if (outputBuffer != null && bufferInfo.size > 0 && muxerStarted) {
                                 bufferInfo.presentationTimeUs = (i * 1000000L / frameRate)
-                                muxer.writeSampleData(trackIndex, outputBuffer, bufferInfo)
+                                muxer.writeSampleData(videoTrackIndex, outputBuffer, bufferInfo)
                             }
                             encoder.releaseOutputBuffer(outputBufferId, false)
                             break
@@ -269,16 +409,33 @@ object StorageHelper {
                             break
                         }
                     }
+
+                    // Drain audio
+                    if (audioEncoder != null && muxerStarted && audioTrackIndex >= 0) {
+                        while (true) {
+                            val aOut = audioEncoder.dequeueOutputBuffer(audioBufferInfo, 5000)
+                            if (aOut >= 0) {
+                                val aBuf = audioEncoder.getOutputBuffer(aOut)
+                                if (aBuf != null && audioBufferInfo.size > 0) {
+                                    muxer.writeSampleData(audioTrackIndex, aBuf, audioBufferInfo)
+                                }
+                                audioEncoder.releaseOutputBuffer(aOut, false)
+                            } else {
+                                break
+                            }
+                        }
+                    }
                 }
 
                 encoder.signalEndOfInputStream()
 
+                // Final video drain
                 while (true) {
                     val outputBufferId = encoder.dequeueOutputBuffer(bufferInfo, 10000)
                     if (outputBufferId >= 0) {
                         val outputBuffer = encoder.getOutputBuffer(outputBufferId)
                         if (outputBuffer != null && bufferInfo.size > 0 && muxerStarted) {
-                            muxer.writeSampleData(trackIndex, outputBuffer, bufferInfo)
+                            muxer.writeSampleData(videoTrackIndex, outputBuffer, bufferInfo)
                         }
                         encoder.releaseOutputBuffer(outputBufferId, false)
                         if ((bufferInfo.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM) != 0) {
@@ -289,19 +446,30 @@ object StorageHelper {
                     }
                 }
 
-                try {
-                    encoder.stop()
-                    encoder.release()
-                } catch (ignored: Exception) {}
-
-                try {
-                    inputSurface.release()
-                } catch (ignored: Exception) {}
-
-                try {
-                    if (muxerStarted) {
-                        muxer.stop()
+                // Final audio drain
+                if (audioEncoder != null && muxerStarted && audioTrackIndex >= 0) {
+                    while (true) {
+                        val aOut = audioEncoder.dequeueOutputBuffer(audioBufferInfo, 10000)
+                        if (aOut >= 0) {
+                            val aBuf = audioEncoder.getOutputBuffer(aOut)
+                            if (aBuf != null && audioBufferInfo.size > 0) {
+                                muxer.writeSampleData(audioTrackIndex, aBuf, audioBufferInfo)
+                            }
+                            audioEncoder.releaseOutputBuffer(aOut, false)
+                            if ((audioBufferInfo.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM) != 0) {
+                                break
+                            }
+                        } else {
+                            break
+                        }
                     }
+                }
+
+                try { encoder.stop(); encoder.release() } catch (ignored: Exception) {}
+                try { audioEncoder?.stop(); audioEncoder?.release() } catch (ignored: Exception) {}
+                try { inputSurface.release() } catch (ignored: Exception) {}
+                try {
+                    if (muxerStarted) muxer.stop()
                     muxer.release()
                 } catch (ignored: Exception) {}
 

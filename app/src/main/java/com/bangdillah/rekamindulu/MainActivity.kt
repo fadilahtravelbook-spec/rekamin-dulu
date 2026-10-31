@@ -44,7 +44,12 @@ import com.bangdillah.rekamindulu.library.LibraryAdapter
 import com.bangdillah.rekamindulu.player.PlayerActivity
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import com.bangdillah.rekamindulu.utils.SelectionBottomSheetDialog
+import com.bangdillah.rekamindulu.utils.SelectionOption
 import com.google.android.material.bottomnavigation.BottomNavigationView
+import com.google.android.material.button.MaterialButton
+import com.google.android.material.card.MaterialCardView
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.snackbar.Snackbar
 import java.io.File
 import java.util.Locale
@@ -94,9 +99,37 @@ open class MainActivity : AppCompatActivity() {
     ) { permissions ->
         val audioGranted = permissions[Manifest.permission.RECORD_AUDIO] ?: hasAudioRecordingPermission()
         if (audioGranted) {
-            showSnackbar("Izin audio mikrofon diberikan")
+            showSnackbar("🎤 Izin audio mikrofon diberikan")
+            initiateScreenCaptureFlow()
+        } else {
+            // Audio permission denied by user
+            if (isMicOn) {
+                MaterialAlertDialogBuilder(this)
+                    .setTitle("🎤 Izin Mikrofon Diperlukan")
+                    .setMessage("Izin mikrofon dibutuhkan agar rekaman layar memiliki suara atau vokal Anda. Apakah Anda ingin tetap merekam tanpa suara (Mute), atau buka Pengaturan untuk mengaktifkan izin?")
+                    .setIcon(R.drawable.ic_mic_off)
+                    .setPositiveButton("Tetap Rekam (Mute)") { _, _ ->
+                        isMicOn = false
+                        syncAudioPreferences()
+                        updateAudioToggleViews()
+                        initiateScreenCaptureFlow()
+                    }
+                    .setNeutralButton("Buka Pengaturan") { _, _ ->
+                        try {
+                            val intent = Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                                data = android.net.Uri.fromParts("package", packageName, null)
+                            }
+                            startActivity(intent)
+                        } catch (e: Exception) {
+                            Toast.makeText(this, "Buka Pengaturan HP > Aplikasi > Rekamin Dulu > Izin", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                    .setNegativeButton("Batal", null)
+                    .show()
+            } else {
+                initiateScreenCaptureFlow()
+            }
         }
-        initiateScreenCaptureFlow()
     }
 
     // Alias for audioPermissionLauncher for backward compatibility
@@ -148,7 +181,7 @@ open class MainActivity : AppCompatActivity() {
                     liveTimerHandler.removeCallbacks(liveTimerRunnable)
                     updateRecordingBanner()
                     if (!isFinishing && !isDestroyed) {
-                        AlertDialog.Builder(this@MainActivity)
+                        MaterialAlertDialogBuilder(this@MainActivity)
                             .setTitle("⚠️ Perekaman Gagal")
                             .setMessage(errorMsg)
                             .setPositiveButton("Mengerti", null)
@@ -175,6 +208,11 @@ open class MainActivity : AppCompatActivity() {
         setupDashboardCards()
         setupHomeRecordingsListView()
         setupBottomNavigation()
+
+        if (intent.getBooleanExtra("REQUEST_PERMISSIONS_ONBOARDING", false)) {
+            intent.removeExtra("REQUEST_PERMISSIONS_ONBOARDING")
+            startActivity(Intent(this, PermissionDialogActivity::class.java))
+        }
     }
 
     /**
@@ -215,6 +253,12 @@ open class MainActivity : AppCompatActivity() {
         val cardMic = findViewById<com.google.android.material.card.MaterialCardView>(R.id.card_mic_toggle)
         val cardGame = findViewById<com.google.android.material.card.MaterialCardView>(R.id.card_game_audio_toggle)
         val cardFacecam = findViewById<com.google.android.material.card.MaterialCardView>(R.id.card_facecam_toggle)
+
+        val isRecordingActive = ScreenRecordingService.isRecording
+        val activeAlpha = if (isRecordingActive) 0.55f else 1.0f
+        cardMic?.alpha = activeAlpha
+        cardGame?.alpha = activeAlpha
+        cardFacecam?.alpha = activeAlpha
 
         cardMic?.strokeColor = ContextCompat.getColor(this, if (isMicOn) R.color.colorPrimary else R.color.colorBorder)
         cardMic?.strokeWidth = if (isMicOn) 3 else 1
@@ -271,7 +315,7 @@ open class MainActivity : AppCompatActivity() {
                 setPadding(48, 36, 48, 36)
             }
 
-            AlertDialog.Builder(this)
+            MaterialAlertDialogBuilder(this)
                 .setTitle("🔒 Kunci Rekamin Dulu")
                 .setMessage("Aplikasi ini dilindungi PIN. Masukkan PIN keamanan untuk melanjutkan:")
                 .setView(input)
@@ -369,31 +413,46 @@ open class MainActivity : AppCompatActivity() {
 
         // Toggle Mic Audio Recording (tap button or whole card)
         val toggleMicAction = {
-            isMicOn = !isMicOn
-            updateAudioToggleViews()
-            syncAudioPreferences()
-            showSnackbar(if (isMicOn) "🎤 Mikrofon diaktifkan" else "🔇 Mikrofon dinonaktifkan")
+            if (ScreenRecordingService.isRecording) {
+                showSnackbar("⚠️ Pengaturan mikrofon terkunci saat perekaman sedang aktif")
+            } else {
+                isMicOn = !isMicOn
+                if (isMicOn && !hasAudioRecordingPermission()) {
+                    runtimePermissionLauncher.launch(arrayOf(Manifest.permission.RECORD_AUDIO))
+                }
+                updateAudioToggleViews()
+                syncAudioPreferences()
+                showSnackbar(if (isMicOn) "🎤 Mikrofon diaktifkan" else "🔇 Mikrofon dinonaktifkan")
+            }
         }
         findViewById<Button>(R.id.toggle_mic)?.setOnClickListener { toggleMicAction() }
         findViewById<View>(R.id.card_mic_toggle)?.setOnClickListener { toggleMicAction() }
 
         // Toggle Internal Game Audio Recording (tap button or whole card)
         val toggleGameAudioAction = {
-            isGameAudioOn = !isGameAudioOn
-            updateAudioToggleViews()
-            syncAudioPreferences()
-            showSnackbar(if (isGameAudioOn) "🎮 Audio internal game diaktifkan" else "🔇 Audio game dinonaktifkan")
+            if (ScreenRecordingService.isRecording) {
+                showSnackbar("⚠️ Pengaturan audio game terkunci saat perekaman sedang aktif")
+            } else {
+                isGameAudioOn = !isGameAudioOn
+                updateAudioToggleViews()
+                syncAudioPreferences()
+                showSnackbar(if (isGameAudioOn) "🎮 Audio internal game diaktifkan" else "🔇 Audio game dinonaktifkan")
+            }
         }
         findViewById<Button>(R.id.toggle_game_audio)?.setOnClickListener { toggleGameAudioAction() }
         findViewById<View>(R.id.card_game_audio_toggle)?.setOnClickListener { toggleGameAudioAction() }
 
         // Toggle Facecam (tap button or whole card)
         val toggleFacecamAction = {
-            facecamStateIndex = (facecamStateIndex + 1) % facecamStates.size
-            val stateStr = facecamStates[facecamStateIndex]
-            appPreferences.facecamMode = stateStr
-            updateAudioToggleViews()
-            showSnackbar("Mode Kamera Wajah: $stateStr")
+            if (ScreenRecordingService.isRecording) {
+                showSnackbar("⚠️ Mode kamera wajah terkunci saat perekaman sedang aktif")
+            } else {
+                facecamStateIndex = (facecamStateIndex + 1) % facecamStates.size
+                val stateStr = facecamStates[facecamStateIndex]
+                appPreferences.facecamMode = stateStr
+                updateAudioToggleViews()
+                showSnackbar("Mode Kamera Wajah: $stateStr")
+            }
         }
         findViewById<Button>(R.id.toggle_facecam)?.setOnClickListener { toggleFacecamAction() }
         findViewById<View>(R.id.card_facecam_toggle)?.setOnClickListener { toggleFacecamAction() }
@@ -484,57 +543,98 @@ open class MainActivity : AppCompatActivity() {
 
 
     private fun showQualityPickerDialog() {
-        val options = arrayOf(
-            "1080p Full HD • 30 FPS • 8 Mbps (Stabil & Rekomendasi)",
-            "720p HD • 30 FPS • 5 Mbps (Hemat Memori)",
-            "1080p Full HD • 60 FPS • 12 Mbps (High Performance)",
-            "4K Ultra HD • 30 FPS • 20 Mbps (Kualitas Tertinggi)",
-            "⚙️ Buka Pengaturan & Analisis Lengkap..."
+        val currentPreset = when {
+            appPreferences.resolution == "1080p" && appPreferences.fps == 30 -> "1080p_30"
+            appPreferences.resolution == "1080p" && appPreferences.fps >= 60 -> "1080p_60"
+            appPreferences.resolution == "4K" -> "4K_30"
+            appPreferences.resolution == "720p" -> "720p_30"
+            else -> "custom"
+        }
+
+        val options = listOf(
+            SelectionOption(
+                value = "1080p_30",
+                title = "1080p Full HD (30 FPS • 8 Mbps)",
+                subtitle = "Standar YouTube, Seimbang & Stabil Tanpa Lag",
+                badgeLabel = "1080p",
+                isRecommended = true
+            ),
+            SelectionOption(
+                value = "1080p_60",
+                title = "1080p Gaming Pro (60 FPS • 12 Mbps)",
+                subtitle = "Gerakan Sangat Mulus untuk Rekaman Game & E-Sports",
+                badgeLabel = "60FPS",
+                isRecommended = false
+            ),
+            SelectionOption(
+                value = "4K_30",
+                title = "4K Ultra HD (30 FPS • 20 Mbps)",
+                subtitle = "Ketajaman Tertinggi untuk Layar Ponsel Flagship",
+                badgeLabel = "4K",
+                isRecommended = false
+            ),
+            SelectionOption(
+                value = "720p_30",
+                title = "720p HD (30 FPS • 5 Mbps)",
+                subtitle = "Ringan & Sangat Hemat Penyimpanan / Baterai",
+                badgeLabel = "720p",
+                isRecommended = false
+            ),
+            SelectionOption(
+                value = "custom",
+                title = "Kustomisasi Lanjutan di Pengaturan",
+                subtitle = "Atur Bitrate manual, Format Codec H.265 & Tuning Mikrofon",
+                badgeLabel = "⚙️",
+                isRecommended = false
+            )
         )
 
-        AlertDialog.Builder(this)
-            .setTitle("Pilih Kualitas Rekaman Video")
-            .setItems(options) { _, which ->
-                when (which) {
-                    0 -> {
-                        appPreferences.resolution = "1080p"
-                        appPreferences.fps = 30
-                        appPreferences.bitrateMbps = 8
-                        appPreferences.isGamingMode = false
-                        updateResolutionBadge()
-                        showSnackbar("Preset 1080p 30FPS diterapkan")
-                    }
-                    1 -> {
-                        appPreferences.resolution = "720p"
-                        appPreferences.fps = 30
-                        appPreferences.bitrateMbps = 5
-                        appPreferences.isGamingMode = false
-                        updateResolutionBadge()
-                        showSnackbar("Preset 720p 30FPS diterapkan")
-                    }
-                    2 -> {
-                        appPreferences.resolution = "1080p"
-                        appPreferences.fps = 60
-                        appPreferences.bitrateMbps = 12
-                        appPreferences.isGamingMode = true
-                        updateResolutionBadge()
-                        showSnackbar("Preset 1080p 60FPS diterapkan (Mode Gaming Pro)")
-                    }
-                    3 -> {
-                        appPreferences.resolution = "4K"
-                        appPreferences.fps = 30
-                        appPreferences.bitrateMbps = 20
-                        appPreferences.isGamingMode = false
-                        updateResolutionBadge()
-                        showSnackbar("Preset 4K Ultra HD diterapkan")
-                    }
-                    4 -> {
-                        startActivity(Intent(this, SettingsActivity::class.java))
-                    }
+        SelectionBottomSheetDialog.show(
+            context = this,
+            iconRes = R.drawable.ic_video,
+            title = "Pilih Kualitas Rekaman Layar",
+            subtitle = "Pilih preset profil rekaman atau sesuaikan konfigurasi",
+            options = options,
+            selectedValue = currentPreset
+        ) { selectedPreset ->
+            when (selectedPreset) {
+                "1080p_30" -> {
+                    appPreferences.resolution = "1080p"
+                    appPreferences.fps = 30
+                    appPreferences.bitrateMbps = 8
+                    appPreferences.isGamingMode = false
+                    updateResolutionBadge()
+                    showSnackbar("Preset 1080p 30FPS diterapkan")
+                }
+                "1080p_60" -> {
+                    appPreferences.resolution = "1080p"
+                    appPreferences.fps = 60
+                    appPreferences.bitrateMbps = 12
+                    appPreferences.isGamingMode = true
+                    updateResolutionBadge()
+                    showSnackbar("Preset 1080p 60FPS diterapkan (Mode Gaming Pro)")
+                }
+                "4K_30" -> {
+                    appPreferences.resolution = "4K"
+                    appPreferences.fps = 30
+                    appPreferences.bitrateMbps = 20
+                    appPreferences.isGamingMode = false
+                    updateResolutionBadge()
+                    showSnackbar("Preset 4K Ultra HD diterapkan")
+                }
+                "720p_30" -> {
+                    appPreferences.resolution = "720p"
+                    appPreferences.fps = 30
+                    appPreferences.bitrateMbps = 5
+                    appPreferences.isGamingMode = false
+                    updateResolutionBadge()
+                    showSnackbar("Preset 720p 30FPS diterapkan")
+                }
+                "custom" -> {
+                    startActivity(Intent(this, SettingsActivity::class.java))
                 }
             }
-            .setNegativeButton("Batal", null)
-            .show()
+        }
     }
 
     private fun updateResolutionBadge() {
@@ -705,7 +805,8 @@ open class MainActivity : AppCompatActivity() {
             isSingleLine = true
         }
 
-        AlertDialog.Builder(this)
+        MaterialAlertDialogBuilder(this)
+            .setIcon(R.drawable.ic_trim)
             .setTitle("Ubah Nama Rekaman")
             .setMessage("Masukkan nama baru untuk rekaman ini:")
             .setView(input)
@@ -737,7 +838,12 @@ open class MainActivity : AppCompatActivity() {
     }
 
     private fun handleExtractAudioHome(file: File) {
-        val progressDialog = AlertDialog.Builder(this)
+        if (!com.bangdillah.rekamindulu.audio.AudioExtractorHelper.hasAudioTrack(file)) {
+            Toast.makeText(this, "⚠️ Video ini tidak memiliki rekaman suara (direkam dalam mode Mute/tanpa suara).", Toast.LENGTH_LONG).show()
+            return
+        }
+
+        val progressDialog = MaterialAlertDialogBuilder(this)
             .setTitle("Mengekstrak Audio 🎵")
             .setMessage("Sedang memisahkan audio dari ${file.name}...")
             .setCancelable(false)
@@ -753,14 +859,14 @@ open class MainActivity : AppCompatActivity() {
                     } catch (ignored: Exception) {}
 
                     if (success && audioFile != null && audioFile.exists()) {
-                        AlertDialog.Builder(this)
+                        MaterialAlertDialogBuilder(this)
                             .setTitle("Ekstrak Audio Berhasil! 🎉")
                             .setIcon(R.drawable.ic_check_circle)
                             .setMessage("Tersimpan sebagai:\n${audioFile.name}")
                             .setPositiveButton("Bagus", null)
                             .show()
                     } else {
-                        Toast.makeText(this, "Gagal mengekstrak audio dari video ini", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(this, "Tidak dapat mengekstrak audio dari video ini", Toast.LENGTH_SHORT).show()
                     }
                 }
             }
@@ -789,7 +895,7 @@ open class MainActivity : AppCompatActivity() {
     }
 
     private fun confirmDeleteHomeRecording(file: File) {
-        AlertDialog.Builder(this)
+        MaterialAlertDialogBuilder(this)
             .setTitle("Hapus Rekaman Video?")
             .setMessage("File \"${file.name}\" akan dihapus secara permanen dari penyimpanan.")
             .setIcon(R.drawable.ic_delete)
@@ -896,10 +1002,10 @@ open class MainActivity : AppCompatActivity() {
         val btnHeroPause = findViewById<Button>(R.id.btn_hero_pause_recording)
 
         // Floating pill views
-        val floatingPill = findViewById<View>(R.id.card_floating_recording_pill)
+        val floatingPill = findViewById<MaterialCardView>(R.id.card_floating_recording_pill)
         val floatingStatus = findViewById<TextView>(R.id.text_floating_rec_status)
         val floatingTimer = findViewById<TextView>(R.id.text_floating_rec_timer)
-        val floatingBtnPause = findViewById<Button>(R.id.btn_floating_pause)
+        val floatingBtnPause = findViewById<MaterialButton>(R.id.btn_floating_pause)
 
         if (ScreenRecordingService.isRecording) {
             banner?.visibility = View.VISIBLE
@@ -920,9 +1026,12 @@ open class MainActivity : AppCompatActivity() {
                 headerStatus?.text = "⏸️ DIJEDA • $formattedTime"
                 headerStatus?.setTextColor(ContextCompat.getColor(this, R.color.colorWarning))
 
-                floatingStatus?.text = "⏸️ REKAMAN DIJEDA"
+                floatingPill?.strokeColor = ContextCompat.getColor(this, R.color.colorWarning)
+                floatingStatus?.text = "REKAMAN DIJEDA"
+                floatingStatus?.setTextColor(ContextCompat.getColor(this, R.color.colorWarning))
                 floatingTimer?.text = "$formattedTime • Ketuk untuk melanjutkan"
                 floatingBtnPause?.text = "Lanjut"
+                floatingBtnPause?.setIconResource(R.drawable.ic_play_arrow)
 
                 textHeroBadge?.text = "⏸️ REKAMAN DIJEDA"
                 textHeroBadge?.setTextColor(ContextCompat.getColor(this, R.color.colorWarning))
@@ -940,9 +1049,12 @@ open class MainActivity : AppCompatActivity() {
                 headerStatus?.text = "🔴 MEREKAM AKTIF • $formattedTime"
                 headerStatus?.setTextColor(ContextCompat.getColor(this, R.color.colorError))
 
-                floatingStatus?.text = "🔴 SEDANG MEREKAM"
+                floatingPill?.strokeColor = 0xFFFF4757.toInt()
+                floatingStatus?.text = "SEDANG MEREKAM"
+                floatingStatus?.setTextColor(0xFFFF6B6B.toInt())
                 floatingTimer?.text = "$formattedTime • ${appPreferences.resolution} ${appPreferences.fps}FPS"
                 floatingBtnPause?.text = "Jeda"
+                floatingBtnPause?.setIconResource(R.drawable.ic_pause)
 
                 textHeroBadge?.text = "🔴 SEDANG MEREKAM AKTIF"
                 textHeroBadge?.setTextColor(ContextCompat.getColor(this, R.color.colorError))

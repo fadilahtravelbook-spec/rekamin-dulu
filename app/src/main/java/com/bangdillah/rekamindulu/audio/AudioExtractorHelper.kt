@@ -23,6 +23,31 @@ object AudioExtractorHelper {
     private const val TAG = "AudioExtractorHelper"
     private const val BUFFER_SIZE = 512 * 1024 // 512 KB
 
+    /**
+     * Memeriksa apakah file video memiliki trek audio yang valid.
+     */
+    fun hasAudioTrack(file: File): Boolean {
+        if (!file.exists()) return false
+        var extractor: MediaExtractor? = null
+        return try {
+            extractor = MediaExtractor()
+            extractor.setDataSource(file.absolutePath)
+            for (i in 0 until extractor.trackCount) {
+                val format = extractor.getTrackFormat(i)
+                val mime = format.getString(MediaFormat.KEY_MIME) ?: ""
+                if (mime.startsWith("audio/")) {
+                    return true
+                }
+            }
+            false
+        } catch (e: Exception) {
+            Log.w(TAG, "Error checking audio track in ${file.name}", e)
+            false
+        } finally {
+            try { extractor?.release() } catch (ignored: Exception) {}
+        }
+    }
+
     fun extractAudio(
         context: Context,
         inputFile: File,
@@ -59,7 +84,7 @@ object AudioExtractorHelper {
             }
 
             if (audioTrackIndex == -1 || audioFormat == null) {
-                Log.w(TAG, "No audio track found in video")
+                Log.w(TAG, "No audio track found in video: ${inputFile.name}")
                 return Pair(false, null)
             }
 

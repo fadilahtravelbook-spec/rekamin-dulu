@@ -23,8 +23,11 @@ import com.bangdillah.rekamindulu.library.LibraryActivity
 import com.bangdillah.rekamindulu.service.ScreenRecordingService
 import com.bangdillah.rekamindulu.utils.AppPreferences
 import com.bangdillah.rekamindulu.utils.SaveTransitionDialog
+import com.bangdillah.rekamindulu.utils.SelectionBottomSheetDialog
+import com.bangdillah.rekamindulu.utils.SelectionOption
 import com.bangdillah.rekamindulu.utils.SpecAnalysisDialog
 import com.google.android.material.bottomnavigation.BottomNavigationView
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.materialswitch.MaterialSwitch
 import java.util.Locale
 
@@ -203,7 +206,8 @@ class SettingsActivity : AppCompatActivity() {
         toggleFloating?.setOnCheckedChangeListener { _, isChecked ->
             appPreferences.showFloatingOverlay = isChecked
             if (isChecked && Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !android.provider.Settings.canDrawOverlays(this)) {
-                AlertDialog.Builder(this)
+                MaterialAlertDialogBuilder(this)
+                    .setIcon(R.drawable.ic_floating)
                     .setTitle("Izin Jendela Mengambang Diperlukan")
                     .setMessage("Untuk menampilkan tombol kontrol dan indikator FPS saat merekam di atas game/aplikasi lain, aktifkan izin \"Tampilkan di atas aplikasi lain\".")
                     .setPositiveButton("Buka Pengaturan") { _, _ ->
@@ -433,158 +437,305 @@ class SettingsActivity : AppCompatActivity() {
     }
 
     private fun showResolutionDialog() {
-        val options = arrayOf(
-            "1080p Full HD (1920×1080 • Standar YouTube & Game)",
-            "720p HD (1280×720 • Ringan & Hemat Memori)",
-            "4K Ultra HD (2160p • Kualitas Tertinggi)",
-            "480p SD (854×480 • Hemat Kuota & Baterai)"
+        val options = listOf(
+            SelectionOption(
+                value = "1080p",
+                title = "1080p Full HD",
+                subtitle = "1920×1080 • Standar YouTube, TikTok & Gaming",
+                badgeLabel = "1080p",
+                isRecommended = true
+            ),
+            SelectionOption(
+                value = "4K",
+                title = "4K Ultra HD",
+                subtitle = "3840×2160 (2160p) • Kualitas Tertinggi & Super Tajam",
+                badgeLabel = "4K",
+                isRecommended = false
+            ),
+            SelectionOption(
+                value = "720p",
+                title = "720p HD",
+                subtitle = "1280×720 • Ringan & Hemat Kapasitas Memori",
+                badgeLabel = "720p",
+                isRecommended = false
+            ),
+            SelectionOption(
+                value = "480p",
+                title = "480p SD",
+                subtitle = "854×480 • Hemat Kuota, Baterai & Ukuran Ringan",
+                badgeLabel = "480p",
+                isRecommended = false
+            )
         )
-        val values = arrayOf("1080p", "720p", "4K", "480p")
-        val currentIndex = values.indexOf(appPreferences.resolution).coerceAtLeast(0)
 
-        AlertDialog.Builder(this)
-            .setTitle("Pilih Resolusi Video")
-            .setSingleChoiceItems(options, currentIndex) { dialog, which ->
-                appPreferences.resolution = values[which]
-                updateUIValues()
-                dialog.dismiss()
-                Toast.makeText(this, "Resolusi disetel ke ${values[which]}", Toast.LENGTH_SHORT).show()
-            }
-            .setNegativeButton("Batal", null)
-            .show()
+        SelectionBottomSheetDialog.show(
+            context = this,
+            iconRes = R.drawable.ic_video,
+            title = "Pilih Resolusi Video",
+            subtitle = "Pilih resolusi layar sesuai kapasitas memori & kebutuhan konten",
+            options = options,
+            selectedValue = appPreferences.resolution
+        ) { selectedResolution ->
+            appPreferences.resolution = selectedResolution
+            updateUIValues()
+            Toast.makeText(this, "Resolusi diubah ke $selectedResolution", Toast.LENGTH_SHORT).show()
+        }
     }
 
     private fun showFpsDialog() {
-        val options = arrayOf(
-            "60 FPS (Sangat Mulus • Standar Gameplay)",
-            "30 FPS (Standar Normal • Rekaman Tutorial)",
-            "90 FPS (Layar Refresh Tinggi • HP Flagship)",
-            "120 FPS (Mode Kompetitif E-Sports)"
+        val options = listOf(
+            SelectionOption(
+                value = 60,
+                title = "60 FPS (Sangat Mulus)",
+                subtitle = "Standar Gameplay Mulus & Rekaman Profesional",
+                badgeLabel = "60",
+                isRecommended = true
+            ),
+            SelectionOption(
+                value = 120,
+                title = "120 FPS (E-Sports)",
+                subtitle = "Mode Kompetitif Refresh Rate Maksimal",
+                badgeLabel = "120",
+                isRecommended = false
+            ),
+            SelectionOption(
+                value = 90,
+                title = "90 FPS (High Refresh)",
+                subtitle = "Optimal untuk Layar Flagship 90Hz+",
+                badgeLabel = "90",
+                isRecommended = false
+            ),
+            SelectionOption(
+                value = 30,
+                title = "30 FPS (Standar Normal)",
+                subtitle = "Hemat Baterai & Cocok untuk Tutorial Aplikasi",
+                badgeLabel = "30",
+                isRecommended = false
+            )
         )
-        val values = arrayOf(60, 30, 90, 120)
-        val currentIndex = values.indexOf(appPreferences.fps).coerceAtLeast(0)
 
-        AlertDialog.Builder(this)
-            .setTitle("Pilih Frame Rate (FPS)")
-            .setSingleChoiceItems(options, currentIndex) { dialog, which ->
-                val selectedFps = values[which]
-                appPreferences.fps = selectedFps
-                // Synchronize gaming mode flag
-                appPreferences.isGamingMode = selectedFps >= 60
-                updateUIValues()
-                dialog.dismiss()
-                Toast.makeText(this, "Frame rate disetel ke $selectedFps FPS", Toast.LENGTH_SHORT).show()
-            }
-            .setNegativeButton("Batal", null)
-            .show()
+        SelectionBottomSheetDialog.show(
+            context = this,
+            iconRes = R.drawable.ic_speed,
+            title = "Pilih Frame Rate (FPS)",
+            subtitle = "Tentukan kehalusan gerakan animasi pada video rekaman",
+            options = options,
+            selectedValue = appPreferences.fps
+        ) { selectedFps ->
+            appPreferences.fps = selectedFps
+            appPreferences.isGamingMode = selectedFps >= 60
+            updateUIValues()
+            Toast.makeText(this, "Frame rate disetel ke $selectedFps FPS", Toast.LENGTH_SHORT).show()
+        }
     }
 
     private fun showBitrateDialog() {
-        val options = arrayOf(
-            "12 Mbps (High-Definition • Jernih & Tajam)",
-            "16 Mbps (Maksimal High-Def • Kompresi Rendah)",
-            "8 Mbps (Seimbang • Standar Direkomendasikan)",
-            "4 Mbps (Hemat Ruang • Ukuran File Ringan)"
+        val options = listOf(
+            SelectionOption(
+                value = 12,
+                title = "12 Mbps (High Definition)",
+                subtitle = "Video Jernih & Detail Tajam Tanpa Pecah",
+                badgeLabel = "12M",
+                isRecommended = true
+            ),
+            SelectionOption(
+                value = 16,
+                title = "16 Mbps (Maksimal)",
+                subtitle = "Kompresi Minimal untuk Kualitas Grafis Tertinggi",
+                badgeLabel = "16M",
+                isRecommended = false
+            ),
+            SelectionOption(
+                value = 8,
+                title = "8 Mbps (Seimbang)",
+                subtitle = "Standar Efisien untuk Perekaman Durasi Panjang",
+                badgeLabel = "8M",
+                isRecommended = false
+            ),
+            SelectionOption(
+                value = 4,
+                title = "4 Mbps (Hemat Ruang)",
+                subtitle = "Ukuran File Sangat Kecil & Cepat Dibagikan",
+                badgeLabel = "4M",
+                isRecommended = false
+            )
         )
-        val values = arrayOf(12, 16, 8, 4)
-        val currentIndex = values.indexOf(appPreferences.bitrateMbps).coerceAtLeast(0)
 
-        AlertDialog.Builder(this)
-            .setTitle("Pilih Bitrate Video")
-            .setSingleChoiceItems(options, currentIndex) { dialog, which ->
-                val selectedBitrate = values[which]
-                appPreferences.bitrateMbps = selectedBitrate
-                updateUIValues()
-                dialog.dismiss()
-                Toast.makeText(this, "Bitrate disetel ke $selectedBitrate Mbps", Toast.LENGTH_SHORT).show()
-            }
-            .setNegativeButton("Batal", null)
-            .show()
+        SelectionBottomSheetDialog.show(
+            context = this,
+            iconRes = R.drawable.ic_tune,
+            title = "Pilih Bitrate Video",
+            subtitle = "Kerapatan data per detik menentukan ketajaman & ukuran file",
+            options = options,
+            selectedValue = appPreferences.bitrateMbps
+        ) { selectedBitrate ->
+            appPreferences.bitrateMbps = selectedBitrate
+            updateUIValues()
+            Toast.makeText(this, "Bitrate disetel ke $selectedBitrate Mbps", Toast.LENGTH_SHORT).show()
+        }
     }
 
     private fun showCodecDialog() {
-        val options = arrayOf(
-            "H.264 / AVC (Kompatibel Semua Pemutar & Media Sosial)",
-            "H.265 / HEVC (Kompresi Efisien • Hemat Ukuran 40%)"
+        val options = listOf(
+            SelectionOption(
+                value = "H264",
+                title = "H.264 / AVC",
+                subtitle = "Kompatibel Luas (Semua Pemutar, WhatsApp, & Media Sosial)",
+                badgeLabel = "H264",
+                isRecommended = true
+            ),
+            SelectionOption(
+                value = "H265",
+                title = "H.265 / HEVC",
+                subtitle = "Kompresi Modern (Hemat Ukuran ~40% dengan Kualitas Sama)",
+                badgeLabel = "H265",
+                isRecommended = false
+            )
         )
-        val values = arrayOf("H264", "H265")
-        val currentIndex = values.indexOf(appPreferences.videoEncoder).coerceAtLeast(0)
 
-        AlertDialog.Builder(this)
-            .setTitle("Format Encoder Video")
-            .setSingleChoiceItems(options, currentIndex) { dialog, which ->
-                appPreferences.videoEncoder = values[which]
-                updateUIValues()
-                dialog.dismiss()
-                Toast.makeText(this, "Encoder disetel ke ${values[which]}", Toast.LENGTH_SHORT).show()
-            }
-            .setNegativeButton("Batal", null)
-            .show()
+        SelectionBottomSheetDialog.show(
+            context = this,
+            iconRes = R.drawable.ic_codec,
+            title = "Format Encoder Video",
+            subtitle = "Pilih standar kompresi video perangkat keras perangkat Anda",
+            options = options,
+            selectedValue = appPreferences.videoEncoder
+        ) { selectedCodec ->
+            appPreferences.videoEncoder = selectedCodec
+            updateUIValues()
+            Toast.makeText(this, "Encoder disetel ke $selectedCodec", Toast.LENGTH_SHORT).show()
+        }
     }
 
     private fun showAudioSourceDialog() {
-        val options = arrayOf(
-            "Mikrofon + Audio Game (Lengkap Suara & Bicara)",
-            "Hanya Suara Mikrofon (Komentar & Vokal)",
-            "Hanya Audio Internal Game (Suara Game Bersih)",
-            "Tanpa Audio / Mute (Hening)"
+        val options = listOf(
+            SelectionOption(
+                value = "BOTH",
+                title = "Mikrofon + Audio Game",
+                subtitle = "Rekam Lengkap: Suara Vokal & Suara Game Sekaligus",
+                badgeLabel = "MIC+",
+                isRecommended = true
+            ),
+            SelectionOption(
+                value = "MIC",
+                title = "Hanya Suara Mikrofon",
+                subtitle = "Fokus Komentar, Vokal & Suara Lingkungan Luar",
+                badgeLabel = "MIC",
+                isRecommended = false
+            ),
+            SelectionOption(
+                value = "INTERNAL",
+                title = "Hanya Audio Internal Game",
+                subtitle = "Suara Game Bersih Tanpa Suara Luar (Android 10+)",
+                badgeLabel = "GAME",
+                isRecommended = false
+            ),
+            SelectionOption(
+                value = "MUTE",
+                title = "Tanpa Audio (Mute)",
+                subtitle = "Rekaman Layar Hening Tanpa Trek Suara",
+                badgeLabel = "OFF",
+                isRecommended = false
+            )
         )
-        val values = arrayOf("BOTH", "MIC", "INTERNAL", "MUTE")
-        val currentIndex = values.indexOf(appPreferences.audioSource).coerceAtLeast(0)
 
-        AlertDialog.Builder(this)
-            .setTitle("Sumber Suara Rekaman")
-            .setSingleChoiceItems(options, currentIndex) { dialog, which ->
-                appPreferences.audioSource = values[which]
-                updateUIValues()
-                dialog.dismiss()
-                Toast.makeText(this, "Sumber audio disetel ke ${values[which]}", Toast.LENGTH_SHORT).show()
-            }
-            .setNegativeButton("Batal", null)
-            .show()
+        SelectionBottomSheetDialog.show(
+            context = this,
+            iconRes = R.drawable.ic_mic,
+            title = "Sumber Suara Rekaman",
+            subtitle = "Pilih kanal audio yang ingin dimasukkan ke dalam video rekaman",
+            options = options,
+            selectedValue = appPreferences.audioSource
+        ) { selectedSource ->
+            appPreferences.audioSource = selectedSource
+            updateUIValues()
+            Toast.makeText(this, "Sumber audio disetel ke $selectedSource", Toast.LENGTH_SHORT).show()
+        }
     }
 
     private fun showMicTypeDialog() {
-        val options = arrayOf(
-            "Default (Mikrofon Bawaan Ponsel)",
-            "Headset / Bluetooth (Mode Suara Percakapan)",
-            "Kamera / Camcorder (Audio Eksternal Jernih)",
-            "Suara Murni (Unprocessed Audio Asli)"
+        val options = listOf(
+            SelectionOption(
+                value = "default",
+                title = "Default (Bawaan Ponsel)",
+                subtitle = "Mikrofon Utama Perangkat Ponsel",
+                badgeLabel = "MIC",
+                isRecommended = true
+            ),
+            SelectionOption(
+                value = "voice_comm",
+                title = "Headset / Bluetooth (TWS)",
+                subtitle = "Mode Suara Percakapan & Earphone Nirkabel",
+                badgeLabel = "BT",
+                isRecommended = false
+            ),
+            SelectionOption(
+                value = "camcorder",
+                title = "Kamera / Camcorder",
+                subtitle = "Audio Eksternal Jernih (Stereo/Wide)",
+                badgeLabel = "CAM",
+                isRecommended = false
+            ),
+            SelectionOption(
+                value = "unprocessed",
+                title = "Suara Murni (Unprocessed)",
+                subtitle = "Audio Mentah Alami Tanpa Filter Peredam Bising OS",
+                badgeLabel = "RAW",
+                isRecommended = false
+            )
         )
-        val values = arrayOf("default", "voice_comm", "camcorder", "unprocessed")
-        val currentIndex = values.indexOf(appPreferences.micType).coerceAtLeast(0)
 
-        AlertDialog.Builder(this)
-            .setTitle("Pilih Mode & Tipe Mikrofon")
-            .setSingleChoiceItems(options, currentIndex) { dialog, which ->
-                appPreferences.micType = values[which]
-                updateUIValues()
-                dialog.dismiss()
-                Toast.makeText(this, "Mode mikrofon diubah", Toast.LENGTH_SHORT).show()
-            }
-            .setNegativeButton("Batal", null)
-            .show()
+        SelectionBottomSheetDialog.show(
+            context = this,
+            iconRes = R.drawable.ic_mic,
+            title = "Pilih Mode & Tipe Mikrofon",
+            subtitle = "Penyetelan input mikrofon untuk kejernihan vokal maksimal",
+            options = options,
+            selectedValue = appPreferences.micType
+        ) { selectedType ->
+            appPreferences.micType = selectedType
+            updateUIValues()
+            Toast.makeText(this, "Mode mikrofon diubah", Toast.LENGTH_SHORT).show()
+        }
     }
 
     private fun showThemeDialog() {
-        val options = arrayOf(
-            "Ikuti Tema Sistem Ponsel",
-            "Tema Terang (Light Mode)",
-            "Tema Gelap (Dark Mode)"
+        val options = listOf(
+            SelectionOption(
+                value = "SYSTEM",
+                title = "Ikuti Tema Sistem Ponsel",
+                subtitle = "Otomatis menyesuaikan mode terang / gelap dari OS",
+                badgeLabel = "AUTO",
+                isRecommended = true
+            ),
+            SelectionOption(
+                value = "LIGHT",
+                title = "Tema Terang (Light Mode)",
+                subtitle = "Tampilan bersih & cerah",
+                badgeLabel = "LIGHT",
+                isRecommended = false
+            ),
+            SelectionOption(
+                value = "DARK",
+                title = "Tema Gelap (Dark Mode)",
+                subtitle = "Nyaman di mata saat malam & hemat konsumsi baterai",
+                badgeLabel = "DARK",
+                isRecommended = false
+            )
         )
-        val values = arrayOf("SYSTEM", "LIGHT", "DARK")
-        val currentIndex = values.indexOf(appPreferences.themeMode).coerceAtLeast(0)
 
-        AlertDialog.Builder(this)
-            .setTitle("Pilih Tema Tampilan")
-            .setSingleChoiceItems(options, currentIndex) { dialog, which ->
-                appPreferences.themeMode = values[which]
-                appPreferences.applyTheme()
-                updateUIValues()
-                dialog.dismiss()
-            }
-            .setNegativeButton("Batal", null)
-            .show()
+        SelectionBottomSheetDialog.show(
+            context = this,
+            iconRes = R.drawable.ic_palette,
+            title = "Pilih Tema Tampilan",
+            subtitle = "Pilih nuansa warna antarmuka aplikasi Rekamin Dulu",
+            options = options,
+            selectedValue = appPreferences.themeMode
+        ) { selectedTheme ->
+            appPreferences.themeMode = selectedTheme
+            appPreferences.applyTheme()
+            updateUIValues()
+        }
     }
 
     private fun showSetPinDialog(callback: ((Boolean) -> Unit)? = null) {
@@ -592,10 +743,13 @@ class SettingsActivity : AppCompatActivity() {
             inputType = InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_VARIATION_PASSWORD
             hint = "Masukkan 4 angka PIN"
             maxLines = 1
-            setPadding(48, 36, 48, 36)
+            setPadding(56, 40, 56, 40)
+            setTextColor(ContextCompat.getColor(this@SettingsActivity, R.color.textTitle))
+            setHintTextColor(ContextCompat.getColor(this@SettingsActivity, R.color.textCaption))
         }
 
-        AlertDialog.Builder(this)
+        MaterialAlertDialogBuilder(this)
+            .setIcon(R.drawable.ic_lock)
             .setTitle("Atur PIN Keamanan")
             .setMessage("PIN ini akan diminta saat membuka aplikasi untuk mengamankan rekaman video Anda:")
             .setView(input)
@@ -619,28 +773,53 @@ class SettingsActivity : AppCompatActivity() {
     }
 
     private fun showCountdownDialog() {
-        val options = arrayOf(
-            "3 Detik (Pilihan Standar & Nyaman)",
-            "5 Detik (Cukup Waktu Siap-siap)",
-            "10 Detik (Waktu Persiapan Panjang)",
-            "Tanpa Countdown (Mulai Seketika)"
+        val options = listOf(
+            SelectionOption(
+                value = 3,
+                title = "3 Detik",
+                subtitle = "Pilihan Standar & Cukup Waktu Bersiap",
+                badgeLabel = "3s",
+                isRecommended = true
+            ),
+            SelectionOption(
+                value = 5,
+                title = "5 Detik",
+                subtitle = "Waktu Persiapan Sedang Sebelum Layar Direkam",
+                badgeLabel = "5s",
+                isRecommended = false
+            ),
+            SelectionOption(
+                value = 10,
+                title = "10 Detik",
+                subtitle = "Persiapan Ekstra Panjang",
+                badgeLabel = "10s",
+                isRecommended = false
+            ),
+            SelectionOption(
+                value = 0,
+                title = "Tanpa Countdown (0 Detik)",
+                subtitle = "Perekaman Layar Langsung Dimulai Seketika",
+                badgeLabel = "0s",
+                isRecommended = false
+            )
         )
-        val values = arrayOf(3, 5, 10, 0)
-        val currentIndex = values.indexOf(appPreferences.countdownDuration).coerceAtLeast(0)
 
-        AlertDialog.Builder(this)
-            .setTitle("Waktu Hitung Mundur")
-            .setSingleChoiceItems(options, currentIndex) { dialog, which ->
-                appPreferences.countdownDuration = values[which]
-                updateUIValues()
-                dialog.dismiss()
-            }
-            .setNegativeButton("Batal", null)
-            .show()
+        SelectionBottomSheetDialog.show(
+            context = this,
+            iconRes = R.drawable.ic_timer,
+            title = "Waktu Hitung Mundur",
+            subtitle = "Jeda persiapan sebelum proses perekaman layar dimulai",
+            options = options,
+            selectedValue = appPreferences.countdownDuration
+        ) { selectedCountdown ->
+            appPreferences.countdownDuration = selectedCountdown
+            updateUIValues()
+        }
     }
 
     private fun showResetConfirmationDialog() {
-        AlertDialog.Builder(this)
+        MaterialAlertDialogBuilder(this)
+            .setIcon(R.drawable.ic_restore)
             .setTitle("Reset Pengaturan?")
             .setMessage("Semua konfigurasi video, audio, dan kontrol akan dikembalikan ke setelan bawaan Rekamin Dulu.")
             .setPositiveButton("Reset") { _, _ ->

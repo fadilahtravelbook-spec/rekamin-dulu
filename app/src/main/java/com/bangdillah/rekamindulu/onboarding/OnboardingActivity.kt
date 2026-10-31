@@ -155,12 +155,13 @@ class OnboardingActivity : AppCompatActivity() {
 
     private fun finishOnboarding(requestPermissions: Boolean) {
         appPreferences.isOnboardingDone = true
-        val homeIntent = Intent(this, HomeActivity::class.java)
-        homeIntent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
-        startActivity(homeIntent)
-        if (requestPermissions) {
-            startActivity(Intent(this, PermissionDialogActivity::class.java))
+        val homeIntent = Intent(this, HomeActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+            if (requestPermissions) {
+                putExtra("REQUEST_PERMISSIONS_ONBOARDING", true)
+            }
         }
+        startActivity(homeIntent)
         finish()
     }
 }

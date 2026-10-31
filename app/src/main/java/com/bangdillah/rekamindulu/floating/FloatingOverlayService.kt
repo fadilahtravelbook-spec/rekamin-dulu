@@ -57,6 +57,47 @@ class FloatingOverlayService : Service() {
     private val handler = Handler(Looper.getMainLooper())
     private var appPreferences: AppPreferences? = null
 
+    // Mode Stealth Gamer: Pilihan tingkat transparansi agar tidak menutupi visual & tombol game
+    private var transparencyIndex = 0
+    private val transparencyLevels = floatArrayOf(1.0f, 0.65f, 0.35f)
+
+    // Auto-Collapse Timer: otomatis menutup panel besar ke bola melayang mini setelah 5 detik tanpa sentuhan
+    private val autoCollapseRunnable = Runnable {
+        if (!isMinimized && ScreenRecordingService.isRecording) {
+            toggleMinimizeMode(true)
+        }
+    }
+
+    private fun resetAutoCollapseTimer() {
+        handler.removeCallbacks(autoCollapseRunnable)
+        if (!isMinimized && ScreenRecordingService.isRecording) {
+            handler.postDelayed(autoCollapseRunnable, 5000L)
+        }
+    }
+
+    private fun cycleTransparency() {
+        transparencyIndex = (transparencyIndex + 1) % transparencyLevels.size
+        val alpha = transparencyLevels[transparencyIndex]
+        overlayView?.findViewById<View>(R.id.overlay_container)?.alpha = alpha
+        val btnTrans = overlayView?.findViewById<ImageView>(R.id.btn_overlay_transparency)
+        triggerVibration(25)
+        when (transparencyIndex) {
+            0 -> {
+                btnTrans?.imageTintList = ColorStateList.valueOf(0xAAFFFFFF.toInt())
+                Toast.makeText(this, "👁️ HUD Normal (100%)", Toast.LENGTH_SHORT).show()
+            }
+            1 -> {
+                btnTrans?.imageTintList = ColorStateList.valueOf(0xFF00B894.toInt())
+                Toast.makeText(this, "👻 Mode Transparan Game (65%)", Toast.LENGTH_SHORT).show()
+            }
+            2 -> {
+                btnTrans?.imageTintList = ColorStateList.valueOf(0xFFFF9F43.toInt())
+                Toast.makeText(this, "🥷 Mode Stealth Gamer (35%)", Toast.LENGTH_SHORT).show()
+            }
+        }
+        resetAutoCollapseTimer()
+    }
+
     private data class FpsRating(
         val grade: String,
         val advice: String,
@@ -285,6 +326,14 @@ class FloatingOverlayService : Service() {
         val isMicActive = prefs.audioSource == "MIC" || prefs.audioSource == "BOTH"
         val btnMic = overlayView?.findViewById<ImageView>(R.id.btn_overlay_mic)
         val labelMic = overlayView?.findViewById<TextView>(R.id.label_overlay_mic)
+        val audioStatusText = overlayView?.findViewById<TextView>(R.id.overlay_audio_status_text)
+
+        when (prefs.audioSource) {
+            "BOTH" -> audioStatusText?.text = "🎙️ Mic + 🔊 Game"
+            "MIC" -> audioStatusText?.text = "🎙️ Mic Aktif"
+            "INTERNAL" -> audioStatusText?.text = "🔊 Audio Game"
+            else -> audioStatusText?.text = "🔇 Audio Mute"
+        }
 
         if (isMicActive) {
             btnMic?.setImageResource(R.drawable.ic_mic)
@@ -359,6 +408,11 @@ class FloatingOverlayService : Service() {
             toggleMinimizeMode(true)
         }
 
+        // Transparency / Stealth action on header (cycles 100% -> 65% -> 35%)
+        overlayView?.findViewById<ImageView>(R.id.btn_overlay_transparency)?.setOnClickListener {
+            cycleTransparency()
+        }
+
         // Drag handling ONLY on headerDragBar and bubbleContainer
         // This ensures child buttons in expanded view receive pristine, responsive clicks!
         setupDragTouchListener(headerDragBar, isBubble = false)
@@ -380,6 +434,7 @@ class FloatingOverlayService : Service() {
         // Action Pause/Resume Button
         val onPauseResumeClick = View.OnClickListener {
             triggerVibration(35)
+            resetAutoCollapseTimer()
             if (!ScreenRecordingService.isPaused) {
                 val pauseIntent = Intent(this, ScreenRecordingService::class.java).apply {
                     action = ScreenRecordingService.ACTION_PAUSE
@@ -400,6 +455,7 @@ class FloatingOverlayService : Service() {
         // Action Instant Screenshot Button
         val onScreenshotClick = View.OnClickListener {
             triggerVibration(45)
+            resetAutoCollapseTimer()
             Toast.makeText(this, "📸 Tangkapan Layar Berhasil Diambil!", Toast.LENGTH_SHORT).show()
         }
         overlayView?.findViewById<View>(R.id.btn_overlay_screenshot)?.setOnClickListener(onScreenshotClick)
@@ -408,6 +464,7 @@ class FloatingOverlayService : Service() {
         // Action Toggle Mic Button
         val onMicClick = View.OnClickListener {
             triggerVibration(35)
+            resetAutoCollapseTimer()
             val prefs = appPreferences ?: AppPreferences(this).also { appPreferences = it }
             val current = prefs.audioSource
             val next = when (current) {
@@ -427,6 +484,7 @@ class FloatingOverlayService : Service() {
         // Action Toggle Facecam Button
         val onFacecamClick = View.OnClickListener {
             triggerVibration(35)
+            resetAutoCollapseTimer()
             val prefs = appPreferences ?: AppPreferences(this).also { appPreferences = it }
             val nextMode = if (prefs.facecamMode == "OFF") "FRONT" else "OFF"
             prefs.facecamMode = nextMode
@@ -440,6 +498,7 @@ class FloatingOverlayService : Service() {
         // Open App Button
         val onOpenAppClick = View.OnClickListener {
             triggerVibration(35)
+            resetAutoCollapseTimer()
             val appIntent = Intent(this, HomeActivity::class.java).apply {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
             }
@@ -454,6 +513,8 @@ class FloatingOverlayService : Service() {
             windowManager?.addView(overlayView, params)
             handler.post(timerRunnable)
             Choreographer.getInstance().postFrameCallback(frameCallback)
+            // Otomatis minimalkan ke bola melayang mini setelah 4 detik agar tidak mengganggu pemain game
+            handler.postDelayed(autoCollapseRunnable, 4000L)
         } catch (e: Exception) {
             e.printStackTrace()
             stopSelf()
@@ -466,6 +527,7 @@ class FloatingOverlayService : Service() {
         val bubbleContainer = overlayView?.findViewById<View>(R.id.overlay_bubble_container)
 
         if (minimize) {
+            handler.removeCallbacks(autoCollapseRunnable)
             expandedCard?.visibility = View.GONE
             bubbleContainer?.visibility = View.VISIBLE
             // Saat minimize, dock bubble ke sisi layar terdekat
@@ -474,6 +536,7 @@ class FloatingOverlayService : Service() {
             bubbleContainer?.visibility = View.GONE
             expandedCard?.visibility = View.VISIBLE
             clampOverlayPosition()
+            resetAutoCollapseTimer()
         }
         triggerVibration(30)
     }
@@ -572,6 +635,7 @@ class FloatingOverlayService : Service() {
                 when (event.action) {
                     MotionEvent.ACTION_DOWN -> {
                         snapAnimator?.cancel()
+                        resetAutoCollapseTimer()
                         initialX = currentParams.x
                         initialY = currentParams.y
                         initialTouchX = event.rawX
@@ -584,6 +648,7 @@ class FloatingOverlayService : Service() {
                         val dy = (event.rawY - initialTouchY).toInt()
                         if (Math.hypot(dx.toDouble(), dy.toDouble()) > touchSlop) {
                             isDrag = true
+                            resetAutoCollapseTimer()
                             val (screenWidth, screenHeight) = getScreenDimensions()
                             val viewWidth = overlayView?.width?.coerceAtLeast(80) ?: 260
                             val viewHeight = overlayView?.height?.coerceAtLeast(60) ?: 200
@@ -599,6 +664,7 @@ class FloatingOverlayService : Service() {
                         }
                     }
                     MotionEvent.ACTION_UP -> {
+                        resetAutoCollapseTimer()
                         if (isDrag) {
                             if (isBubble) {
                                 dockBubbleToNearestEdge()
@@ -626,6 +692,7 @@ class FloatingOverlayService : Service() {
         if (isStopping) return
         isStopping = true
         handler.removeCallbacks(timerRunnable)
+        handler.removeCallbacks(autoCollapseRunnable)
         dummyAnimator?.cancel()
         dummyAnimator = null
         snapAnimator?.cancel()

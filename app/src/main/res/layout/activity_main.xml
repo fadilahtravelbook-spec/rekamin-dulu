@@ -1400,31 +1400,42 @@
         android:layout_marginHorizontal="16dp"
         android:layout_marginBottom="12dp"
         android:visibility="gone"
-        app:cardBackgroundColor="@color/colorError"
+        app:cardBackgroundColor="#1B1C2A"
         app:cardCornerRadius="28dp"
-        app:cardElevation="12dp"
+        app:cardElevation="14dp"
+        app:strokeColor="#FF4757"
+        app:strokeWidth="1.5dp"
         app:layout_constraintBottom_toTopOf="@id/bottom_navigation"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent">
 
         <LinearLayout
             android:layout_width="match_parent"
-            android:layout_height="56dp"
+            android:layout_height="62dp"
             android:gravity="center_vertical"
             android:orientation="horizontal"
-            android:paddingHorizontal="16dp">
+            android:paddingHorizontal="14dp">
 
-            <ImageView
-                android:id="@+id/img_floating_rec_dot"
-                android:layout_width="20dp"
-                android:layout_height="20dp"
-                android:contentDescription="Status Merekam"
-                android:src="@drawable/ic_record_beacon" />
+            <!-- Glowing Record Beacon Container -->
+            <FrameLayout
+                android:layout_width="38dp"
+                android:layout_height="38dp"
+                android:background="@drawable/bg_chip_pill"
+                android:backgroundTint="#22FF4757">
+
+                <ImageView
+                    android:id="@+id/img_floating_rec_dot"
+                    android:layout_width="22dp"
+                    android:layout_height="22dp"
+                    android:layout_gravity="center"
+                    android:contentDescription="Status Merekam"
+                    android:src="@drawable/ic_record_beacon" />
+            </FrameLayout>
 
             <LinearLayout
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:layout_marginStart="10dp"
+                android:layout_marginStart="12dp"
                 android:layout_weight="1"
                 android:orientation="vertical">
 
@@ -1432,46 +1443,63 @@
                     android:id="@+id/text_floating_rec_status"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="🔴 SEDANG MEREKAM"
-                    android:textColor="#FFFFFF"
-                    android:textSize="13sp"
+                    android:fontFamily="sans-serif-medium"
+                    android:text="SEDANG MEREKAM"
+                    android:textColor="#FF6B6B"
+                    android:textSize="12sp"
                     android:textStyle="bold" />
 
                 <TextView
                     android:id="@+id/text_floating_rec_timer"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="00:00 • Layar Aktif"
-                    android:textColor="#F0F0F0"
-                    android:textSize="11sp" />
+                    android:layout_marginTop="1dp"
+                    android:fontFamily="sans-serif-medium"
+                    android:text="00:00 • 1080p 60FPS"
+                    android:textColor="#E0E0EC"
+                    android:textSize="11.5sp" />
             </LinearLayout>
 
-            <Button
+            <!-- Jeda / Lanjut Action Button -->
+            <com.google.android.material.button.MaterialButton
                 android:id="@+id/btn_floating_pause"
+                style="@style/Widget.Material3.Button.TonalButton"
                 android:layout_width="wrap_content"
-                android:layout_height="38dp"
+                android:layout_height="40dp"
                 android:layout_marginEnd="6dp"
                 android:minWidth="0dp"
-                android:paddingHorizontal="14dp"
+                android:paddingHorizontal="12dp"
                 android:text="Jeda"
                 android:textColor="#FFFFFF"
                 android:textSize="12sp"
                 android:textStyle="bold"
-                app:backgroundTint="#40FFFFFF"
-                app:cornerRadius="19dp" />
+                app:backgroundTint="#33FFFFFF"
+                app:cornerRadius="20dp"
+                app:icon="@drawable/ic_pause"
+                app:iconGravity="textStart"
+                app:iconPadding="4dp"
+                app:iconSize="16dp"
+                app:iconTint="#FFFFFF" />
 
-            <Button
+            <!-- Simpan / Selesai Action Button -->
+            <com.google.android.material.button.MaterialButton
                 android:id="@+id/btn_floating_stop"
+                style="@style/Widget.Material3.Button"
                 android:layout_width="wrap_content"
-                android:layout_height="38dp"
+                android:layout_height="40dp"
                 android:minWidth="0dp"
                 android:paddingHorizontal="14dp"
                 android:text="Simpan"
-                android:textColor="@color/colorError"
+                android:textColor="#FFFFFF"
                 android:textSize="12sp"
                 android:textStyle="bold"
-                app:backgroundTint="#FFFFFF"
-                app:cornerRadius="19dp" />
+                app:backgroundTint="#FF4757"
+                app:cornerRadius="20dp"
+                app:icon="@drawable/ic_stop"
+                app:iconGravity="textStart"
+                app:iconPadding="4dp"
+                app:iconSize="16dp"
+                app:iconTint="#FFFFFF" />
         </LinearLayout>
     </com.google.android.material.card.MaterialCardView>
 

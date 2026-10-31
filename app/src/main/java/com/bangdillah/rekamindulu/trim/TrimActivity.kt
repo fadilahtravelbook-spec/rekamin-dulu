@@ -23,6 +23,7 @@ import com.bangdillah.rekamindulu.R
 import com.bangdillah.rekamindulu.library.LibraryActivity
 import com.bangdillah.rekamindulu.player.PlayerActivity
 import com.bangdillah.rekamindulu.utils.StorageHelper
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import java.io.File
 import java.io.FileOutputStream
 import java.text.SimpleDateFormat
@@ -286,7 +287,8 @@ class TrimActivity : AppCompatActivity() {
                     // Daftarkan ke MediaStore dan Galeri Ponsel
                     StorageHelper.scanVideoFile(this@TrimActivity, outputFile)
 
-                    AlertDialog.Builder(this@TrimActivity)
+                    MaterialAlertDialogBuilder(this@TrimActivity)
+                        .setIcon(R.drawable.ic_check_circle)
                         .setTitle("Pemotongan Berhasil! 🎉")
                         .setMessage("Klip video baru telah disimpan di galeri ponsel:\n${outputFile.name}")
                         .setPositiveButton("Putar Video") { _, _ ->

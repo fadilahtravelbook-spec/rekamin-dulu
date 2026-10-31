@@ -30,8 +30,11 @@ import com.bangdillah.rekamindulu.settings.SettingsActivity
 import com.bangdillah.rekamindulu.trim.TrimActivity
 import com.bangdillah.rekamindulu.audio.AudioExtractorHelper
 import com.bangdillah.rekamindulu.utils.SaveTransitionDialog
+import com.bangdillah.rekamindulu.utils.SelectionBottomSheetDialog
+import com.bangdillah.rekamindulu.utils.SelectionOption
 import com.bangdillah.rekamindulu.utils.StorageHelper
 import com.google.android.material.bottomnavigation.BottomNavigationView
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import java.io.File
 import java.util.Locale
 
@@ -277,28 +280,65 @@ class LibraryActivity : AppCompatActivity() {
     }
 
     private fun showSortDialog() {
-        val sortOptions = arrayOf(
-            "Terbaru (Waktu Merekam)",
-            "Terlama (Waktu Merekam)",
-            "Nama File (A - Z)",
-            "Nama File (Z - A)",
-            "Ukuran Terbesar",
-            "Ukuran Terkecil"
+        val sortOptions = listOf(
+            SelectionOption(
+                value = 0,
+                title = "Terbaru (Waktu Merekam)",
+                subtitle = "Video rekaman yang paling anyar di urutan teratas",
+                badgeLabel = "NEW",
+                isRecommended = true
+            ),
+            SelectionOption(
+                value = 1,
+                title = "Terlama (Waktu Merekam)",
+                subtitle = "Video rekaman awal di urutan teratas",
+                badgeLabel = "OLD",
+                isRecommended = false
+            ),
+            SelectionOption(
+                value = 2,
+                title = "Nama File (A - Z)",
+                subtitle = "Urutkan abjad judul rekaman dari huruf awal",
+                badgeLabel = "A-Z",
+                isRecommended = false
+            ),
+            SelectionOption(
+                value = 3,
+                title = "Nama File (Z - A)",
+                subtitle = "Urutkan abjad judul rekaman dari huruf akhir",
+                badgeLabel = "Z-A",
+                isRecommended = false
+            ),
+            SelectionOption(
+                value = 4,
+                title = "Ukuran Terbesar",
+                subtitle = "File video dengan kapasitas penyimpanan terbesar",
+                badgeLabel = "MAX",
+                isRecommended = false
+            ),
+            SelectionOption(
+                value = 5,
+                title = "Ukuran Terkecil",
+                subtitle = "File video dengan kapasitas penyimpanan terkecil",
+                badgeLabel = "MIN",
+                isRecommended = false
+            )
         )
 
-        AlertDialog.Builder(this)
-            .setTitle("Urutkan Rekaman Video")
-            .setSingleChoiceItems(sortOptions, currentSortOrder) { dialog, which ->
-                currentSortOrder = which
-                dialog.dismiss()
-                applySorting()
-                val currentQuery = findViewById<EditText>(R.id.et_search_library)?.text?.toString() ?: ""
-                filterVideos(currentQuery)
-                val label = sortOptions[which].split(" (")[0]
-                Toast.makeText(this, "Diurutkan: $label", Toast.LENGTH_SHORT).show()
-            }
-            .setNegativeButton("Tutup", null)
-            .show()
+        SelectionBottomSheetDialog.show(
+            context = this,
+            iconRes = R.drawable.ic_sort,
+            title = "Urutkan Galeri Rekaman",
+            subtitle = "Pilih kriteria penyusunan daftar rekaman video",
+            options = sortOptions,
+            selectedValue = currentSortOrder
+        ) { selectedOrder ->
+            currentSortOrder = selectedOrder
+            applySorting()
+            val currentQuery = findViewById<EditText>(R.id.et_search_library)?.text?.toString() ?: ""
+            filterVideos(currentQuery)
+            Toast.makeText(this, "Galeri diurutkan", Toast.LENGTH_SHORT).show()
+        }
     }
 
     private fun applySorting() {
@@ -429,7 +469,8 @@ class LibraryActivity : AppCompatActivity() {
             isSingleLine = true
         }
 
-        AlertDialog.Builder(this)
+        MaterialAlertDialogBuilder(this)
+            .setIcon(R.drawable.ic_trim)
             .setTitle("Ubah Nama Rekaman")
             .setMessage("Masukkan nama baru untuk video ini:")
             .setView(input)
@@ -470,7 +511,7 @@ class LibraryActivity : AppCompatActivity() {
     }
 
     private fun confirmDelete(file: File) {
-        AlertDialog.Builder(this)
+        MaterialAlertDialogBuilder(this)
             .setTitle("Hapus Rekaman Video?")
             .setMessage("File \"${file.name}\" akan dihapus secara permanen dari galeri.")
             .setIcon(R.drawable.ic_delete)
@@ -487,7 +528,12 @@ class LibraryActivity : AppCompatActivity() {
     }
 
     private fun handleExtractAudio(file: File) {
-        val progressDialog = AlertDialog.Builder(this)
+        if (!AudioExtractorHelper.hasAudioTrack(file)) {
+            Toast.makeText(this, "⚠️ Video ini tidak memiliki rekaman suara (direkam dalam mode Mute/tanpa suara).", Toast.LENGTH_LONG).show()
+            return
+        }
+
+        val progressDialog = MaterialAlertDialogBuilder(this)
             .setTitle("Mengekstrak Audio 🎵")
             .setMessage("Sedang memisahkan trek audio dari rekaman video ${file.name}...")
             .setCancelable(false)
@@ -503,7 +549,7 @@ class LibraryActivity : AppCompatActivity() {
                     } catch (ignored: Exception) {}
 
                     if (success && audioFile != null && audioFile.exists()) {
-                        AlertDialog.Builder(this)
+                        MaterialAlertDialogBuilder(this)
                             .setTitle("Ekstrak Audio Berhasil! 🎉")
                             .setIcon(R.drawable.ic_check_circle)
                             .setMessage("Audio disimpan sebagai:\n${audioFile.name}\nUkuran: ${String.format(Locale.getDefault(), "%.1f MB", audioFile.length() / (1024.0 * 1024.0))}")
