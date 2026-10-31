@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Surface & Background Dark Mode Theme Mapping -->
+    <color name="colorSurface">#161622</color>
+    <color name="colorBackground">#0F0F17</color>
+    <color name="colorCardBackground">#1A1A28</color>
+    <color name="colorOnSurface">#F5F6FA</color>
+    <color name="colorOnBackground">#F5F6FA</color>
+    
+    <!-- High Contrast Typography for Dark Mode -->
+    <color name="textTitle">#FFFFFF</color>
+    <color name="textBody">#E0E2EC</color>
+    <color name="textCaption">#A2A7BD</color>
+    
+    <!-- Component Accents & Borders in Dark Mode -->
+    <color name="colorSurfaceVariant">#242436</color>
+    <color name="colorOnSurfaceVariant">#E2E4EE</color>
+    <color name="colorSurfaceContainerHigh">#222232</color>
+    <color name="colorBorder">#2C2D40</color>
+    
+    <color name="colorPrimaryContainer">#2D245A</color>
+    <color name="colorOnPrimaryContainer">#E0DBFE</color>
+</resources>

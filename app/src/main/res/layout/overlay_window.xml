@@ -1,155 +1,541 @@
 <?xml version="1.0" encoding="utf-8"?>
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/overlay_root_frame"
     android:layout_width="wrap_content"
     android:layout_height="wrap_content"
     android:background="@android:color/transparent">
 
-    <!-- Mini Controller Floating Bubble Card -->
+    <!-- ============================================================ -->
+    <!-- MODE 1: COMPACT FLOATING BUBBLE (Bola Melayang Mini)        -->
+    <!-- ============================================================ -->
+    <androidx.cardview.widget.CardView
+        android:id="@+id/overlay_bubble_container"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:clickable="true"
+        android:focusable="true"
+        android:foreground="?android:attr/selectableItemBackground"
+        android:visibility="gone"
+        app:cardBackgroundColor="@color/colorSurface"
+        app:cardCornerRadius="24dp"
+        app:cardElevation="14dp">
+
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="46dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingHorizontal="12dp">
+
+            <!-- Pulsing Record Dot -->
+            <ImageView
+                android:id="@+id/overlay_bubble_pulse_dot"
+                android:layout_width="14dp"
+                android:layout_height="14dp"
+                android:contentDescription="Status Rekaman"
+                android:src="@drawable/ic_record"
+                app:tint="#FF4757" />
+
+            <!-- Live Timer in Bubble -->
+            <TextView
+                android:id="@+id/overlay_bubble_timer_text"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:fontFamily="sans-serif-medium"
+                android:text="00:00"
+                android:textColor="@color/colorError"
+                android:textSize="14sp"
+                android:textStyle="bold" />
+
+            <!-- Live FPS Chip in Bubble -->
+            <TextView
+                android:id="@+id/overlay_bubble_fps_text"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:background="@drawable/bg_chip_pill"
+                android:backgroundTint="@color/colorSuccessContainer"
+                android:paddingHorizontal="7dp"
+                android:paddingVertical="3dp"
+                android:text="60 FPS"
+                android:textColor="@color/colorSuccess"
+                android:textSize="11sp"
+                android:textStyle="bold" />
+
+            <!-- Expand Chevron Icon -->
+            <ImageView
+                android:layout_width="16dp"
+                android:layout_height="16dp"
+                android:layout_marginStart="6dp"
+                android:contentDescription="Buka Panel Lengkap"
+                android:src="@drawable/ic_next"
+                app:tint="@color/textCaption" />
+        </LinearLayout>
+    </androidx.cardview.widget.CardView>
+
+    <!-- ============================================================ -->
+    <!-- MODE 2: EXPANDED PRO FLOATING STUDIO PANEL                   -->
+    <!-- ============================================================ -->
     <androidx.cardview.widget.CardView
         android:id="@+id/overlay_container"
-        android:layout_width="190dp"
+        android:layout_width="265dp"
         android:layout_height="wrap_content"
+        android:visibility="visible"
         app:cardBackgroundColor="@color/colorSurface"
-        app:cardCornerRadius="16dp"
-        app:cardElevation="10dp">
+        app:cardCornerRadius="22dp"
+        app:cardElevation="16dp">
 
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical">
 
-            <!-- Header Drag Bar -->
+            <!-- 1. Header Drag Bar (Dedicated touch target for dragging) -->
             <LinearLayout
+                android:id="@+id/overlay_header_drag_bar"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:background="@color/colorPrimary"
+                android:background="@drawable/bg_gradient_primary"
+                android:clickable="true"
+                android:focusable="true"
                 android:gravity="center_vertical"
                 android:orientation="horizontal"
-                android:paddingHorizontal="10dp"
-                android:paddingVertical="5dp">
+                android:paddingHorizontal="12dp"
+                android:paddingVertical="7dp">
 
                 <ImageView
+                    android:id="@+id/overlay_pulse_icon"
                     android:layout_width="14dp"
                     android:layout_height="14dp"
-                    android:contentDescription="Icon Rekam"
-                    android:src="@drawable/ic_record" />
+                    android:contentDescription="Status Rekam"
+                    android:src="@drawable/ic_record"
+                    app:tint="#FF4757" />
 
                 <TextView
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
-                    android:layout_marginStart="6dp"
+                    android:layout_marginStart="8dp"
                     android:layout_weight="1"
-                    android:text="Rekamin Dulu"
-                    android:textColor="@color/colorOnPrimary"
-                    android:textSize="11sp"
+                    android:text="Rekamin Dulu Pro"
+                    android:textColor="#FFFFFF"
+                    android:textSize="12.5sp"
                     android:textStyle="bold" />
 
+                <!-- Drag Handle Indicator Capsule -->
+                <View
+                    android:layout_width="26dp"
+                    android:layout_height="4dp"
+                    android:layout_marginEnd="8dp"
+                    android:background="@drawable/bg_chip_pill"
+                    android:backgroundTint="#55FFFFFF" />
+
+                <!-- REC / PAUSE Live Pill -->
+                <TextView
+                    android:id="@+id/overlay_header_badge"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginEnd="6dp"
+                    android:background="@drawable/bg_chip_pill"
+                    android:backgroundTint="#33FFFFFF"
+                    android:paddingHorizontal="6dp"
+                    android:paddingVertical="2dp"
+                    android:text="REC"
+                    android:textColor="#FFFFFF"
+                    android:textSize="9.5sp"
+                    android:textStyle="bold" />
+
+                <!-- Minimize Button (collapses to floating bubble) -->
+                <ImageView
+                    android:id="@+id/btn_overlay_minimize"
+                    android:layout_width="26dp"
+                    android:layout_height="26dp"
+                    android:layout_marginEnd="2dp"
+                    android:background="?android:attr/selectableItemBackgroundBorderless"
+                    android:clickable="true"
+                    android:contentDescription="Kecilkan ke Bola Melayang"
+                    android:focusable="true"
+                    android:padding="4dp"
+                    android:src="@drawable/ic_collapse"
+                    app:tint="#FFFFFF" />
+
+                <!-- Close / Hide Overlay Button -->
                 <ImageView
                     android:id="@+id/overlay_close_btn"
-                    android:layout_width="20dp"
-                    android:layout_height="20dp"
-                    android:background="?attr/selectableItemBackgroundBorderless"
-                    android:contentDescription="Hentikan Perekaman"
-                    android:padding="2dp"
-                    android:src="@drawable/ic_close" />
+                    android:layout_width="26dp"
+                    android:layout_height="26dp"
+                    android:background="?android:attr/selectableItemBackgroundBorderless"
+                    android:clickable="true"
+                    android:contentDescription="Tutup Overlay"
+                    android:focusable="true"
+                    android:padding="5dp"
+                    android:src="@drawable/ic_close"
+                    app:tint="#FFFFFF" />
             </LinearLayout>
 
-            <!-- Live Timer & FPS Display -->
+            <!-- 2. Live Timer, FPS & Telemetry Display -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:gravity="center"
                 android:orientation="vertical"
-                android:paddingTop="6dp"
+                android:paddingHorizontal="14dp"
+                android:paddingTop="10dp"
                 android:paddingBottom="4dp">
 
                 <LinearLayout
-                    android:layout_width="wrap_content"
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:gravity="center_vertical"
                     android:orientation="horizontal">
 
+                    <!-- Live Digital Timer -->
                     <TextView
                         android:id="@+id/overlay_timer_text"
-                        android:layout_width="wrap_content"
+                        android:layout_width="0dp"
                         android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:fontFamily="sans-serif-medium"
                         android:text="00:00"
                         android:textColor="@color/colorError"
-                        android:textSize="17sp"
+                        android:textSize="21sp"
                         android:textStyle="bold" />
 
+                    <!-- Live FPS Badge -->
                     <TextView
                         android:id="@+id/overlay_fps_text"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:layout_marginStart="8dp"
-                        android:background="@drawable/ic_play_circle_bg"
+                        android:background="@drawable/bg_chip_pill"
+                        android:backgroundTint="@color/colorSuccessContainer"
+                        android:paddingHorizontal="8dp"
+                        android:paddingVertical="3dp"
+                        android:text="60 FPS"
+                        android:textColor="@color/colorSuccess"
+                        android:textSize="11.5sp"
+                        android:textStyle="bold" />
+
+                    <!-- Quality / Resolution Badge -->
+                    <TextView
+                        android:id="@+id/overlay_quality_text"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="6dp"
+                        android:background="@drawable/bg_chip_pill"
                         android:backgroundTint="@color/colorPrimaryContainer"
                         android:paddingHorizontal="6dp"
-                        android:paddingVertical="1dp"
-                        android:text="60 FPS"
+                        android:paddingVertical="3dp"
+                        android:text="1080p"
                         android:textColor="@color/colorPrimary"
-                        android:textSize="10sp"
+                        android:textSize="10.5sp"
                         android:textStyle="bold" />
                 </LinearLayout>
 
+                <!-- Recording Status Line -->
                 <TextView
                     android:id="@+id/overlay_status_text"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="2dp"
-                    android:text="● Merekam Layar"
+                    android:text="● Merekam Layar Aktif"
                     android:textColor="@color/textCaption"
-                    android:textSize="10sp" />
+                    android:textSize="10.5sp" />
             </LinearLayout>
 
-            <!-- Floating Control Actions Row -->
+            <!-- 3. Penilai FPS & Evaluasi Performa Aplikasi -->
+            <LinearLayout
+                android:id="@+id/box_fps_evaluation"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginHorizontal="12dp"
+                android:layout_marginVertical="5dp"
+                android:background="@drawable/bg_telemetry_box"
+                android:orientation="vertical"
+                android:padding="8dp">
+
+                <!-- Header Evaluasi & Skor -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="PENILAI FPS APLIKASI"
+                        android:textColor="@color/textCaption"
+                        android:textSize="9.5sp"
+                        android:textStyle="bold" />
+
+                    <!-- Skor Penilai FPS (A+, A, B, C) -->
+                    <TextView
+                        android:id="@+id/overlay_fps_rating_badge"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:background="@drawable/bg_chip_pill"
+                        android:backgroundTint="@color/colorSuccessContainer"
+                        android:paddingHorizontal="6dp"
+                        android:paddingVertical="2dp"
+                        android:text="A+ SANGAT MULUS"
+                        android:textColor="@color/colorSuccess"
+                        android:textSize="9.5sp"
+                        android:textStyle="bold" />
+                </LinearLayout>
+
+                <!-- Metrik Sinkronisasi FPS App & Layar -->
+                <TextView
+                    android:id="@+id/overlay_fps_details"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="3dp"
+                    android:text="Target: 60 FPS • Layar: 60Hz • Stabilitas: 100%"
+                    android:textColor="@color/textBody"
+                    android:textSize="10sp"
+                    android:textStyle="bold" />
+
+                <!-- Keterangan Advice / Status Game -->
+                <TextView
+                    android:id="@+id/overlay_fps_advice"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="1dp"
+                    android:text="Sinkron: Frame rate stabil untuk merekam game &amp; aplikasi."
+                    android:textColor="@color/textCaption"
+                    android:textSize="9sp" />
+            </LinearLayout>
+
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:layout_marginHorizontal="12dp"
+                android:layout_marginTop="2dp"
+                android:layout_marginBottom="3dp"
+                android:background="@color/colorBorder" />
+
+            <!-- 4. Floating Tools Row 1 (Primary Actions) -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:gravity="center"
                 android:orientation="horizontal"
-                android:paddingHorizontal="8dp"
-                android:paddingBottom="8dp">
+                android:paddingHorizontal="6dp"
+                android:paddingTop="3dp"
+                android:paddingBottom="1dp">
 
-                <!-- Pause/Resume Button -->
-                <ImageView
-                    android:id="@+id/btn_overlay_pause_resume"
-                    android:layout_width="32dp"
-                    android:layout_height="32dp"
-                    android:background="?attr/selectableItemBackgroundBorderless"
-                    android:contentDescription="Jeda / Lanjut"
-                    android:padding="6dp"
-                    android:src="@drawable/ic_pause" />
+                <!-- Tool 1: Jeda / Lanjut -->
+                <LinearLayout
+                    android:id="@+id/action_overlay_pause_wrapper"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:background="?android:attr/selectableItemBackground"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:gravity="center"
+                    android:orientation="vertical"
+                    android:paddingVertical="4dp">
 
-                <View
-                    android:layout_width="16dp"
-                    android:layout_height="1dp" />
+                    <ImageView
+                        android:id="@+id/btn_overlay_pause_resume"
+                        android:layout_width="36dp"
+                        android:layout_height="36dp"
+                        android:background="@drawable/bg_chip_pill"
+                        android:backgroundTint="@color/colorPrimaryContainer"
+                        android:contentDescription="Jeda atau Lanjut Rekaman"
+                        android:padding="8dp"
+                        android:src="@drawable/ic_pause"
+                        app:tint="@color/colorPrimary" />
 
-                <!-- Stop Recording Button -->
-                <ImageView
-                    android:id="@+id/btn_overlay_stop"
-                    android:layout_width="32dp"
-                    android:layout_height="32dp"
-                    android:background="?attr/selectableItemBackgroundBorderless"
-                    android:contentDescription="Hentikan"
-                    android:padding="6dp"
-                    android:src="@drawable/ic_record" />
+                    <TextView
+                        android:id="@+id/label_overlay_pause"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="2dp"
+                        android:text="Jeda"
+                        android:textColor="@color/textBody"
+                        android:textSize="9.5sp"
+                        android:textStyle="bold" />
+                </LinearLayout>
 
-                <View
-                    android:layout_width="16dp"
-                    android:layout_height="1dp" />
+                <!-- Tool 2: Hentikan & Simpan -->
+                <LinearLayout
+                    android:id="@+id/action_overlay_stop_wrapper"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:background="?android:attr/selectableItemBackground"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:gravity="center"
+                    android:orientation="vertical"
+                    android:paddingVertical="4dp">
 
-                <!-- Open Home App -->
-                <ImageView
-                    android:id="@+id/btn_overlay_open_app"
-                    android:layout_width="32dp"
-                    android:layout_height="32dp"
-                    android:background="?attr/selectableItemBackgroundBorderless"
-                    android:contentDescription="Buka Rekamin"
-                    android:padding="6dp"
-                    android:src="@drawable/ic_home" />
+                    <ImageView
+                        android:id="@+id/btn_overlay_stop"
+                        android:layout_width="36dp"
+                        android:layout_height="36dp"
+                        android:background="@drawable/bg_chip_pill"
+                        android:backgroundTint="@color/colorErrorContainer"
+                        android:contentDescription="Hentikan dan Simpan"
+                        android:padding="8dp"
+                        android:src="@drawable/ic_stop"
+                        app:tint="@color/colorError" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="2dp"
+                        android:text="Selesai"
+                        android:textColor="@color/colorError"
+                        android:textSize="9.5sp"
+                        android:textStyle="bold" />
+                </LinearLayout>
+
+                <!-- Tool 3: Screenshot Cepat -->
+                <LinearLayout
+                    android:id="@+id/action_overlay_screenshot_wrapper"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:background="?android:attr/selectableItemBackground"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:gravity="center"
+                    android:orientation="vertical"
+                    android:paddingVertical="4dp">
+
+                    <ImageView
+                        android:id="@+id/btn_overlay_screenshot"
+                        android:layout_width="36dp"
+                        android:layout_height="36dp"
+                        android:background="@drawable/bg_chip_pill"
+                        android:backgroundTint="@color/colorSurfaceVariant"
+                        android:contentDescription="Ambil Tangkapan Layar Cepat"
+                        android:padding="8dp"
+                        android:src="@drawable/ic_camera"
+                        app:tint="@color/colorPrimary" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="2dp"
+                        android:text="Screenshot"
+                        android:textColor="@color/textBody"
+                        android:textSize="9.5sp"
+                        android:textStyle="bold" />
+                </LinearLayout>
+            </LinearLayout>
+
+            <!-- 5. Floating Tools Row 2 (Auxiliary Interactive Tools) -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:paddingHorizontal="6dp"
+                android:paddingTop="1dp"
+                android:paddingBottom="7dp">
+
+                <!-- Tool 4: Toggle Mikrofon Cepat -->
+                <LinearLayout
+                    android:id="@+id/action_overlay_mic_wrapper"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:background="?android:attr/selectableItemBackground"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:gravity="center"
+                    android:orientation="vertical"
+                    android:paddingVertical="4dp">
+
+                    <ImageView
+                        android:id="@+id/btn_overlay_mic"
+                        android:layout_width="34dp"
+                        android:layout_height="34dp"
+                        android:background="@drawable/bg_chip_pill"
+                        android:backgroundTint="@color/colorSurfaceVariant"
+                        android:contentDescription="Nyalakan atau Matikan Mikrofon"
+                        android:padding="8dp"
+                        android:src="@drawable/ic_mic"
+                        app:tint="@color/colorPrimary" />
+
+                    <TextView
+                        android:id="@+id/label_overlay_mic"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="2dp"
+                        android:text="Mic On"
+                        android:textColor="@color/textBody"
+                        android:textSize="9sp" />
+                </LinearLayout>
+
+                <!-- Tool 5: Toggle Facecam Kamera Wajah -->
+                <LinearLayout
+                    android:id="@+id/action_overlay_facecam_wrapper"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:background="?android:attr/selectableItemBackground"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:gravity="center"
+                    android:orientation="vertical"
+                    android:paddingVertical="4dp">
+
+                    <ImageView
+                        android:id="@+id/btn_overlay_facecam"
+                        android:layout_width="34dp"
+                        android:layout_height="34dp"
+                        android:background="@drawable/bg_chip_pill"
+                        android:backgroundTint="@color/colorSurfaceVariant"
+                        android:contentDescription="Kamera Wajah Facecam"
+                        android:padding="8dp"
+                        android:src="@drawable/ic_video"
+                        app:tint="@color/textCaption" />
+
+                    <TextView
+                        android:id="@+id/label_overlay_facecam"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="2dp"
+                        android:text="Facecam"
+                        android:textColor="@color/textBody"
+                        android:textSize="9sp" />
+                </LinearLayout>
+
+                <!-- Tool 6: Buka Aplikasi Rekamin Dulu -->
+                <LinearLayout
+                    android:id="@+id/action_overlay_home_wrapper"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:background="?android:attr/selectableItemBackground"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:gravity="center"
+                    android:orientation="vertical"
+                    android:paddingVertical="4dp">
+
+                    <ImageView
+                        android:id="@+id/btn_overlay_open_app"
+                        android:layout_width="34dp"
+                        android:layout_height="34dp"
+                        android:background="@drawable/bg_chip_pill"
+                        android:backgroundTint="@color/colorSurfaceVariant"
+                        android:contentDescription="Buka Dashboard Rekamin Dulu"
+                        android:padding="8dp"
+                        android:src="@drawable/ic_home"
+                        app:tint="@color/colorOnSurfaceVariant" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="2dp"
+                        android:text="Aplikasi"
+                        android:textColor="@color/textBody"
+                        android:textSize="9sp" />
+                </LinearLayout>
             </LinearLayout>
 
         </LinearLayout>

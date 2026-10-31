@@ -94,8 +94,8 @@ object StorageHelper {
         val files = dir.listFiles() ?: return
         for (file in files) {
             if (file.isFile && file.name.endsWith(".mp4", ignoreCase = true)) {
-                if (file.length() < 100) {
-                    // Hapus file 0-byte / dummy rusak
+                if (file.length() < 10240) {
+                    // Hapus file dummy / rusak / tidak memiliki frame
                     try {
                         file.delete()
                     } catch (e: Exception) {

@@ -92,7 +92,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="6dp"
-                    android:background="@drawable/ic_play_circle_bg"
+                    android:background="@drawable/bg_chip_pill"
                     android:backgroundTint="@color/colorSuccess"
                     android:paddingHorizontal="14dp"
                     android:paddingVertical="5dp"

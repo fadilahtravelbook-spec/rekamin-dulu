@@ -3,7 +3,13 @@ package com.bangdillah.rekamindulu.utils
 import android.app.Activity
 import android.content.Context
 import android.content.Intent
+import android.graphics.Bitmap
 import android.media.MediaMetadataRetriever
+import android.media.ThumbnailUtils
+import android.os.Build
+import android.provider.MediaStore
+import android.util.Log
+import android.util.Size
 import android.view.LayoutInflater
 import android.widget.Button
 import android.widget.ImageView
@@ -13,11 +19,14 @@ import com.bangdillah.rekamindulu.R
 import com.bangdillah.rekamindulu.library.LibraryActivity
 import com.bangdillah.rekamindulu.player.PlayerActivity
 import com.bangdillah.rekamindulu.trim.TrimActivity
+import com.bumptech.glide.Glide
 import com.google.android.material.bottomsheet.BottomSheetDialog
 import java.io.File
 import java.util.Locale
 
 object SaveTransitionDialog {
+
+    private const val TAG = "SaveTransitionDialog"
 
     fun show(context: Context, videoPath: String, onDismissed: (() -> Unit)? = null) {
         val file = File(videoPath)
@@ -26,6 +35,7 @@ object SaveTransitionDialog {
         val dialog = BottomSheetDialog(context)
         val view = LayoutInflater.from(context).inflate(R.layout.layout_save_transition_dialog, null)
         dialog.setContentView(view)
+        dialog.window?.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT))
 
         val imgThumbnail = view.findViewById<ImageView>(R.id.img_save_dialog_thumbnail)
         val textTitle = view.findViewById<TextView>(R.id.text_save_dialog_title)
@@ -33,27 +43,56 @@ object SaveTransitionDialog {
         val textDurationBadge = view.findViewById<TextView>(R.id.text_save_dialog_overlay_duration)
 
         textTitle.text = file.name
+        imgThumbnail.setImageResource(R.drawable.ic_video_placeholder)
 
-        // Compute metadata
+        // Compute metadata safely
         var durationMs = 0L
         var width = 0
         var height = 0
+        var hasVideo = false
+        var retriever: MediaMetadataRetriever? = null
         try {
-            val retriever = MediaMetadataRetriever()
+            retriever = MediaMetadataRetriever()
             retriever.setDataSource(file.absolutePath)
             val durStr = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)
             durationMs = durStr?.toLongOrNull() ?: 0L
             width = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)?.toIntOrNull() ?: 0
             height = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)?.toIntOrNull() ?: 0
-
-            val frame = retriever.getFrameAtTime((durationMs * 500).coerceAtLeast(0L), MediaMetadataRetriever.OPTION_CLOSEST_SYNC)
-                ?: retriever.getFrameAtTime(0, MediaMetadataRetriever.OPTION_CLOSEST_SYNC)
-            if (frame != null) {
-                imgThumbnail.setImageBitmap(frame)
-            }
-            retriever.release()
+            hasVideo = "yes".equals(
+                retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_HAS_VIDEO),
+                ignoreCase = true
+            )
         } catch (e: Exception) {
-            e.printStackTrace()
+            Log.w(TAG, "Error extracting metadata from ${file.name}", e)
+        } finally {
+            try {
+                retriever?.release()
+            } catch (ignored: Exception) {}
+        }
+
+        // Load thumbnail safely without causing getFrameAtTime NULL pointer JNI errors
+        var thumbnailBitmap: Bitmap? = null
+        if (hasVideo && width > 0 && height > 0 && durationMs > 0 && file.length() > 10240) {
+            var frameRetriever: MediaMetadataRetriever? = null
+            try {
+                frameRetriever = MediaMetadataRetriever()
+                frameRetriever.setDataSource(file.absolutePath)
+                val targetUs = if (durationMs > 1000L) 500000L else 0L
+                thumbnailBitmap = frameRetriever.getFrameAtTime(targetUs, MediaMetadataRetriever.OPTION_CLOSEST)
+                    ?: frameRetriever.getFrameAtTime(0L, MediaMetadataRetriever.OPTION_CLOSEST)
+            } catch (e: Exception) {
+                Log.w(TAG, "Thumbnail extraction notice: ${e.message}")
+            } finally {
+                try {
+                    frameRetriever?.release()
+                } catch (ignored: Exception) {}
+            }
+        }
+
+        if (thumbnailBitmap != null) {
+            imgThumbnail.setImageBitmap(thumbnailBitmap)
+        } else {
+            imgThumbnail.setImageResource(R.drawable.ic_video_placeholder)
         }
 
         val totalSec = (durationMs / 1000).toInt()

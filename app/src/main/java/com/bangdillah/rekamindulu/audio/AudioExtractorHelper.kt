@@ -39,6 +39,7 @@ object AudioExtractorHelper {
 
         var extractor: MediaExtractor? = null
         var muxer: MediaMuxer? = null
+        var muxerStarted = false
 
         try {
             extractor = MediaExtractor()
@@ -70,7 +71,6 @@ object AudioExtractorHelper {
                 1000000L
             }
 
-            var muxerStarted = false
             muxer = MediaMuxer(outputFile.absolutePath, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
             val muxerTrackIndex = muxer.addTrack(audioFormat)
             muxer.start()

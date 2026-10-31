@@ -125,7 +125,7 @@ open class MainActivity : AppCompatActivity() {
                     updateRecordingBanner()
                     updateLibraryStats()
                     updateHomeRecordingsList()
-                    if (!path.isNullOrEmpty() && File(path).exists() && File(path).length() > 200) {
+                    if (!path.isNullOrEmpty() && File(path).exists() && File(path).length() > 10240) {
                         showSaveSuccessToast(path)
                         SaveTransitionDialog.show(this@MainActivity, path) {
                             updateLibraryStats()
@@ -307,7 +307,7 @@ open class MainActivity : AppCompatActivity() {
         if (hasPendingSaveDialog) {
             hasPendingSaveDialog = false
             val path = ScreenRecordingService.lastRecordedFilePath
-            if (!path.isNullOrEmpty() && File(path).exists()) {
+            if (!path.isNullOrEmpty() && File(path).exists() && File(path).length() > 10240) {
                 showSaveSuccessToast(path)
                 SaveTransitionDialog.show(this, path) {
                     updateLibraryStats()

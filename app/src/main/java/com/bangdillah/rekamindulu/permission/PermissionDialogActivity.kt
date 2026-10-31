@@ -22,6 +22,7 @@ class PermissionDialogActivity : AppCompatActivity() {
     }
 
     private lateinit var appPreferences: AppPreferences
+    private var settingsDialog: AlertDialog? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -80,25 +81,56 @@ class PermissionDialogActivity : AppCompatActivity() {
                 val rationaleRequired = shouldShowRequestPermissionRationale(Manifest.permission.RECORD_AUDIO)
                 if (!rationaleRequired) {
                     // Permanently denied (Don't ask again)
-                    AlertDialog.Builder(this)
-                        .setTitle("Izin Diperlukan")
-                        .setMessage("Izin mikrofon dibutuhkan untuk merekam suara game & bicara. Buka pengaturan aplikasi untuk mengaktifkannya?")
-                        .setPositiveButton("Buka Pengaturan") { _, _ ->
-                            val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
-                                data = Uri.fromParts("package", packageName, null)
-                            }
-                            startActivity(intent)
-                            finish()
-                        }
-                        .setNegativeButton("Nanti Saja") { _, _ ->
-                            finish()
-                        }
-                        .show()
+                    showSettingsDialog()
                 } else {
                     Toast.makeText(this, "Izin perekaman belum diaktifkan", Toast.LENGTH_SHORT).show()
                     finish()
                 }
             }
         }
+    }
+
+    private fun showSettingsDialog() {
+        if (isFinishing || isDestroyed) return
+
+        dismissSettingsDialog()
+
+        settingsDialog = AlertDialog.Builder(this)
+            .setTitle("Izin Diperlukan")
+            .setMessage("Izin mikrofon dibutuhkan untuk merekam suara game & bicara. Buka pengaturan aplikasi untuk mengaktifkannya?")
+            .setPositiveButton("Buka Pengaturan") { dialog, _ ->
+                dialog.dismiss()
+                val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                    data = Uri.fromParts("package", packageName, null)
+                }
+                startActivity(intent)
+                finish()
+            }
+            .setNegativeButton("Nanti Saja") { dialog, _ ->
+                dialog.dismiss()
+                finish()
+            }
+            .setOnCancelListener { dialog ->
+                dialog.dismiss()
+                finish()
+            }
+            .create()
+
+        settingsDialog?.show()
+    }
+
+    private fun dismissSettingsDialog() {
+        try {
+            if (settingsDialog?.isShowing == true) {
+                settingsDialog?.dismiss()
+            }
+        } catch (ignored: Exception) {
+        }
+        settingsDialog = null
+    }
+
+    override fun onDestroy() {
+        dismissSettingsDialog()
+        super.onDestroy()
     }
 }

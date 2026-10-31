@@ -672,7 +672,7 @@ open class ScreenRecordingService : Service() {
             val savedPath = currentVideoFilePath
             if (!savedPath.isNullOrEmpty()) {
                 val savedFile = File(savedPath)
-                val isValidRecording = savedFile.exists() && savedFile.length() > 2048
+                val isValidRecording = savedFile.exists() && savedFile.length() > 10240 && recordingStoppedCleanly
                 if (isValidRecording) {
                     StorageHelper.scanVideoFile(this, savedFile)
                     MainActivity.hasPendingSaveDialog = true
