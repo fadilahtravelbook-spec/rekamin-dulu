@@ -15,6 +15,7 @@ class AboutActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        com.bangdillah.rekamindulu.utils.AppPreferences(this).applyTheme()
         setContentView(R.layout.about_screen)
         supportActionBar?.hide()
 

@@ -126,7 +126,7 @@ class FloatingOverlayService : Service() {
         val instantFps = (1_000_000_000.0 / avgDeltaNanos.coerceAtLeast(1_000_000.0)).coerceIn(10.0, 144.0)
 
         val prefs = appPreferences ?: AppPreferences(this).also { appPreferences = it }
-        val targetFps = if (prefs.isGamingMode || prefs.fpsStabilizerEnabled) maxOf(60, prefs.fps) else prefs.fps
+        val targetFps = prefs.fps
         val hardwareHz = getHardwareRefreshRate()
 
         // Hitung frame jitter aktual (deviasi antar selang VSYNC dalam ms)
@@ -228,6 +228,27 @@ class FloatingOverlayService : Service() {
         resetAutoCollapseTimer()
     }
 
+    companion object {
+        const val TAG = "FloatingOverlayService"
+
+        /**
+         * Format durasi aktif perekaman layar ke format waktu ramah pengguna:
+         * - mm:ss untuk durasi di bawah 1 jam (misal 05:32)
+         * - HH:mm:ss untuk durasi 1 jam atau lebih (misal 01:14:08)
+         */
+        fun formatDuration(totalSeconds: Int): String {
+            val s = totalSeconds.coerceAtLeast(0)
+            val hours = s / 3600
+            val minutes = (s % 3600) / 60
+            val seconds = s % 60
+            return if (hours > 0) {
+                String.format(Locale.US, "%02d:%02d:%02d", hours, minutes, seconds)
+            } else {
+                String.format(Locale.US, "%02d:%02d", minutes, seconds)
+            }
+        }
+    }
+
     private data class FpsRating(
         val grade: String,
         val advice: String,
@@ -235,15 +256,42 @@ class FloatingOverlayService : Service() {
         val bgTintHex: Int
     )
 
+    /**
+     * Memperbarui tampilan timer melayang (on-screen timer) pada overlay
+     * secara real-time pada Mode Bola Mini (Pill) maupun Panel HUD Gamer.
+     */
+    fun updateOverlayTimer() {
+        val sec = ScreenRecordingService.elapsedSeconds
+        val timerText = formatDuration(sec)
+        val isPausedNow = ScreenRecordingService.isPaused
+
+        val expandedTimerView = overlayView?.findViewById<TextView>(R.id.overlay_timer_text)
+        val bubbleTimerView = overlayView?.findViewById<TextView>(R.id.overlay_bubble_timer_text)
+        val bubblePulse = overlayView?.findViewById<ImageView>(R.id.overlay_bubble_pulse_dot)
+        val headerPulse = overlayView?.findViewById<ImageView>(R.id.overlay_pulse_icon)
+
+        expandedTimerView?.text = timerText
+        expandedTimerView?.contentDescription = "Durasi rekaman $timerText"
+        bubbleTimerView?.text = timerText
+        bubbleTimerView?.contentDescription = "Durasi rekaman $timerText"
+
+        if (isPausedNow) {
+            expandedTimerView?.setTextColor(0xFFFF9F43.toInt())
+            bubbleTimerView?.setTextColor(0xFFFF9F43.toInt())
+            bubblePulse?.alpha = 0.4f
+            headerPulse?.alpha = 0.4f
+        } else {
+            expandedTimerView?.setTextColor(0xFFFF4757.toInt())
+            bubbleTimerView?.setTextColor(0xFFFFFFFF.toInt())
+            bubblePulse?.alpha = 1.0f
+            headerPulse?.alpha = 1.0f
+        }
+    }
+
     private val timerRunnable = object : Runnable {
         override fun run() {
             if (ScreenRecordingService.isRecording) {
-                val sec = ScreenRecordingService.elapsedSeconds
-                val min = sec / 60
-                val timerText = String.format(Locale.getDefault(), "%02d:%02d", min, sec % 60)
-
-                overlayView?.findViewById<TextView>(R.id.overlay_timer_text)?.text = timerText
-                overlayView?.findViewById<TextView>(R.id.overlay_bubble_timer_text)?.text = timerText
+                updateOverlayTimer()
 
                 // Deteksi jika foreground game freeze/lag berat sehingga Choreographer terhambat > 600ms
                 val now = System.nanoTime()
@@ -288,6 +336,12 @@ class FloatingOverlayService : Service() {
         )
         setupOverlayWindow()
         startFrameHeartbeat()
+    }
+
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        syncOverlayStatus()
+        updateOverlayTimer()
+        return START_NOT_STICKY
     }
 
     private fun startFrameHeartbeat() {
@@ -339,9 +393,19 @@ class FloatingOverlayService : Service() {
 
         val textFps = overlayView?.findViewById<TextView>(R.id.overlay_fps_text)
         val bubbleFps = overlayView?.findViewById<TextView>(R.id.overlay_bubble_fps_text)
+        val boxFpsEvaluation = overlayView?.findViewById<View>(R.id.box_fps_evaluation)
         val ratingBadge = overlayView?.findViewById<TextView>(R.id.overlay_fps_rating_badge)
         val detailsText = overlayView?.findViewById<TextView>(R.id.overlay_fps_details)
         val adviceText = overlayView?.findViewById<TextView>(R.id.overlay_fps_advice)
+
+        val showFps = prefs.showFpsCounter
+        textFps?.visibility = if (showFps) View.VISIBLE else View.GONE
+        bubbleFps?.visibility = if (showFps) View.VISIBLE else View.GONE
+        boxFpsEvaluation?.visibility = if (showFps) View.VISIBLE else View.GONE
+
+        if (!showFps) {
+            return
+        }
 
         if (isPaused) {
             textFps?.text = "0 FPS"
@@ -481,6 +545,7 @@ class FloatingOverlayService : Service() {
         syncMicButtonUi()
         syncFacecamButtonUi()
         calculateAndDispatchDynamicFps(System.nanoTime())
+        updateOverlayTimer()
     }
 
     private fun syncMicButtonUi() {

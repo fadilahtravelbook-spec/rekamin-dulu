@@ -29,13 +29,13 @@ class PermissionDialogActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        appPreferences = AppPreferences(this)
+        appPreferences.applyTheme()
         supportActionBar?.hide()
         window.setBackgroundDrawableResource(android.R.color.transparent)
         setContentView(R.layout.permission_dialog)
 
         applyDialogWindowBounds()
-
-        appPreferences = AppPreferences(this)
 
         val btnTambahIzin = findViewById<Button>(R.id.btn_tambah_izin)
         val btnTidakKeluar = findViewById<Button>(R.id.btn_tidak_keluar)

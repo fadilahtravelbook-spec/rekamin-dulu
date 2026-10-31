@@ -38,6 +38,7 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import androidx.lifecycle.lifecycleScope
 import com.bangdillah.rekamindulu.backend.FirebaseAuthManager
 import com.bangdillah.rekamindulu.backend.FirebaseVideoRepository
+import com.bangdillah.rekamindulu.floating.FloatingOverlayService
 import kotlinx.coroutines.launch
 import java.io.File
 import java.util.Locale
@@ -97,6 +98,7 @@ class LibraryActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        com.bangdillah.rekamindulu.utils.AppPreferences(this).applyTheme()
         setContentView(R.layout.library_screen)
         supportActionBar?.hide()
 
@@ -218,12 +220,12 @@ class LibraryActivity : AppCompatActivity() {
         if (ScreenRecordingService.isRecording) {
             banner?.visibility = View.VISIBLE
             val sec = ScreenRecordingService.elapsedSeconds
-            val min = sec / 60
             val isPaused = ScreenRecordingService.isPaused
+            val durationStr = FloatingOverlayService.formatDuration(sec)
             if (isPaused) {
-                textTimer?.text = String.format(Locale.getDefault(), "⏸️ Perekaman Layar Dijeda • %02d:%02d", min, sec % 60)
+                textTimer?.text = "⏸️ Perekaman Layar Dijeda • $durationStr"
             } else {
-                textTimer?.text = String.format(Locale.getDefault(), "🔴 Perekaman Layar Aktif • %02d:%02d", min, sec % 60)
+                textTimer?.text = "🔴 Perekaman Layar Aktif • $durationStr"
             }
         } else {
             banner?.visibility = View.GONE

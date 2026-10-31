@@ -778,6 +778,7 @@ open class MainActivity : AppCompatActivity() {
                     appPreferences.fps = 30
                     appPreferences.bitrateMbps = 8
                     appPreferences.isGamingMode = false
+                    appPreferences.fpsStabilizerEnabled = false
                     updateResolutionBadge()
                     updateFpsStabilizerView()
                     showSnackbar("Preset 1080p 30FPS diterapkan")
@@ -787,6 +788,7 @@ open class MainActivity : AppCompatActivity() {
                     appPreferences.fps = 30
                     appPreferences.bitrateMbps = 20
                     appPreferences.isGamingMode = false
+                    appPreferences.fpsStabilizerEnabled = false
                     updateResolutionBadge()
                     updateFpsStabilizerView()
                     showSnackbar("Preset 4K Ultra HD diterapkan")
@@ -796,6 +798,7 @@ open class MainActivity : AppCompatActivity() {
                     appPreferences.fps = 30
                     appPreferences.bitrateMbps = 5
                     appPreferences.isGamingMode = false
+                    appPreferences.fpsStabilizerEnabled = false
                     updateResolutionBadge()
                     updateFpsStabilizerView()
                     showSnackbar("Preset 720p 30FPS diterapkan")
@@ -833,7 +836,7 @@ open class MainActivity : AppCompatActivity() {
         if (isEnabled) {
             card?.strokeColor = ContextCompat.getColor(this, R.color.colorSuccess)
             card?.strokeWidth = 3
-            btn?.text = "✓ 60 FPS TERKUNCI"
+            btn?.text = "✓ ${appPreferences.fps} FPS TERKUNCI"
             btn?.backgroundTintList = ContextCompat.getColorStateList(this, R.color.colorSuccessContainer)
             btn?.setTextColor(ContextCompat.getColor(this, R.color.colorSuccess))
             statusText?.text = "Terkunci Stabil ${appPreferences.fps} FPS • Offload GPU Aktif (0 Frame Drop)"
@@ -1232,9 +1235,8 @@ open class MainActivity : AppCompatActivity() {
             layoutActive?.visibility = View.VISIBLE
 
             val sec = ScreenRecordingService.elapsedSeconds
-            val min = sec / 60
             val isPaused = ScreenRecordingService.isPaused
-            val formattedTime = String.format(Locale.getDefault(), "%02d:%02d", min, sec % 60)
+            val formattedTime = com.bangdillah.rekamindulu.floating.FloatingOverlayService.formatDuration(sec)
 
             textHeroTimer?.text = formattedTime
 
@@ -1377,6 +1379,9 @@ open class MainActivity : AppCompatActivity() {
             return
         }
 
+        // Pastikan konfigurasi audio (Mic/Game Audio/Both/Mute) tersinkronisasi ke preferensi
+        syncAudioPreferences()
+
         val missingPermissions = getRequiredRuntimePermissions().filter {
             ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
         }
@@ -1480,8 +1485,13 @@ open class MainActivity : AppCompatActivity() {
      * Meminta izin sistem MediaProjection menggunakan MediaProjectionManager
      */
     fun requestScreenCapture() {
-        val captureIntent = mediaProjectionManager.createScreenCaptureIntent()
-        screenCaptureLauncher.launch(captureIntent)
+        try {
+            val captureIntent = mediaProjectionManager.createScreenCaptureIntent()
+            screenCaptureLauncher.launch(captureIntent)
+        } catch (e: Exception) {
+            Log.e(TAG, "Gagal membuat intent tangkap layar MediaProjection", e)
+            Toast.makeText(this, "Tidak dapat memulai tangkap layar: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
+        }
     }
 
     /**
@@ -1500,10 +1510,14 @@ open class MainActivity : AppCompatActivity() {
     }
 
     private fun actuallyStartScreenRecordingService(resultCode: Int, data: Intent) {
+        syncAudioPreferences()
         val serviceIntent = Intent(this, ScreenRecordingService::class.java).apply {
             action = ScreenRecordingService.ACTION_START
             putExtra(ScreenRecordingService.EXTRA_RESULT_CODE, resultCode)
             putExtra(ScreenRecordingService.EXTRA_RESULT_DATA, data)
+            putExtra("EXTRA_AUDIO_SOURCE", appPreferences.audioSource)
+            putExtra("EXTRA_MIC_ENABLED", isMicOn)
+            putExtra("EXTRA_GAME_AUDIO_ENABLED", isGameAudioOn)
         }
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -1512,7 +1526,13 @@ open class MainActivity : AppCompatActivity() {
                 startService(serviceIntent)
             }
             updateRecordingBanner()
-            showSnackbar("🔴 Perekaman layar aktif • Video otomatis disimpan saat selesai")
+            val audioInfo = when {
+                isMicOn && isGameAudioOn -> "Mikrofon & Audio Game Aktif"
+                isMicOn -> "Mikrofon Aktif"
+                isGameAudioOn -> "Audio Game Aktif"
+                else -> "Mute"
+            }
+            showSnackbar("🔴 Perekaman layar aktif ($audioInfo)")
         } catch (e: Exception) {
             Log.e(TAG, "Gagal memulai ScreenRecordingService", e)
             Toast.makeText(this, "Gagal memulai perekaman layar: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
@@ -1520,6 +1540,7 @@ open class MainActivity : AppCompatActivity() {
     }
 
     open fun onScreenCapturePermissionDenied() {
+        updateRecordingBanner()
         Toast.makeText(this, "Izin tangkap layar dibatalkan pengguna", Toast.LENGTH_SHORT).show()
     }
 

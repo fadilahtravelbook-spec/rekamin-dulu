@@ -153,6 +153,7 @@ open class ScreenRecordingService : Service() {
 
         when (action) {
             ACTION_START -> {
+                safeStartForeground(buildNotification())
                 val resultCode = intent.getIntExtra(EXTRA_RESULT_CODE, Activity.RESULT_OK)
                 val resultData = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                     intent.getParcelableExtra(EXTRA_RESULT_DATA, Intent::class.java)
@@ -163,6 +164,10 @@ open class ScreenRecordingService : Service() {
                 }
                 val isResultCodeValid = (resultCode == Activity.RESULT_OK) || (intent.hasExtra(EXTRA_RESULT_CODE) && resultCode != Activity.RESULT_CANCELED)
                 if (isResultCodeValid && resultData != null) {
+                    val audioSourceExtra = intent.getStringExtra("EXTRA_AUDIO_SOURCE")
+                    if (!audioSourceExtra.isNullOrEmpty()) {
+                        AppPreferences(this).audioSource = audioSourceExtra
+                    }
                     startRecording(resultCode, resultData)
                 } else {
                     Log.e(TAG, "Missing resultCode or resultData in ACTION_START (resultCode=$resultCode, hasData=${resultData != null})")
@@ -539,7 +544,8 @@ open class ScreenRecordingService : Service() {
             targetHeight: Int,
             bitrate: Int,
             fps: Int,
-            audioSourceOverride: Int? = null
+            audioSourceOverride: Int? = null,
+            encoderOverride: Int? = null
         ): Boolean {
             try {
                 mediaRecorder?.reset()
@@ -558,8 +564,6 @@ open class ScreenRecordingService : Service() {
                     if (withAudio) {
                         val src = audioSourceOverride ?: try {
                             if (isInternalOnly && prefs.internalAudioStabilizer) {
-                                // Sumber VOICE_RECOGNITION memiliki filter anti-noise ruangan bawaan OS
-                                // sehingga suara ketukan jari & kebisingan luar teredam, fokus suara game
                                 MediaRecorder.AudioSource.VOICE_RECOGNITION
                             } else {
                                 com.bangdillah.rekamindulu.audio.MicrophoneSelector.getAudioSource(prefs.micType)
@@ -568,15 +572,26 @@ open class ScreenRecordingService : Service() {
                             MediaRecorder.AudioSource.MIC
                         }
 
+                        var sourceSet = false
                         try {
                             setAudioSource(src)
+                            sourceSet = true
                         } catch (eSrc: Exception) {
-                            Log.w(TAG, "Audio source $src ditolak, fallback ke MIC standar", eSrc)
+                            Log.w(TAG, "Audio source $src ditolak, coba MIC", eSrc)
+                        }
+
+                        if (!sourceSet) {
                             try {
+                                reset()
                                 setAudioSource(MediaRecorder.AudioSource.MIC)
+                                sourceSet = true
                             } catch (eMic: Exception) {
-                                Log.w(TAG, "MIC standar juga ditolak (mungkin dikunci game voice chat), coba DEFAULT", eMic)
-                                setAudioSource(MediaRecorder.AudioSource.DEFAULT)
+                                Log.w(TAG, "MIC standar juga ditolak, coba DEFAULT", eMic)
+                                try {
+                                    reset()
+                                    setAudioSource(MediaRecorder.AudioSource.DEFAULT)
+                                    sourceSet = true
+                                } catch (ignored: Exception) {}
                             }
                         }
                     }
@@ -587,35 +602,23 @@ open class ScreenRecordingService : Service() {
                     if (withAudio) {
                         try {
                             setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
+                            setAudioChannels(1)
 
-                            // Kanal: Utamakan stereo (2) untuk audio game internal, mono (1) untuk mic/fallback
-                            val desiredChannels = if (isInternalOnly) 2 else 1
+                            val sampleRate = try {
+                                com.bangdillah.rekamindulu.audio.AudioHelper.getOptimalSampleRate(this@ScreenRecordingService)
+                            } catch (e: Exception) {
+                                44100
+                            }
                             try {
-                                setAudioChannels(desiredChannels)
-                            } catch (eChan: Exception) {
-                                try { setAudioChannels(1) } catch (ignored: Exception) {}
+                                setAudioSamplingRate(sampleRate)
+                            } catch (eRate: Exception) {
+                                try { setAudioSamplingRate(44100) } catch (ignored: Exception) {}
                             }
 
-                            // Frekuensi sampling bertingkat: 48000Hz (Hi-Fi) -> 44100Hz (CD Standar Universal) -> 16000Hz (Aman)
-                            var sampleRateConfigured = false
-                            for (rate in intArrayOf(48000, 44100, 16000)) {
-                                try {
-                                    setAudioSamplingRate(rate)
-                                    sampleRateConfigured = true
-                                    break
-                                } catch (eRate: Exception) {
-                                    Log.w(TAG, "Audio sampling rate $rate Hz tidak didukung: ${eRate.message}")
-                                }
-                            }
-
-                            // Bitrate audio adaptif: 128kbps -> 96kbps -> 64kbps
-                            for (bitrate in intArrayOf(128000, 96000, 64000)) {
-                                try {
-                                    setAudioEncodingBitRate(bitrate)
-                                    break
-                                } catch (eBitrate: Exception) {
-                                    Log.w(TAG, "Audio encoding bitrate $bitrate bps tidak didukung: ${eBitrate.message}")
-                                }
+                            try {
+                                setAudioEncodingBitRate(128000)
+                            } catch (eBitrate: Exception) {
+                                try { setAudioEncodingBitRate(96000) } catch (ignored: Exception) {}
                             }
                         } catch (eAac: Exception) {
                             Log.w(TAG, "Gagal menginisialisasi audio encoder AAC: ${eAac.message}")
@@ -623,46 +626,27 @@ open class ScreenRecordingService : Service() {
                         }
                     }
 
-                    // Pilih hardware video encoder (HEVC / AVC)
-                    val encoder = if (prefs.videoEncoder == "H265" && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    val encoder = encoderOverride ?: if (prefs.videoEncoder == "H265" && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                         MediaRecorder.VideoEncoder.HEVC
                     } else {
                         MediaRecorder.VideoEncoder.H264
                     }
-                    setVideoEncoder(encoder)
-                    setOutputFile(filePath)
-                    val chosenFps = if (prefs.isGamingMode || prefs.fpsStabilizerEnabled) maxOf(60, fps) else fps
-                    // Bitrate game adaptif:
-                    // Di mode gaming, bitrate 6 Mbps pada 1080p (atau 4.5 Mbps pada 720p) adalah sweet-spot ideal:
-                    // Gambar tajam, latensi hardware encode < 3ms, buffer encoder tidak pernah stall,
-                    // dan memori GPU/VPU tetap 100% bebas untuk performa game tanpa stutter/lag.
-                    val pixelCount = targetWidth * targetHeight
-                    val chosenBitrate = when {
-                        prefs.isGamingMode -> {
-                            when {
-                                pixelCount >= 1920 * 800 -> minOf(6_500_000, maxOf(4_500_000, bitrate))
-                                pixelCount >= 1280 * 500 -> minOf(4_500_000, maxOf(3_000_000, bitrate))
-                                else -> minOf(2_500_000, maxOf(1_500_000, bitrate))
-                            }
-                        }
-                        else -> {
-                            when {
-                                pixelCount >= 1920 * 800 -> minOf(8_000_000, maxOf(4_000_000, bitrate))
-                                pixelCount >= 1280 * 500 -> minOf(6_000_000, maxOf(2_500_000, bitrate))
-                                else -> minOf(3_000_000, maxOf(1_000_000, bitrate))
-                            }
-                        }
+                    try {
+                        setVideoEncoder(encoder)
+                    } catch (eEnc: Exception) {
+                        Log.w(TAG, "Encoder $encoder gagal, coba H264", eEnc)
+                        setVideoEncoder(MediaRecorder.VideoEncoder.H264)
                     }
+
+                    setOutputFile(filePath)
+                    val chosenFps = fps
+                    val chosenBitrate = bitrate.coerceIn(1_000_000, 30_000_000)
 
                     setVideoSize(targetWidth, targetHeight)
                     setVideoEncodingBitRate(chosenBitrate)
                     setVideoFrameRate(chosenFps)
 
-                    // Sinkronisasi frame rate surface recorder (mencegah variable frame rate judder & drop fps)
-                    // Catatan arsitektur: Hindari memanggil setCaptureRate() di MediaRecorder karena mengaktifkan
-                    // time-lapse recorder pada Stagefright C++ layer dan menonaktifkan VSYNC timestamp real-time.
-                    // Menggunakan setVideoFrameRate(chosenFps) dengan Surface dari VirtualDisplay menjamin 60 FPS murni.
-                    Log.i(TAG, "Stabilisator FPS: Hardware encoder aktif pada $chosenFps FPS (${chosenBitrate / 1_000_000} Mbps)")
+                    Log.i(TAG, "MediaRecorder dikonfigurasi sesuai pengaturan: ${targetWidth}x${targetHeight} @ $chosenFps FPS (${chosenBitrate / 1_000_000} Mbps)")
 
                     setOnErrorListener { _, what, extra ->
                         Log.e(TAG, "MediaRecorder error: what=$what, extra=$extra")
@@ -692,59 +676,62 @@ open class ScreenRecordingService : Service() {
         val ultraSafeW = if (isPortrait) 480 else 848
         val ultraSafeH = if (isPortrait) 848 else 480
 
-        val initialBitrate = if (prefs.isGamingMode) {
-            minOf(6_500_000, maxOf(4_500_000, prefs.bitrateMbps * 1000 * 1000))
-        } else {
-            minOf(8_000_000, prefs.bitrateMbps * 1000 * 1000)
-        }
-        val initialFps = if (prefs.isGamingMode || prefs.fpsStabilizerEnabled) {
-            maxOf(60, prefs.fps)
-        } else {
-            prefs.fps
-        }
+        val initialBitrate = (prefs.bitrateMbps * 1_000_000).coerceIn(1_000_000, 30_000_000)
+        val initialFps = prefs.fps
         val preferredAudioSource = if (isInternalOnly && prefs.internalAudioStabilizer) {
             MediaRecorder.AudioSource.VOICE_RECOGNITION
         } else {
             com.bangdillah.rekamindulu.audio.MicrophoneSelector.getAudioSource(prefs.micType)
         }
 
-        // Tier 1: Konfigurasi optimal sesuai pilihan pengguna (Resolusi Asli Layar 1:1 + Target FPS 60 + Audio)
+        // Tier 1: Konfigurasi optimal sesuai pilihan pengguna (Resolusi, FPS, Bitrate, dan Audio dari pengaturan)
         if (configureAndPrepare(wantsAudio, screenWidth, screenHeight, initialBitrate, initialFps, preferredAudioSource)) {
-            Log.i(TAG, "Tier 1: MediaRecorder siap (${screenWidth}x${screenHeight} @ ${initialFps} FPS, audio=$wantsAudio, internal=$isInternalOnly)")
+            Log.i(TAG, "Tier 1: MediaRecorder siap (${screenWidth}x${screenHeight} @ ${initialFps} FPS, bitrate=${initialBitrate / 1_000_000} Mbps, audio=$wantsAudio)")
             return
         }
 
-        // Tier 2: Jika Tier 1 gagal dan pengguna menginginkan audio, coba dengan sumber MIC standar pada 60 FPS
+        // Tier 1b: Jika HEVC dipilih tapi gagal di Tier 1, coba H264 pada resolusi, FPS dan bitrate yang sama
+        if (prefs.videoEncoder == "H265") {
+            Log.w(TAG, "Tier 1b: Mencoba H264 fallback untuk resolusi ${screenWidth}x${screenHeight} @ ${initialFps} FPS")
+            if (configureAndPrepare(wantsAudio, screenWidth, screenHeight, initialBitrate, initialFps, preferredAudioSource, MediaRecorder.VideoEncoder.H264)) {
+                Log.i(TAG, "Tier 1b: MediaRecorder H264 siap @ ${initialFps} FPS")
+                return
+            }
+        }
+
+        // Tier 2: Jika Tier 1 gagal dan pengguna menginginkan audio, coba dengan sumber MIC standar
         if (wantsAudio && preferredAudioSource != MediaRecorder.AudioSource.MIC) {
             Log.w(TAG, "Tier 1 gagal, mencoba Tier 2 (Resolusi asli @ ${initialFps} FPS + Audio MIC Standar)")
-            if (configureAndPrepare(true, screenWidth, screenHeight, initialBitrate, initialFps, MediaRecorder.AudioSource.MIC)) {
+            if (configureAndPrepare(true, screenWidth, screenHeight, initialBitrate, initialFps, MediaRecorder.AudioSource.MIC, MediaRecorder.VideoEncoder.H264)) {
                 Log.i(TAG, "Tier 2: MediaRecorder siap dengan audio MIC standar @ ${initialFps} FPS")
                 return
             }
         }
 
-        // Tier 3: Fallback ke HD 720p TETAP PADA 60 FPS DENGAN AUDIO (Anti Drop FPS)
+        // Tier 3: Fallback ke HD 720p TETAP PADA FPS PENGGUNA DENGAN AUDIO
         Log.w(TAG, "Mencoba Tier 3 (HD 720p @ ${initialFps} FPS DENGAN AUDIO)")
-        if (configureAndPrepare(wantsAudio, safeW, safeH, 6_000_000, initialFps, MediaRecorder.AudioSource.MIC)) {
+        val fallbackBitrate720 = minOf(initialBitrate, 8_000_000)
+        if (configureAndPrepare(wantsAudio, safeW, safeH, fallbackBitrate720, initialFps, MediaRecorder.AudioSource.MIC, MediaRecorder.VideoEncoder.H264)) {
             screenWidth = safeW
             screenHeight = safeH
             Log.i(TAG, "Tier 3: MediaRecorder 720p siap @ ${initialFps} FPS (audio=$wantsAudio)")
             return
         }
 
-        // Tier 4: Fallback ke 480p TETAP PADA 60 FPS DENGAN AUDIO
+        // Tier 4: Fallback ke 480p TETAP PADA FPS PENGGUNA DENGAN AUDIO
         Log.w(TAG, "Mencoba Tier 4 (480p @ ${initialFps} FPS DENGAN AUDIO)")
-        if (configureAndPrepare(wantsAudio, ultraSafeW, ultraSafeH, 3_000_000, initialFps, MediaRecorder.AudioSource.MIC)) {
+        val fallbackBitrate480 = minOf(initialBitrate, 4_000_000)
+        if (configureAndPrepare(wantsAudio, ultraSafeW, ultraSafeH, fallbackBitrate480, initialFps, MediaRecorder.AudioSource.MIC, MediaRecorder.VideoEncoder.H264)) {
             screenWidth = ultraSafeW
             screenHeight = ultraSafeH
             Log.i(TAG, "Tier 4: MediaRecorder 480p siap @ ${initialFps} FPS (audio=$wantsAudio)")
             return
         }
 
-        // Tier 5: Hanya jika hardware audio menolak karena in-game voice chat eksklusif, fallback ke video-only 720p 60 FPS
+        // Tier 5: Hanya jika hardware audio menolak karena in-game voice chat eksklusif, fallback ke video-only 720p
         if (wantsAudio) {
             Log.w(TAG, "Perangkat keras audio sibuk/tidak merespon, fallback ke video-only 720p @ ${initialFps} FPS")
-            if (configureAndPrepare(false, safeW, safeH, 5_000_000, initialFps)) {
+            if (configureAndPrepare(false, safeW, safeH, fallbackBitrate720, initialFps, null, MediaRecorder.VideoEncoder.H264)) {
                 screenWidth = safeW
                 screenHeight = safeH
                 Log.i(TAG, "Tier 5: MediaRecorder 720p video-only siap @ ${initialFps} FPS")
@@ -752,8 +739,8 @@ open class ScreenRecordingService : Service() {
             }
         }
 
-        // Tier 6: Fallback terakhir universal 480p video-only pada 60 FPS
-        if (!configureAndPrepare(false, ultraSafeW, ultraSafeH, 2_000_000, initialFps)) {
+        // Tier 6: Fallback terakhir universal 480p video-only
+        if (!configureAndPrepare(false, ultraSafeW, ultraSafeH, fallbackBitrate480, initialFps, null, MediaRecorder.VideoEncoder.H264)) {
             throw RuntimeException("Perangkat tidak dapat menginisialisasi encoder video untuk perekaman layar.")
         }
         screenWidth = ultraSafeW
@@ -762,13 +749,14 @@ open class ScreenRecordingService : Service() {
 
     /**
      * Fallback cepat jika mediaRecorder.start() gagal pada konfigurasi awal sebelum virtual display dibuat.
-     * Mengutamakan perekaman suara mikrofon dengan resolusi aman 720p dan tetap menjaga 60 FPS.
+     * Mengutamakan perekaman suara mikrofon dengan resolusi aman 720p dan tetap menjaga FPS pengaturan pengguna.
      */
     protected fun setupMediaRecorderFallback(filePath: String) {
         val prefs = AppPreferences(this)
         val hasMicPermission = ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
         val wantsAudio = prefs.audioSource != "MUTE" && hasMicPermission
-        val targetFps = if (prefs.isGamingMode || prefs.fpsStabilizerEnabled) maxOf(60, prefs.fps) else prefs.fps
+        val targetFps = prefs.fps
+        val targetBitrate = (prefs.bitrateMbps * 1_000_000).coerceIn(1_000_000, 30_000_000)
 
         try {
             mediaRecorder?.reset()
@@ -799,10 +787,15 @@ open class ScreenRecordingService : Service() {
                     setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
                     setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
                     setAudioChannels(1)
+                    val sampleRate = try {
+                        com.bangdillah.rekamindulu.audio.AudioHelper.getOptimalSampleRate(this@ScreenRecordingService)
+                    } catch (e: Exception) {
+                        44100
+                    }
                     try {
-                        setAudioSamplingRate(44100)
+                        setAudioSamplingRate(sampleRate)
                     } catch (eRate: Exception) {
-                        try { setAudioSamplingRate(48000) } catch (ignored: Exception) {}
+                        try { setAudioSamplingRate(44100) } catch (ignored: Exception) {}
                     }
                     try {
                         setAudioEncodingBitRate(128000)
@@ -812,7 +805,7 @@ open class ScreenRecordingService : Service() {
                     setVideoEncoder(MediaRecorder.VideoEncoder.H264)
                     setOutputFile(filePath)
                     setVideoSize(safeW, safeH)
-                    setVideoEncodingBitRate(6_000_000)
+                    setVideoEncodingBitRate(minOf(targetBitrate, 8_000_000))
                     setVideoFrameRate(targetFps)
                     prepare()
                 }
@@ -833,7 +826,7 @@ open class ScreenRecordingService : Service() {
                 setVideoEncoder(MediaRecorder.VideoEncoder.H264)
                 setOutputFile(filePath)
                 setVideoSize(safeW, safeH)
-                setVideoEncodingBitRate(5_000_000)
+                setVideoEncodingBitRate(minOf(targetBitrate, 6_000_000))
                 setVideoFrameRate(targetFps)
                 prepare()
             }
@@ -1143,7 +1136,7 @@ open class ScreenRecordingService : Service() {
                 this,
                 screenOffReceiver,
                 IntentFilter(Intent.ACTION_SCREEN_OFF),
-                ContextCompat.RECEIVER_NOT_EXPORTED
+                ContextCompat.RECEIVER_EXPORTED
             )
         }
     }
@@ -1208,9 +1201,7 @@ open class ScreenRecordingService : Service() {
     }
 
     private fun buildNotification(customMessage: String? = null): Notification {
-        val minutes = elapsedSeconds / 60
-        val seconds = elapsedSeconds % 60
-        val timeString = String.format(Locale.getDefault(), "%02d:%02d", minutes, seconds)
+        val timeString = FloatingOverlayService.formatDuration(elapsedSeconds)
 
         val contentIntent = Intent(this, com.bangdillah.rekamindulu.HomeActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP

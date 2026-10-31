@@ -19,7 +19,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import com.bangdillah.rekamindulu.HomeActivity
 import com.bangdillah.rekamindulu.R
-import com.bangdillah.rekamindulu.library.LibraryActivity
+import com.bangdillah.rekamindulu.floating.FloatingOverlayService
 import com.bangdillah.rekamindulu.service.ScreenRecordingService
 import com.bangdillah.rekamindulu.utils.AppPreferences
 import com.bangdillah.rekamindulu.utils.SaveTransitionDialog
@@ -211,6 +211,7 @@ class SettingsActivity : AppCompatActivity() {
             } else {
                 appPreferences.fps = 30
                 appPreferences.bitrateMbps = 8
+                appPreferences.fpsStabilizerEnabled = false
                 updateUIValues(skipGamingSwitch = true)
                 Toast.makeText(this, "Mode Standar: 30 FPS & 8 Mbps", Toast.LENGTH_SHORT).show()
             }
@@ -601,6 +602,9 @@ class SettingsActivity : AppCompatActivity() {
         ) { selectedFps ->
             appPreferences.fps = selectedFps
             appPreferences.isGamingMode = selectedFps >= 60
+            if (selectedFps < 60) {
+                appPreferences.fpsStabilizerEnabled = false
+            }
             updateUIValues()
             com.bangdillah.rekamindulu.backend.FirebaseAuthManager.getInstance(this).updateUserPreferences(
                 fps = selectedFps,

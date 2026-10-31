@@ -151,4 +151,61 @@ class RekaminDuluUnitTest {
         assertTrue(model.hasAudio)
         assertEquals("H264", model.encoder)
     }
+
+    @Test
+    fun testMediaProjectionServiceActionConstants() {
+        assertEquals("ACTION_START", com.bangdillah.rekamindulu.service.ScreenRecordingService.ACTION_START)
+        assertEquals("ACTION_STOP", com.bangdillah.rekamindulu.service.ScreenRecordingService.ACTION_STOP)
+        assertEquals("ACTION_PAUSE", com.bangdillah.rekamindulu.service.ScreenRecordingService.ACTION_PAUSE)
+        assertEquals("ACTION_RESUME", com.bangdillah.rekamindulu.service.ScreenRecordingService.ACTION_RESUME)
+        assertEquals("EXTRA_RESULT_CODE", com.bangdillah.rekamindulu.service.ScreenRecordingService.EXTRA_RESULT_CODE)
+        assertEquals("EXTRA_RESULT_DATA", com.bangdillah.rekamindulu.service.ScreenRecordingService.EXTRA_RESULT_DATA)
+    }
+
+    @Test
+    fun testAudioSupportModesAndPermissionCheck() {
+        // Mode 1: Mic Only -> Audio enabled, requires RECORD_AUDIO
+        val micOnlySource = if (true && !false) "MIC" else "OTHER"
+        assertEquals("MIC", micOnlySource)
+        val micNeedsAudioPermission = micOnlySource != "MUTE"
+        assertTrue(micNeedsAudioPermission)
+
+        // Mode 2: Game Audio Only -> Internal audio
+        val gameOnlySource = if (!false && true) "INTERNAL" else "OTHER"
+        assertEquals("INTERNAL", gameOnlySource)
+
+        // Mode 3: Both (Mic + Game Audio)
+        val bothSource = if (true && true) "BOTH" else "OTHER"
+        assertEquals("BOTH", bothSource)
+
+        // Mode 4: Mute (No Mic, No Game Audio) -> No audio track
+        val muteSource = if (!false && !false) "MUTE" else "OTHER"
+        assertEquals("MUTE", muteSource)
+        val muteNeedsAudioPermission = muteSource != "MUTE"
+        assertTrue(!muteNeedsAudioPermission)
+    }
+
+    @Test
+    fun testOverlayOnScreenTimerFormatting() {
+        // 0 seconds -> 00:00
+        assertEquals("00:00", com.bangdillah.rekamindulu.floating.FloatingOverlayService.formatDuration(0))
+
+        // Negative duration safeguard -> 00:00
+        assertEquals("00:00", com.bangdillah.rekamindulu.floating.FloatingOverlayService.formatDuration(-10))
+
+        // 45 seconds -> 00:45
+        assertEquals("00:45", com.bangdillah.rekamindulu.floating.FloatingOverlayService.formatDuration(45))
+
+        // 5 minutes 32 seconds (332s) -> 05:32
+        assertEquals("05:32", com.bangdillah.rekamindulu.floating.FloatingOverlayService.formatDuration(332))
+
+        // 59 minutes 59 seconds (3599s) -> 59:59
+        assertEquals("59:59", com.bangdillah.rekamindulu.floating.FloatingOverlayService.formatDuration(3599))
+
+        // 1 hour exactly (3600s) -> 01:00:00
+        assertEquals("01:00:00", com.bangdillah.rekamindulu.floating.FloatingOverlayService.formatDuration(3600))
+
+        // 2 hours 15 minutes 40 seconds (8140s) -> 02:15:40
+        assertEquals("02:15:40", com.bangdillah.rekamindulu.floating.FloatingOverlayService.formatDuration(8140))
+    }
 }

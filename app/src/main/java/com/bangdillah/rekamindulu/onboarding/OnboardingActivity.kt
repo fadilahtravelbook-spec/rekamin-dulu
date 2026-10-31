@@ -30,10 +30,10 @@ class OnboardingActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        appPreferences = AppPreferences(this)
+        appPreferences.applyTheme()
         setContentView(R.layout.onboarding_screen)
         supportActionBar?.hide()
-
-        appPreferences = AppPreferences(this)
 
         viewFlipper = findViewById(R.id.onboarding_view_flipper)
         btnAction = findViewById(R.id.btn_onboarding_action)
