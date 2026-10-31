@@ -711,13 +711,6 @@ class FloatingOverlayService : Service() {
             }
             prefs.audioSource = next
 
-            // Mute / Unmute hardware mic stream via AudioManager secara instan saat perekaman aktif
-            val isMute = (next == "INTERNAL" || next == "MUTE")
-            try {
-                val audioManager = getSystemService(Context.AUDIO_SERVICE) as? android.media.AudioManager
-                audioManager?.isMicrophoneMute = isMute
-            } catch (ignored: Exception) {}
-
             syncMicButtonUi()
             val msg = if (next == "BOTH" || next == "MIC") {
                 if (ScreenRecordingService.isRecording) "🎙️ Suara Mikrofon Aktif (On Air)" else "🎙️ Mikrofon Aktif"
@@ -991,11 +984,6 @@ class FloatingOverlayService : Service() {
         if (isStopping) return
         isStopping = true
 
-        try {
-            val audioManager = getSystemService(Context.AUDIO_SERVICE) as? android.media.AudioManager
-            audioManager?.isMicrophoneMute = false
-        } catch (ignored: Exception) {}
-
         handler.removeCallbacks(timerRunnable)
         handler.removeCallbacks(autoCollapseRunnable)
         handler.removeCallbacks(idleDimRunnable)
@@ -1018,12 +1006,12 @@ class FloatingOverlayService : Service() {
             try {
                 if (view.isAttachedToWindow) {
                     windowManager?.removeViewImmediate(view)
-                } else {
-                    windowManager?.removeView(view)
                 }
             } catch (e: Exception) {
                 try {
-                    windowManager?.removeView(view)
+                    if (view.isAttachedToWindow) {
+                        windowManager?.removeView(view)
+                    }
                 } catch (ignored: Exception) {}
             }
         }

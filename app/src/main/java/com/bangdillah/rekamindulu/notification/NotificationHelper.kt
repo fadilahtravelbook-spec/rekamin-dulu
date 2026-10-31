@@ -120,8 +120,9 @@ class NotificationHelper(private val context: Context) {
                 putExtra(Intent.EXTRA_STREAM, contentUri)
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             }
-            val chooser = Intent.createChooser(shareIntent, "Bagikan Rekaman")
-            chooser.flags = Intent.FLAG_ACTIVITY_NEW_TASK
+            val chooser = Intent.createChooser(shareIntent, "Bagikan Rekaman").apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
             pendingShare = PendingIntent.getActivity(
                 context,
                 203,

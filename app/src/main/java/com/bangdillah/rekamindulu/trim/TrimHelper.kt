@@ -198,6 +198,11 @@ object TrimHelper {
                 extractor.advance()
             }
 
+            if (lastWrittenPtsMap.isEmpty() || !outputFile.exists() || outputFile.length() < 1024) {
+                if (outputFile.exists()) outputFile.delete()
+                return Pair(false, "Rentang waktu potong tidak menghasilkan sampel video yang valid")
+            }
+
             progressCallback?.invoke(100)
             return Pair(true, "Video berhasil dipotong dan disimpan!")
 

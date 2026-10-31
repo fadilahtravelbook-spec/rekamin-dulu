@@ -116,6 +116,9 @@ object SaveTransitionDialog {
             dialog.dismiss()
             val intent = Intent(context, PlayerActivity::class.java).apply {
                 putExtra("VIDEO_PATH", file.absolutePath)
+                if (context !is Activity) {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
             }
             context.startActivity(intent)
         }
@@ -125,6 +128,9 @@ object SaveTransitionDialog {
             dialog.dismiss()
             val intent = Intent(context, TrimActivity::class.java).apply {
                 putExtra("VIDEO_PATH", file.absolutePath)
+                if (context !is Activity) {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
             }
             context.startActivity(intent)
         }
@@ -142,7 +148,12 @@ object SaveTransitionDialog {
                     putExtra(Intent.EXTRA_STREAM, uri)
                     addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                 }
-                context.startActivity(Intent.createChooser(shareIntent, "Bagikan Rekaman Layar"))
+                val chooser = Intent.createChooser(shareIntent, "Bagikan Rekaman Layar").apply {
+                    if (context !is Activity) {
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    }
+                }
+                context.startActivity(chooser)
             } catch (e: Exception) {
                 e.printStackTrace()
             }
@@ -152,7 +163,11 @@ object SaveTransitionDialog {
         view.findViewById<Button>(R.id.btn_save_dialog_library)?.setOnClickListener {
             dialog.dismiss()
             if (context !is LibraryActivity) {
-                val intent = Intent(context, LibraryActivity::class.java)
+                val intent = Intent(context, LibraryActivity::class.java).apply {
+                    if (context !is Activity) {
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    }
+                }
                 context.startActivity(intent)
             }
         }

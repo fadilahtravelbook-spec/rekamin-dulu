@@ -47,5 +47,46 @@ object MicrophoneSelector {
     fun isUnprocessedSupported(): Boolean {
         return Build.VERSION.SDK_INT >= Build.VERSION_CODES.N
     }
+
+    /**
+     * Sumber audio hardware terbaik untuk mode audio internal game (low-latency & frekuensi penuh).
+     * Mencegah pemotongan frekuensi bass/treble yang disebabkan oleh filter pengenal suara (Voice Recognition).
+     */
+    fun getGameAudioSource(): Int {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            MediaRecorder.AudioSource.VOICE_PERFORMANCE
+        } else {
+            MediaRecorder.AudioSource.DEFAULT
+        }
+    }
+
+    /**
+     * Daftar urutan fallback sumber audio jika hardware menolak input pilihan pertama.
+     */
+    fun getFallbackAudioSources(primarySource: Int): IntArray {
+        return when (primarySource) {
+            MediaRecorder.AudioSource.CAMCORDER -> intArrayOf(
+                MediaRecorder.AudioSource.CAMCORDER,
+                MediaRecorder.AudioSource.MIC,
+                MediaRecorder.AudioSource.DEFAULT
+            )
+            MediaRecorder.AudioSource.VOICE_COMMUNICATION -> intArrayOf(
+                MediaRecorder.AudioSource.VOICE_COMMUNICATION,
+                MediaRecorder.AudioSource.MIC,
+                MediaRecorder.AudioSource.DEFAULT
+            )
+            MediaRecorder.AudioSource.VOICE_RECOGNITION -> intArrayOf(
+                MediaRecorder.AudioSource.VOICE_RECOGNITION,
+                MediaRecorder.AudioSource.MIC,
+                MediaRecorder.AudioSource.DEFAULT
+            )
+            else -> {
+                val list = mutableListOf(primarySource)
+                if (primarySource != MediaRecorder.AudioSource.MIC) list.add(MediaRecorder.AudioSource.MIC)
+                if (primarySource != MediaRecorder.AudioSource.DEFAULT) list.add(MediaRecorder.AudioSource.DEFAULT)
+                list.toIntArray()
+            }
+        }
+    }
 }
 

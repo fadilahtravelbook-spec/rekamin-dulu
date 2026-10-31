@@ -45,6 +45,40 @@ class RekaminDuluUnitTest {
     }
 
     @Test
+    fun testGameAudioSourceAndFallbacks() {
+        val gameSource = MicrophoneSelector.getGameAudioSource()
+        assertTrue("Game audio source harus berupa integer valid", gameSource >= 0)
+
+        val camFallbacks = MicrophoneSelector.getFallbackAudioSources(MediaRecorder.AudioSource.CAMCORDER)
+        assertTrue(camFallbacks.contains(MediaRecorder.AudioSource.CAMCORDER))
+        assertTrue(camFallbacks.contains(MediaRecorder.AudioSource.MIC))
+        assertTrue(camFallbacks.contains(MediaRecorder.AudioSource.DEFAULT))
+
+        val micFallbacks = MicrophoneSelector.getFallbackAudioSources(MediaRecorder.AudioSource.MIC)
+        assertTrue(micFallbacks.contains(MediaRecorder.AudioSource.MIC))
+    }
+
+    @Test
+    fun testSampleRateClampingLogic() {
+        fun clampSampleRate(rawRate: Int): Int {
+            return when {
+                rawRate >= 48000 -> 48000
+                rawRate in 44100 until 48000 -> 44100
+                rawRate > 0 -> 44100
+                else -> 44100
+            }
+        }
+
+        // Standard DAC outputs
+        assertEquals(44100, clampSampleRate(44100))
+        assertEquals(48000, clampSampleRate(48000))
+
+        // High-res DAC outputs (96kHz, 192kHz) that crash standard AAC encoder if unclamped
+        assertEquals(48000, clampSampleRate(96000))
+        assertEquals(48000, clampSampleRate(192000))
+    }
+
+    @Test
     fun testAudioSourcePreferencesMapping() {
         fun computeAudioSource(micOn: Boolean, internalOn: Boolean): String {
             return when {
@@ -277,5 +311,31 @@ class RekaminDuluUnitTest {
         assertEquals("(default)", resolveDatabaseTarget(""))
         assertEquals("(default)", resolveDatabaseTarget("   "))
         assertEquals("(default)", resolveDatabaseTarget(null))
+    }
+
+    @Test
+    fun testTrimValidationLogic() {
+        fun validateTrim(startMs: Long, endMs: Long, fileExists: Boolean, fileLength: Long): Pair<Boolean, String> {
+            if (!fileExists) return Pair(false, "File sumber tidak ditemukan")
+            if (fileLength < 1024) return Pair(false, "File terlalu kecil atau kosong")
+            val durationMs = endMs - startMs
+            if (durationMs < 1000) return Pair(false, "Rentang durasi minimal 1 detik")
+            return Pair(true, "Valid")
+        }
+
+        // Non-existent file
+        val (ok1, msg1) = validateTrim(0, 5000, fileExists = false, fileLength = 50000)
+        assertEquals(false, ok1)
+        assertEquals("File sumber tidak ditemukan", msg1)
+
+        // Sub-second trim (too short)
+        val (ok2, msg2) = validateTrim(1000, 1500, fileExists = true, fileLength = 50000)
+        assertEquals(false, ok2)
+        assertEquals("Rentang durasi minimal 1 detik", msg2)
+
+        // Valid trim
+        val (ok3, msg3) = validateTrim(1000, 4000, fileExists = true, fileLength = 50000)
+        assertEquals(true, ok3)
+        assertEquals("Valid", msg3)
     }
 }

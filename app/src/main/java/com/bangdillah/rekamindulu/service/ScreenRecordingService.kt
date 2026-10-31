@@ -569,50 +569,60 @@ open class ScreenRecordingService : Service() {
                 MediaRecorder()
             }
 
+            var sourceSet = false
             return try {
                 mediaRecorder?.apply {
                     if (withAudio) {
-                        val src = audioSourceOverride ?: try {
-                            if (isInternalOnly && prefs.internalAudioStabilizer) {
-                                MediaRecorder.AudioSource.VOICE_RECOGNITION
-                            } else {
-                                com.bangdillah.rekamindulu.audio.MicrophoneSelector.getAudioSource(prefs.micType)
-                            }
-                        } catch (e: Exception) {
-                            MediaRecorder.AudioSource.MIC
+                        val candidateSources = if (audioSourceOverride != null) {
+                            com.bangdillah.rekamindulu.audio.MicrophoneSelector.getFallbackAudioSources(audioSourceOverride)
+                        } else if (isInternalOnly) {
+                            intArrayOf(
+                                com.bangdillah.rekamindulu.audio.MicrophoneSelector.getGameAudioSource(),
+                                MediaRecorder.AudioSource.DEFAULT,
+                                MediaRecorder.AudioSource.MIC
+                            )
+                        } else {
+                            val primary = com.bangdillah.rekamindulu.audio.MicrophoneSelector.getAudioSource(prefs.micType)
+                            com.bangdillah.rekamindulu.audio.MicrophoneSelector.getFallbackAudioSources(primary)
                         }
 
-                        var sourceSet = false
-                        try {
-                            setAudioSource(src)
-                            sourceSet = true
-                        } catch (eSrc: Exception) {
-                            Log.w(TAG, "Audio source $src ditolak, coba MIC", eSrc)
+                        for (src in candidateSources) {
+                            try {
+                                setAudioSource(src)
+                                sourceSet = true
+                                Log.i(TAG, "Audio source $src berhasil disetel untuk perekaman")
+                                break
+                            } catch (eSrc: Exception) {
+                                Log.w(TAG, "Audio source $src ditolak oleh sistem hardware: ${eSrc.message}")
+                            }
                         }
 
                         if (!sourceSet) {
-                            try {
-                                reset()
-                                setAudioSource(MediaRecorder.AudioSource.MIC)
-                                sourceSet = true
-                            } catch (eMic: Exception) {
-                                Log.w(TAG, "MIC standar juga ditolak, coba DEFAULT", eMic)
-                                try {
-                                    reset()
-                                    setAudioSource(MediaRecorder.AudioSource.DEFAULT)
-                                    sourceSet = true
-                                } catch (ignored: Exception) {}
-                            }
+                            Log.w(TAG, "Semua audio source hardware ditolak, beralih ke video-only")
                         }
                     }
 
                     setVideoSource(MediaRecorder.VideoSource.SURFACE)
                     setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
 
-                    if (withAudio) {
+                    if (withAudio && sourceSet) {
                         try {
                             setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
-                            setAudioChannels(1)
+
+                            // Prefer stereo (2 kanal) untuk mode Game & Camcorder, fallback ke mono 1 kanal
+                            val preferStereo = isInternalOnly || prefs.micType == "camcorder" || prefs.audioSource == "BOTH"
+                            var channelSet = false
+                            if (preferStereo) {
+                                try {
+                                    setAudioChannels(2)
+                                    channelSet = true
+                                } catch (eStereo: Exception) {
+                                    Log.w(TAG, "Stereo 2 kanal ditolak, fallback ke mono: ${eStereo.message}")
+                                }
+                            }
+                            if (!channelSet) {
+                                try { setAudioChannels(1) } catch (ignored: Exception) {}
+                            }
 
                             val sampleRate = try {
                                 com.bangdillah.rekamindulu.audio.AudioHelper.getOptimalSampleRate(this@ScreenRecordingService)
@@ -625,8 +635,9 @@ open class ScreenRecordingService : Service() {
                                 try { setAudioSamplingRate(44100) } catch (ignored: Exception) {}
                             }
 
+                            val targetBitrate = if (preferStereo) 160000 else 128000
                             try {
-                                setAudioEncodingBitRate(128000)
+                                setAudioEncodingBitRate(targetBitrate)
                             } catch (eBitrate: Exception) {
                                 try { setAudioEncodingBitRate(96000) } catch (ignored: Exception) {}
                             }
@@ -688,8 +699,8 @@ open class ScreenRecordingService : Service() {
 
         val initialBitrate = (prefs.bitrateMbps * 1_000_000).coerceIn(1_000_000, 30_000_000)
         val initialFps = prefs.fps
-        val preferredAudioSource = if (isInternalOnly && prefs.internalAudioStabilizer) {
-            MediaRecorder.AudioSource.VOICE_RECOGNITION
+        val preferredAudioSource = if (isInternalOnly) {
+            com.bangdillah.rekamindulu.audio.MicrophoneSelector.getGameAudioSource()
         } else {
             com.bangdillah.rekamindulu.audio.MicrophoneSelector.getAudioSource(prefs.micType)
         }
@@ -792,7 +803,24 @@ open class ScreenRecordingService : Service() {
         if (wantsAudio) {
             try {
                 mediaRecorder?.apply {
-                    setAudioSource(MediaRecorder.AudioSource.MIC)
+                    val fallbackSource = if (prefs.audioSource == "INTERNAL") {
+                        com.bangdillah.rekamindulu.audio.MicrophoneSelector.getGameAudioSource()
+                    } else {
+                        MediaRecorder.AudioSource.MIC
+                    }
+                    val candidates = com.bangdillah.rekamindulu.audio.MicrophoneSelector.getFallbackAudioSources(fallbackSource)
+                    var sourceSet = false
+                    for (src in candidates) {
+                        try {
+                            setAudioSource(src)
+                            sourceSet = true
+                            break
+                        } catch (e: Exception) {
+                            Log.w(TAG, "Fallback setAudioSource $src failed: ${e.message}")
+                        }
+                    }
+                    if (!sourceSet) throw IllegalStateException("Tidak ada sumber audio yang diterima")
+
                     setVideoSource(MediaRecorder.VideoSource.SURFACE)
                     setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
                     setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
@@ -880,11 +908,6 @@ open class ScreenRecordingService : Service() {
             currentActiveFilePath = null
             isPaused = false
             timerHandler.removeCallbacks(timerRunnable)
-
-            try {
-                val audioManager = getSystemService(Context.AUDIO_SERVICE) as? android.media.AudioManager
-                audioManager?.isMicrophoneMute = false
-            } catch (ignored: Exception) {}
 
             unregisterScreenOffReceiver()
             releaseWakeLock()
@@ -1305,10 +1328,6 @@ open class ScreenRecordingService : Service() {
         if (isRecording || isPaused) {
             stopRecording()
         }
-        try {
-            val audioManager = getSystemService(Context.AUDIO_SERVICE) as? android.media.AudioManager
-            audioManager?.isMicrophoneMute = false
-        } catch (ignored: Exception) {}
         unregisterScreenOffReceiver()
         releaseWakeLock()
     }

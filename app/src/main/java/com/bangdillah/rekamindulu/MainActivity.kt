@@ -108,13 +108,19 @@ open class MainActivity : AppCompatActivity() {
             initiateScreenCaptureFlow()
         } else {
             // Audio permission denied by user
-            if (isMicOn) {
+            if (isMicOn || isGameAudioOn) {
+                val audioType = when {
+                    isMicOn && isGameAudioOn -> "suara mikrofon dan audio game"
+                    isMicOn -> "suara mikrofon"
+                    else -> "audio internal game"
+                }
                 MaterialAlertDialogBuilder(this)
-                    .setTitle("🎤 Izin Mikrofon Diperlukan")
-                    .setMessage("Izin mikrofon dibutuhkan agar rekaman layar memiliki suara atau vokal Anda. Apakah Anda ingin tetap merekam tanpa suara (Mute), atau buka Pengaturan untuk mengaktifkan izin?")
+                    .setTitle("🎙️ Izin Audio Diperlukan")
+                    .setMessage("Izin audio dibutuhkan agar rekaman layar memiliki $audioType Anda. Apakah Anda ingin tetap merekam tanpa suara (Mute), atau buka Pengaturan untuk mengaktifkan izin?")
                     .setIcon(R.drawable.ic_mic_off)
                     .setPositiveButton("Tetap Rekam (Mute)") { _, _ ->
                         isMicOn = false
+                        isGameAudioOn = false
                         syncAudioPreferences()
                         updateAudioToggleViews()
                         initiateScreenCaptureFlow()
@@ -1313,8 +1319,9 @@ open class MainActivity : AppCompatActivity() {
      * Mencakup RECORD_AUDIO (jika mikrofon aktif) dan POST_NOTIFICATIONS (Android 13+).
      */
     fun getRequiredRuntimePermissions(): Array<String> {
+        syncAudioPreferences()
         val permissions = mutableListOf<String>()
-        if (isMicOn || isGameAudioOn || appPreferences.audioSource != "MUTE") {
+        if (isMicOn || isGameAudioOn) {
             permissions.add(Manifest.permission.RECORD_AUDIO)
         }
         if (appPreferences.facecamMode != "OFF") {
