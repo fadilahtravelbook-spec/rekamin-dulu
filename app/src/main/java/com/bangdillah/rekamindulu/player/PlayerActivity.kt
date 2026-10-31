@@ -44,6 +44,9 @@ class PlayerActivity : AppCompatActivity() {
     private val speedLabels = arrayOf("0.5x", "0.75x", "1.0x (Normal)", "1.25x", "1.5x", "2.0x")
     private val speedValues = floatArrayOf(0.5f, 0.75f, 1.0f, 1.25f, 1.5f, 2.0f)
 
+    private var restoredPosition = 0
+    private var restoredWasPlaying = true
+
     private var areControlsVisible = true
 
     private val handler = Handler(Looper.getMainLooper())
@@ -80,6 +83,16 @@ class PlayerActivity : AppCompatActivity() {
         topBar = findViewById(R.id.player_top_bar)
         bottomPanel = findViewById(R.id.player_bottom_panel)
         btnSpeed = findViewById(R.id.btn_playback_speed)
+
+        if (savedInstanceState != null) {
+            restoredPosition = savedInstanceState.getInt("KEY_PLAYBACK_POSITION", 0)
+            restoredWasPlaying = savedInstanceState.getBoolean("KEY_WAS_PLAYING", true)
+            currentSpeedIndex = savedInstanceState.getInt("KEY_SPEED_INDEX", 2)
+        }
+
+        if (currentSpeedIndex != 2) {
+            btnSpeed?.text = "⚡ ${speedLabels[currentSpeedIndex].split(" ")[0]}"
+        }
 
         val videoPath = intent.getStringExtra("VIDEO_PATH")
         if (videoPath.isNullOrEmpty()) {
@@ -320,10 +333,27 @@ class PlayerActivity : AppCompatActivity() {
             val duration = mp.duration
             seekBar?.max = duration
             totalTimeText?.text = formatTime(duration)
-            videoView?.start()
-            playPauseBtn?.setImageResource(R.drawable.ic_pause)
-            handler.post(updateSeekRunnable)
-            scheduleControlsAutoHide()
+
+            if (currentSpeedIndex != 2) {
+                val speed = speedValues[currentSpeedIndex]
+                applyPlaybackSpeed(speed)
+            }
+
+            if (restoredPosition > 0) {
+                videoView?.seekTo(restoredPosition)
+                seekBar?.progress = restoredPosition
+                currentTimeText?.text = formatTime(restoredPosition)
+            }
+
+            if (restoredWasPlaying) {
+                videoView?.start()
+                playPauseBtn?.setImageResource(R.drawable.ic_pause)
+                handler.post(updateSeekRunnable)
+                scheduleControlsAutoHide()
+            } else {
+                playPauseBtn?.setImageResource(R.drawable.ic_play_arrow)
+                showControls()
+            }
         }
 
         videoView?.setOnCompletionListener {
@@ -437,13 +467,27 @@ class PlayerActivity : AppCompatActivity() {
         }.start()
     }
 
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        val pos = videoView?.currentPosition ?: restoredPosition
+        val playing = videoView?.isPlaying ?: restoredWasPlaying
+        outState.putInt("KEY_PLAYBACK_POSITION", pos)
+        outState.putBoolean("KEY_WAS_PLAYING", playing)
+        outState.putInt("KEY_SPEED_INDEX", currentSpeedIndex)
+    }
+
     override fun onPause() {
         super.onPause()
         if (videoView?.isPlaying == true) {
+            restoredPosition = videoView?.currentPosition ?: 0
+            restoredWasPlaying = true
             videoView?.pause()
             playPauseBtn?.setImageResource(R.drawable.ic_play_arrow)
             handler.removeCallbacks(updateSeekRunnable)
             handler.removeCallbacks(hideControlsRunnable)
+        } else {
+            restoredPosition = videoView?.currentPosition ?: restoredPosition
+            restoredWasPlaying = false
         }
     }
 

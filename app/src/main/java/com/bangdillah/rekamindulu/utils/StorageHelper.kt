@@ -95,6 +95,12 @@ object StorageHelper {
         for (file in files) {
             if (file.isFile && file.name.endsWith(".mp4", ignoreCase = true)) {
                 if (file.length() < 10240) {
+                    // Jangan hapus jika file sedang aktif direkam oleh ScreenRecordingService
+                    if (com.bangdillah.rekamindulu.service.ScreenRecordingService.isRecording &&
+                        com.bangdillah.rekamindulu.service.ScreenRecordingService.currentActiveFilePath == file.absolutePath
+                    ) {
+                        continue
+                    }
                     // Hapus file dummy / rusak / tidak memiliki frame
                     try {
                         file.delete()

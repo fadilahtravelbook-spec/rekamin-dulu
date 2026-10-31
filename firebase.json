@@ -1,0 +1,8 @@
+{
+  "firestore": [
+    {
+      "database": "ai-studio-android-rekamind-5a4c5140-0e5d-478e-b0a1-33a67abd1f30",
+      "rules": "firestore.rules"
+    }
+  ]
+}

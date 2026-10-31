@@ -35,6 +35,10 @@ import com.bangdillah.rekamindulu.utils.SelectionOption
 import com.bangdillah.rekamindulu.utils.StorageHelper
 import com.google.android.material.bottomnavigation.BottomNavigationView
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import androidx.lifecycle.lifecycleScope
+import com.bangdillah.rekamindulu.backend.FirebaseAuthManager
+import com.bangdillah.rekamindulu.backend.FirebaseVideoRepository
+import kotlinx.coroutines.launch
 import java.io.File
 import java.util.Locale
 
@@ -43,6 +47,8 @@ class LibraryActivity : AppCompatActivity() {
     private lateinit var adapter: LibraryAdapter
     private val allVideoFiles = mutableListOf<File>()
     private val displayedVideoFiles = mutableListOf<File>()
+    private var authManager: FirebaseAuthManager? = null
+    private var videoRepository: FirebaseVideoRepository? = null
 
     private var currentSortOrder = 0 // 0: Terbaru, 1: Terlama, 2: Nama A-Z, 3: Nama Z-A, 4: Terbesar, 5: Terkecil
     private var currentFilterMode = 0 // 0: Semua, 1: Game, 2: Hari Ini, 3: > 1 Menit
@@ -67,6 +73,15 @@ class LibraryActivity : AppCompatActivity() {
                         ?: ScreenRecordingService.lastRecordedFilePath
                     updateRecordingIndicator()
                     loadVideoFiles()
+                    val currentUser = authManager?.currentUser
+                    if (currentUser != null && !path.isNullOrEmpty()) {
+                        val file = File(path)
+                        if (file.exists() && file.length() > 10240) {
+                            lifecycleScope.launch {
+                                videoRepository?.syncSingleFile(this@LibraryActivity, currentUser.uid, file)
+                            }
+                        }
+                    }
                     if (!path.isNullOrEmpty()) {
                         SaveTransitionDialog.show(this@LibraryActivity, path) {
                             loadVideoFiles()
@@ -84,6 +99,9 @@ class LibraryActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.library_screen)
         supportActionBar?.hide()
+
+        authManager = FirebaseAuthManager.getInstance(this)
+        videoRepository = FirebaseVideoRepository(this)
 
         val recyclerView = findViewById<RecyclerView>(R.id.library_recycler_view)
         recyclerView?.layoutManager = LinearLayoutManager(this)
@@ -411,11 +429,13 @@ class LibraryActivity : AppCompatActivity() {
         val totalCount = allVideoFiles.size
         val totalBytes = allVideoFiles.sumOf { it.length() }
         val totalMb = totalBytes / (1024.0 * 1024.0)
+        val isCloudActive = authManager?.isUserSignedIn == true
+        val cloudStatus = if (isCloudActive) " • ☁️ Cloud Aktif" else ""
 
         textSummary?.text = if (totalCount == 0) {
-            "Belum ada rekaman tersimpan"
+            "Belum ada rekaman tersimpan$cloudStatus"
         } else {
-            String.format(Locale.getDefault(), "%d Video Tersimpan • %.1f MB Digunakan", totalCount, totalMb)
+            String.format(Locale.getDefault(), "%d Video Tersimpan • %.1f MB Digunakan%s", totalCount, totalMb, cloudStatus)
         }
     }
 
@@ -499,6 +519,14 @@ class LibraryActivity : AppCompatActivity() {
 
                 val success = file.renameTo(targetFile)
                 if (success) {
+                    val oldDocId = file.nameWithoutExtension.replace("[^a-zA-Z0-9_-]".toRegex(), "_")
+                    val currentUser = authManager?.currentUser
+                    if (currentUser != null) {
+                        lifecycleScope.launch {
+                            videoRepository?.deleteRecording(currentUser.uid, oldDocId)
+                            videoRepository?.syncSingleFile(this@LibraryActivity, currentUser.uid, targetFile)
+                        }
+                    }
                     StorageHelper.scanRenamedFile(this, file, targetFile)
                     Toast.makeText(this, "Nama rekaman berhasil diubah", Toast.LENGTH_SHORT).show()
                     loadVideoFiles()
@@ -517,6 +545,13 @@ class LibraryActivity : AppCompatActivity() {
             .setIcon(R.drawable.ic_delete)
             .setPositiveButton("Hapus") { _, _ ->
                 if (file.exists()) {
+                    val docId = file.nameWithoutExtension.replace("[^a-zA-Z0-9_-]".toRegex(), "_")
+                    val currentUser = authManager?.currentUser
+                    if (currentUser != null) {
+                        lifecycleScope.launch {
+                            videoRepository?.deleteRecording(currentUser.uid, docId)
+                        }
+                    }
                     StorageHelper.scanDeletedFile(this, file)
                     file.delete()
                     Toast.makeText(this, "Rekaman video berhasil dihapus", Toast.LENGTH_SHORT).show()

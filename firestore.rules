@@ -12,13 +12,13 @@ service cloud.firestore {
 
     // Profil pengguna: Hanya pemilik akun yang dapat membaca & menulis datanya
     match /users/{userId} {
-      allow read, update, delete: if isOwner(userId);
-      allow create: if isAuthenticated() && request.auth.uid == userId;
+      allow read, delete: if isOwner(userId);
+      allow create, update: if isOwner(userId);
 
       // Katalog & riwayat rekaman video milik pengguna
       match /recordings/{recordingId} {
-        allow read, update, delete: if isOwner(userId);
-        allow create: if isOwner(userId) && request.resource.data.userId == userId;
+        allow read, delete: if isOwner(userId);
+        allow create, update: if isOwner(userId);
       }
     }
 

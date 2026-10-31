@@ -287,6 +287,18 @@ class TrimActivity : AppCompatActivity() {
                     // Daftarkan ke MediaStore dan Galeri Ponsel
                     StorageHelper.scanVideoFile(this@TrimActivity, outputFile)
 
+                    // Sinkronisasi klip video hasil pemotongan ke katalog Cloud Firestore
+                    val authManager = com.bangdillah.rekamindulu.backend.FirebaseAuthManager.getInstance(this@TrimActivity)
+                    val currentUser = authManager.currentUser
+                    if (currentUser != null) {
+                        Thread {
+                            val repo = com.bangdillah.rekamindulu.backend.FirebaseVideoRepository(this@TrimActivity)
+                            kotlinx.coroutines.runBlocking {
+                                repo.syncSingleFile(this@TrimActivity, currentUser.uid, outputFile)
+                            }
+                        }.start()
+                    }
+
                     MaterialAlertDialogBuilder(this@TrimActivity)
                         .setIcon(R.drawable.ic_check_circle)
                         .setTitle("Pemotongan Berhasil! 🎉")

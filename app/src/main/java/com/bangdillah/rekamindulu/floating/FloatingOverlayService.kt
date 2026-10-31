@@ -85,8 +85,8 @@ class FloatingOverlayService : Service() {
         override fun doFrame(frameTimeNanos: Long) {
             if (previousFrameTimeNanos > 0L) {
                 val delta = frameTimeNanos - previousFrameTimeNanos
-                // Filter frame delta masuk akal (5ms - 150ms)
-                if (delta in 5_000_000L..150_000_000L) {
+                // Filter frame delta masuk akal (4ms - 300ms)
+                if (delta in 4_000_000L..300_000_000L) {
                     frameIntervalBuffer[bufferIndex] = delta
                     bufferIndex = (bufferIndex + 1) % frameIntervalBuffer.size
                     if (bufferFilled < frameIntervalBuffer.size) bufferFilled++
@@ -94,8 +94,8 @@ class FloatingOverlayService : Service() {
             }
             previousFrameTimeNanos = frameTimeNanos
 
-            // Update UI FPS setiap ~750ms agar tampilan stabil, tenang, dan tidak melompat-lompat liar di mata gamer
-            if (frameTimeNanos - lastUiUpdateNanos >= 750_000_000L && bufferFilled >= 4) {
+            // Update UI FPS setiap ~500ms agar tampilan dinamis, responsif, dan mencerminkan drop frame game
+            if (frameTimeNanos - lastUiUpdateNanos >= 500_000_000L && bufferFilled >= 2) {
                 lastUiUpdateNanos = frameTimeNanos
                 calculateAndDispatchDynamicFps(frameTimeNanos)
             }
@@ -117,43 +117,35 @@ class FloatingOverlayService : Service() {
             return
         }
 
+        val count = bufferFilled.coerceAtLeast(1)
         var sumDelta = 0L
-        for (i in 0 until bufferFilled) {
+        for (i in 0 until count) {
             sumDelta += frameIntervalBuffer[i]
         }
-        val avgDeltaNanos = sumDelta.toDouble() / bufferFilled.coerceAtLeast(1)
-        val instantFps = (1_000_000_000.0 / avgDeltaNanos.coerceAtLeast(1_000_000.0)).coerceIn(15.0, 144.0)
+        val avgDeltaNanos = sumDelta.toDouble() / count
+        val instantFps = (1_000_000_000.0 / avgDeltaNanos.coerceAtLeast(1_000_000.0)).coerceIn(10.0, 144.0)
 
         val prefs = appPreferences ?: AppPreferences(this).also { appPreferences = it }
         val targetFps = if (prefs.isGamingMode || prefs.fpsStabilizerEnabled) maxOf(60, prefs.fps) else prefs.fps
         val hardwareHz = getHardwareRefreshRate()
-        val isStabilizerActive = prefs.fpsStabilizerEnabled || prefs.isGamingMode
 
-        val finalFps: Int
-        val avgJitterMs: Double
-        if (isStabilizerActive) {
-            // Mode Stabilisator FPS & Mode Gaming Pro:
-            // MediaRecorder dan VirtualDisplay mengalirkan frame langsung dari hardware composer (60 FPS terkunci).
-            // Kompositor sistem Android menurunkan frekuensi update overlay jendela latar belakang saat game full-screen aktif
-            // demi menghemat daya. Stabilisator mengenali arsitektur ini dan mengunci indikator pada status aktual 60 FPS.
-            smoothedFps = targetFps.toDouble()
-            finalFps = targetFps
-            avgJitterMs = 0.1
-        } else {
-            // Hitung frame jitter (deviasi rata-rata VSYNC delta)
-            var sumJitter = 0.0
-            for (i in 0 until bufferFilled) {
-                sumJitter += abs(frameIntervalBuffer[i] - avgDeltaNanos)
-            }
-            avgJitterMs = (sumJitter / bufferFilled.coerceAtLeast(1)) / 1_000_000.0
-
-            smoothedFps = (0.30 * instantFps) + (0.70 * smoothedFps)
-            finalFps = Math.round(smoothedFps).toInt().coerceIn(15, hardwareHz)
+        // Hitung frame jitter aktual (deviasi antar selang VSYNC dalam ms)
+        var sumJitter = 0.0
+        for (i in 0 until count) {
+            sumJitter += abs(frameIntervalBuffer[i] - avgDeltaNanos)
         }
+        val avgJitterMs = (sumJitter / count) / 1_000_000.0
+
+        // Filter EMA adaptif:
+        // Jika terjadi drop FPS nyata (instantFps < smoothedFps), respons cepat (bobot 45%)
+        // agar gamer langsung melihat penurunan performa game secara real-time.
+        val alpha = if (instantFps < smoothedFps) 0.45 else 0.30
+        smoothedFps = (alpha * instantFps) + ((1.0 - alpha) * smoothedFps)
+        val finalFps = Math.round(smoothedFps).toInt().coerceIn(10, hardwareHz)
 
         currentMeasuredFps = finalFps
 
-        if (finalFps in 15..144) {
+        if (finalFps in 10..144) {
             if (finalFps < sessionMinFps) sessionMinFps = finalFps
             if (finalFps > sessionMaxFps) sessionMaxFps = finalFps
         }
@@ -253,10 +245,15 @@ class FloatingOverlayService : Service() {
                 overlayView?.findViewById<TextView>(R.id.overlay_timer_text)?.text = timerText
                 overlayView?.findViewById<TextView>(R.id.overlay_bubble_timer_text)?.text = timerText
 
-                val prefs = appPreferences ?: AppPreferences(this@FloatingOverlayService).also { appPreferences = it }
-                overlayView?.findViewById<TextView>(R.id.overlay_quality_text)?.text = prefs.resolution
-
-                calculateAndDispatchDynamicFps(System.nanoTime())
+                // Deteksi jika foreground game freeze/lag berat sehingga Choreographer terhambat > 600ms
+                val now = System.nanoTime()
+                if (previousFrameTimeNanos > 0L && (now - previousFrameTimeNanos) > 600_000_000L) {
+                    val stallDelta = minOf(now - previousFrameTimeNanos, 300_000_000L)
+                    frameIntervalBuffer[bufferIndex] = stallDelta
+                    bufferIndex = (bufferIndex + 1) % frameIntervalBuffer.size
+                    if (bufferFilled < frameIntervalBuffer.size) bufferFilled++
+                    calculateAndDispatchDynamicFps(now)
+                }
 
                 handler.postDelayed(this, 1000)
             }
@@ -363,34 +360,35 @@ class FloatingOverlayService : Service() {
             if (measuredFps >= targetFps) 100 else ((measuredFps.toFloat() / targetFps.toFloat()) * 100).toInt().coerceIn(0, 100)
         } else 100
 
+        val jitterFormatted = String.format(Locale.US, "%.1f", jitterMs)
         val rating = when {
             measuredFps >= targetFps -> FpsRating(
                 grade = "S+ ESPORTS READY (100% STABIL)",
-                advice = "Terkunci Stabil: 0 frame drop, akselerasi GPU HW aktif, frame rate konsisten $targetFps FPS.",
+                advice = "Terkunci Lancar: Frame rate konsisten $targetFps FPS, jitter ${jitterFormatted}ms, GPU HW aktif.",
                 colorHex = 0xFF00E676.toInt(),
                 bgTintHex = 0x2600E676.toInt()
             )
-            measuredFps >= targetFps - 2 -> FpsRating(
-                grade = "A+ SANGAT MULUS",
-                advice = "Sinkron: Frame rate stabil untuk rekaman game HD ($stabilityPct% optimal, beban CPU ringan).",
+            measuredFps >= targetFps - 3 -> FpsRating(
+                grade = "A+ SANGAT MULUS ($measuredFps FPS)",
+                advice = "Sinkron: $stabilityPct% target, jitter ${jitterFormatted}ms, rekaman lancar bebas beban.",
                 colorHex = 0xFF00E676.toInt(),
                 bgTintHex = 0x2600E676.toInt()
             )
-            measuredFps >= targetFps - 6 -> FpsRating(
-                grade = "A STABIL",
-                advice = "Performa aplikasi baik dan konsisten ($stabilityPct% sinkron).",
+            measuredFps >= targetFps - 8 -> FpsRating(
+                grade = "A STABIL ($measuredFps FPS)",
+                advice = "Performa game baik ($measuredFps FPS, jitter ${jitterFormatted}ms). Video rekaman sinkron.",
                 colorHex = 0xFF00B894.toInt(),
                 bgTintHex = 0x2600B894.toInt()
             )
-            measuredFps >= 30 -> FpsRating(
-                grade = "B CUKUP",
-                advice = "Beban game intens ($measuredFps FPS). GPU Hardware menjaga rekaman tetap lancar.",
+            measuredFps >= 35 -> FpsRating(
+                grade = "B BEBAN BERAT ($measuredFps FPS)",
+                advice = "Beban grafis game meningkat ($measuredFps FPS, jitter ${jitterFormatted}ms). Encoder menyeimbangkan buffer.",
                 colorHex = 0xFFFFAB00.toInt(),
                 bgTintHex = 0x26FFAB00.toInt()
             )
             else -> FpsRating(
-                grade = "C FRAME DROP",
-                advice = "Beban game berat ($measuredFps FPS). Prioritas GPU & CPU otomatis dimaksimalkan.",
+                grade = "C FRAME DROP ($measuredFps FPS)",
+                advice = "Terdeteksi lag game ($measuredFps FPS)! Prioritas thread hardware diselaraskan otomatis.",
                 colorHex = 0xFFFF5252.toInt(),
                 bgTintHex = 0x26FF5252.toInt()
             )

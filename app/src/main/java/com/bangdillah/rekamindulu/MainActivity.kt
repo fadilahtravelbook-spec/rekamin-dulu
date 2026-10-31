@@ -163,6 +163,15 @@ open class MainActivity : AppCompatActivity() {
                     updateRecordingBanner()
                     updateLibraryStats()
                     updateHomeRecordingsList()
+                    val currentUser = authManager?.currentUser
+                    if (currentUser != null && !path.isNullOrEmpty()) {
+                        val file = File(path)
+                        if (file.exists() && file.length() > 10240) {
+                            lifecycleScope.launch {
+                                videoRepository?.syncSingleFile(this@MainActivity, currentUser.uid, file)
+                            }
+                        }
+                    }
                     if (!path.isNullOrEmpty() && File(path).exists() && File(path).length() > 10240) {
                         showSaveSuccessToast(path)
                         SaveTransitionDialog.show(this@MainActivity, path) {
@@ -245,6 +254,22 @@ open class MainActivity : AppCompatActivity() {
                     textSubtitle?.text = "☁️ Terhubung: ${user.email ?: "Cloud Aktif"}"
                     btnAuth?.isEnabled = true
                     btnAuth?.text = "Keluar"
+                    val imgAvatar = findViewById<ImageView>(R.id.img_cloud_user_avatar)
+                    val avatarUrl = user.photoUrl?.toString()
+                    if (!avatarUrl.isNullOrBlank() && imgAvatar != null && !isFinishing && !isDestroyed) {
+                        try {
+                            com.bumptech.glide.Glide.with(this@MainActivity)
+                                .load(avatarUrl)
+                                .circleCrop()
+                                .placeholder(R.drawable.ic_storage)
+                                .into(imgAvatar)
+                        } catch (e: Exception) {
+                            imgAvatar.setImageResource(R.drawable.ic_storage)
+                        }
+                    } else {
+                        imgAvatar?.setImageResource(R.drawable.ic_storage)
+                    }
+
                     btnAuth?.setOnClickListener {
                         MaterialAlertDialogBuilder(this)
                             .setTitle("Keluar Akun Google")
@@ -282,6 +307,7 @@ open class MainActivity : AppCompatActivity() {
                     btnAuth?.isEnabled = false
                 }
                 is AuthStatus.Error -> {
+                    findViewById<ImageView>(R.id.img_cloud_user_avatar)?.setImageResource(R.drawable.ic_storage)
                     textSubtitle?.text = "⚠️ ${status.message}"
                     btnAuth?.isEnabled = true
                     btnAuth?.text = "Login Google"
@@ -290,6 +316,7 @@ open class MainActivity : AppCompatActivity() {
                     }
                 }
                 else -> {
+                    findViewById<ImageView>(R.id.img_cloud_user_avatar)?.setImageResource(R.drawable.ic_storage)
                     textName?.text = "Google Cloud Firestore"
                     textSubtitle?.text = "☁️ Masuk untuk backup & sinkronisasi katalog"
                     btnAuth?.isEnabled = true
@@ -774,6 +801,11 @@ open class MainActivity : AppCompatActivity() {
                     startActivity(Intent(this, SettingsActivity::class.java))
                 }
             }
+            authManager?.updateUserPreferences(
+                resolution = appPreferences.resolution,
+                fps = appPreferences.fps,
+                gamingMode = appPreferences.isGamingMode
+            )
         }
     }
 
@@ -996,6 +1028,14 @@ open class MainActivity : AppCompatActivity() {
                     return@setPositiveButton
                 }
                 if (file.renameTo(targetFile)) {
+                    val oldDocId = file.nameWithoutExtension.replace("[^a-zA-Z0-9_-]".toRegex(), "_")
+                    val currentUser = authManager?.currentUser
+                    if (currentUser != null) {
+                        lifecycleScope.launch {
+                            videoRepository?.deleteRecording(currentUser.uid, oldDocId)
+                            videoRepository?.syncSingleFile(this@MainActivity, currentUser.uid, targetFile)
+                        }
+                    }
                     StorageHelper.scanRenamedFile(this, file, targetFile)
                     Toast.makeText(this, "Nama berhasil diubah", Toast.LENGTH_SHORT).show()
                     updateHomeRecordingsList()
@@ -1069,6 +1109,13 @@ open class MainActivity : AppCompatActivity() {
             .setIcon(R.drawable.ic_delete)
             .setPositiveButton("Hapus") { _, _ ->
                 if (file.exists()) {
+                    val docId = file.nameWithoutExtension.replace("[^a-zA-Z0-9_-]".toRegex(), "_")
+                    val currentUser = authManager?.currentUser
+                    if (currentUser != null) {
+                        lifecycleScope.launch {
+                            videoRepository?.deleteRecording(currentUser.uid, docId)
+                        }
+                    }
                     StorageHelper.scanDeletedFile(this, file)
                     file.delete()
                     Toast.makeText(this, "Rekaman video berhasil dihapus", Toast.LENGTH_SHORT).show()

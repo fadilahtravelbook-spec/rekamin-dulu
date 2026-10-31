@@ -90,4 +90,23 @@ class RekaminDuluUnitTest {
         }
         assertEquals(33, lagResult)
     }
+
+    @Test
+    fun testFirestoreDocIdSanitization() {
+        val rawName = "Rekaman Layar 2026/10/31 #1.mp4"
+        val rawWithoutExt = rawName.substringBeforeLast(".")
+        val sanitized = rawWithoutExt.replace("[^a-zA-Z0-9_-]".toRegex(), "_")
+        assertEquals("Rekaman_Layar_2026_10_31__1", sanitized)
+        assertTrue(sanitized.matches("^[a-zA-Z0-9_-]+$".toRegex()))
+    }
+
+    @Test
+    fun testVideoRecordingModelDefaults() {
+        val model = com.bangdillah.rekamindulu.backend.VideoRecording()
+        assertEquals("", model.id)
+        assertEquals("", model.userId)
+        assertEquals("00:00", model.durationFormatted)
+        assertTrue(model.hasAudio)
+        assertEquals("H264", model.encoder)
+    }
 }

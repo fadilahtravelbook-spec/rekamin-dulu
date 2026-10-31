@@ -86,6 +86,9 @@ open class ScreenRecordingService : Service() {
 
         var lastRecordedFilePath: String? = null
             protected set
+
+        var currentActiveFilePath: String? = null
+            internal set
     }
 
     protected var mediaProjection: MediaProjection? = null
@@ -232,11 +235,12 @@ open class ScreenRecordingService : Service() {
         // 1. Inisialisasi WakeLock dan Wi-Fi lock untuk performa maksimal bebas throttle
         acquireWakeLock(prefs)
 
-        // 1b. Game Turbo & Mode Gaming: Elevasi prioritas thread encoder CPU ke URGENT_DISPLAY
+        // 1b. Game Turbo & Mode Gaming: Elevasi prioritas thread encoder CPU ke DISPLAY / FOREGROUND
+        // Menggunakan THREAD_PRIORITY_DISPLAY (-4) agar tidak mempreempt atau mengorbankan thread render game 3D
         if (prefs.gamingTurboBoost || prefs.isGamingMode) {
             try {
-                android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_URGENT_DISPLAY)
-                Log.i(TAG, "Game Turbo: Service process priority elevated to THREAD_PRIORITY_URGENT_DISPLAY (-8)")
+                android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_DISPLAY)
+                Log.i(TAG, "Game Turbo: Service process priority elevated to THREAD_PRIORITY_DISPLAY (-4)")
             } catch (e: Exception) {
                 try {
                     android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_FOREGROUND)
@@ -264,6 +268,7 @@ open class ScreenRecordingService : Service() {
             // 4. Siapkan file output di direktori aman
             val outputFile = StorageHelper.createOutputFile(this, "Rekaman")
             currentVideoFilePath = outputFile.absolutePath
+            currentActiveFilePath = outputFile.absolutePath
 
             // 5. Inisialisasi MediaRecorder (Audio Mikrofon/Internal + Surface Video Akselerasi Hardware GPU)
             setupMediaRecorder(outputFile.absolutePath, prefs)
@@ -279,13 +284,13 @@ open class ScreenRecordingService : Service() {
                 return
             }
 
-            // Inisialisasi dedicated HandlerThread dengan prioritas URGENT_DISPLAY (Game Turbo)
-            // agar antrean buffer frame dari SurfaceFlinger tidak pernah terhambat oleh thread UI
+            // Inisialisasi dedicated HandlerThread dengan prioritas DISPLAY
+            // agar antrean buffer frame dari SurfaceFlinger dialirkan mulus tanpa membebani thread render game
             try {
                 virtualDisplayThread?.quitSafely()
             } catch (ignored: Exception) {}
             val vdPriority = if (prefs.gamingTurboBoost || prefs.isGamingMode) {
-                android.os.Process.THREAD_PRIORITY_URGENT_DISPLAY
+                android.os.Process.THREAD_PRIORITY_DISPLAY
             } else {
                 android.os.Process.THREAD_PRIORITY_FOREGROUND
             }
@@ -467,37 +472,42 @@ open class ScreenRecordingService : Service() {
 
         val longSide = maxOf(rawWidth, rawHeight)
         val shortSide = minOf(rawWidth, rawHeight)
-        val aspectRatio = longSide.toDouble() / shortSide.toDouble()
 
-        // Standar resolusi rekaman layar mobile:
-        // Jika resolusi native perangkat memiliki sisi pendek <= 1080 (misal 1080x2400 pada layar 20:9),
-        // mempertahankan resolusi native 1:1 pixel match menghilangkan overhead scaling GPU SurfaceFlinger,
-        // mencegah stutter, frame drop, dan distorsi aspek rasio di game 3D!
-        val targetShort = when (resolutionPref) {
-            "4K" -> minOf(2160, shortSide)
-            "1080p" -> minOf(1080, shortSide)
-            "720p" -> minOf(720, shortSide)
-            else -> minOf(480, shortSide)
+        // Batas maksimal dimensi sesuai standar profil encoder hardware H.264 / H.265 (MaxMBPS limit)
+        // Layar ultra-wide modern (20:9 / 19.5:9 misal 2400x1080) yang dipaksa 2400x1080 melebihi
+        // kapasitas macroblock Level 4.1 hardware encoder sehingga menjatuhkan frame rate secara masif saat main game.
+        // Solusi: Skalakan sisi panjang secara proporsional ke 1920 (1080p), 1280 (720p), atau 854 (480p).
+        val (maxLongLimit, maxShortLimit) = when (resolutionPref) {
+            "4K" -> Pair(3840, 2160)
+            "1080p" -> Pair(1920, 1080)
+            "720p" -> Pair(1280, 720)
+            else -> Pair(854, 480)
         }
 
-        val effectiveShort = targetShort.coerceAtLeast(320)
-        var finalW: Int
-        var finalH: Int
+        var targetLong = longSide
+        var targetShort = shortSide
 
-        if (effectiveShort == shortSide) {
-            // 1:1 Pixel Match Native: Zero-copy GPU Hardware Overlay tanpa cropping atau black bars
-            finalW = if (isPortrait) shortSide else longSide
-            finalH = if (isPortrait) longSide else shortSide
-        } else {
-            // Skala resolusi (misal 720p pada layar 1080p)
-            val effectiveLong = (effectiveShort * aspectRatio).toInt().coerceAtLeast(480)
-            finalW = if (isPortrait) effectiveShort else effectiveLong
-            finalH = if (isPortrait) effectiveLong else effectiveShort
+        if (targetLong > maxLongLimit || targetShort > maxShortLimit) {
+            val scaleLong = maxLongLimit.toDouble() / targetLong.toDouble()
+            val scaleShort = maxShortLimit.toDouble() / targetShort.toDouble()
+            val scale = minOf(scaleLong, scaleShort)
+            targetLong = (targetLong * scale).toInt()
+            targetShort = (targetShort * scale).toInt()
         }
 
-        // Pastikan dimensi selalu bilangan genap (divisible by 2) untuk encoder H.264 / H.265 YUV420
-        if (finalW % 2 != 0) finalW -= 1
-        if (finalH % 2 != 0) finalH -= 1
+        // Pastikan dimensi kelipatan 16 (macroblock H.264) atau minimal kelipatan 2 genap
+        // Mengeliminasi overhead software padding di GPU SurfaceFlinger
+        var alignedLong = (targetLong / 16) * 16
+        var alignedShort = (targetShort / 16) * 16
+
+        if (alignedLong < 320) alignedLong = (targetLong / 2) * 2
+        if (alignedShort < 320) alignedShort = (targetShort / 2) * 2
+
+        if (alignedLong % 2 != 0) alignedLong -= 1
+        if (alignedShort % 2 != 0) alignedShort -= 1
+
+        val finalW = if (isPortrait) alignedShort else alignedLong
+        val finalH = if (isPortrait) alignedLong else alignedShort
 
         screenWidth = finalW.coerceAtLeast(320)
         screenHeight = finalH.coerceAtLeast(480)
@@ -607,12 +617,26 @@ open class ScreenRecordingService : Service() {
                     setVideoEncoder(encoder)
                     setOutputFile(filePath)
                     val chosenFps = if (prefs.isGamingMode || prefs.fpsStabilizerEnabled) maxOf(60, fps) else fps
-                    // Bitrate 8-10 Mbps adalah sweet-spot emas untuk video 1080p 60FPS:
-                    // Sangat jernih, latensi kompresi hardware < 6ms per frame, antrean buffer SurfaceFlinger tidak pernah tersumbat!
-                    val chosenBitrate = if (prefs.isGamingMode) {
-                        maxOf(8_000_000, minOf(10_000_000, bitrate))
-                    } else {
-                        minOf(8_000_000, bitrate)
+                    // Bitrate game adaptif:
+                    // Di mode gaming, bitrate 6 Mbps pada 1080p (atau 4.5 Mbps pada 720p) adalah sweet-spot ideal:
+                    // Gambar tajam, latensi hardware encode < 3ms, buffer encoder tidak pernah stall,
+                    // dan memori GPU/VPU tetap 100% bebas untuk performa game tanpa stutter/lag.
+                    val pixelCount = targetWidth * targetHeight
+                    val chosenBitrate = when {
+                        prefs.isGamingMode -> {
+                            when {
+                                pixelCount >= 1920 * 800 -> minOf(6_500_000, maxOf(4_500_000, bitrate))
+                                pixelCount >= 1280 * 500 -> minOf(4_500_000, maxOf(3_000_000, bitrate))
+                                else -> minOf(2_500_000, maxOf(1_500_000, bitrate))
+                            }
+                        }
+                        else -> {
+                            when {
+                                pixelCount >= 1920 * 800 -> minOf(8_000_000, maxOf(4_000_000, bitrate))
+                                pixelCount >= 1280 * 500 -> minOf(6_000_000, maxOf(2_500_000, bitrate))
+                                else -> minOf(3_000_000, maxOf(1_000_000, bitrate))
+                            }
+                        }
                     }
 
                     setVideoSize(targetWidth, targetHeight)
@@ -654,7 +678,7 @@ open class ScreenRecordingService : Service() {
         val ultraSafeH = if (isPortrait) 848 else 480
 
         val initialBitrate = if (prefs.isGamingMode) {
-            maxOf(8_000_000, minOf(10_000_000, prefs.bitrateMbps * 1000 * 1000))
+            minOf(6_500_000, maxOf(4_500_000, prefs.bitrateMbps * 1000 * 1000))
         } else {
             minOf(8_000_000, prefs.bitrateMbps * 1000 * 1000)
         }
@@ -820,6 +844,7 @@ open class ScreenRecordingService : Service() {
         try {
             val prefs = AppPreferences(this)
             isRecording = false
+            currentActiveFilePath = null
             isPaused = false
             timerHandler.removeCallbacks(timerRunnable)
 

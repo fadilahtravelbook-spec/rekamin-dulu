@@ -214,6 +214,10 @@ class SettingsActivity : AppCompatActivity() {
                 updateUIValues(skipGamingSwitch = true)
                 Toast.makeText(this, "Mode Standar: 30 FPS & 8 Mbps", Toast.LENGTH_SHORT).show()
             }
+            com.bangdillah.rekamindulu.backend.FirebaseAuthManager.getInstance(this).updateUserPreferences(
+                fps = appPreferences.fps,
+                gamingMode = isChecked
+            )
         }
 
         // FPS Stabilizer toggle
@@ -548,6 +552,9 @@ class SettingsActivity : AppCompatActivity() {
         ) { selectedResolution ->
             appPreferences.resolution = selectedResolution
             updateUIValues()
+            com.bangdillah.rekamindulu.backend.FirebaseAuthManager.getInstance(this).updateUserPreferences(
+                resolution = selectedResolution
+            )
             Toast.makeText(this, "Resolusi diubah ke $selectedResolution", Toast.LENGTH_SHORT).show()
         }
     }
@@ -595,6 +602,10 @@ class SettingsActivity : AppCompatActivity() {
             appPreferences.fps = selectedFps
             appPreferences.isGamingMode = selectedFps >= 60
             updateUIValues()
+            com.bangdillah.rekamindulu.backend.FirebaseAuthManager.getInstance(this).updateUserPreferences(
+                fps = selectedFps,
+                gamingMode = appPreferences.isGamingMode
+            )
             Toast.makeText(this, "Frame rate disetel ke $selectedFps FPS", Toast.LENGTH_SHORT).show()
         }
     }

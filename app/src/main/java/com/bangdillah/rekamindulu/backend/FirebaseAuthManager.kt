@@ -9,6 +9,7 @@ import androidx.credentials.GetCredentialRequest
 import androidx.credentials.exceptions.GetCredentialCancellationException
 import androidx.credentials.exceptions.GetCredentialException
 import com.bangdillah.rekamindulu.R
+import com.bangdillah.rekamindulu.utils.AppPreferences
 import com.google.android.libraries.identity.googleid.GetGoogleIdOption
 import com.google.android.libraries.identity.googleid.GetSignInWithGoogleOption
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
@@ -83,7 +84,11 @@ class FirebaseAuthManager private constructor(private val appContext: Context) {
      * Memulai proses interaktif Google Sign-In menggunakan Jetpack CredentialManager
      */
     fun signInWithGoogle(activity: Activity, onComplete: ((Boolean, String?) -> Unit)? = null) {
-        val serverClientId = appContext.getString(R.string.default_web_client_id)
+        val serverClientId = try {
+            appContext.getString(R.string.default_web_client_id)
+        } catch (e: Exception) {
+            ""
+        }
         if (serverClientId.isBlank()) {
             val errMsg = "Web Client ID belum dikonfigurasi di strings.xml"
             _authStatus.value = AuthStatus.Error(errMsg)
@@ -152,7 +157,11 @@ class FirebaseAuthManager private constructor(private val appContext: Context) {
     fun attemptSilentSignIn(activity: Activity) {
         if (auth.currentUser != null) return
 
-        val serverClientId = appContext.getString(R.string.default_web_client_id)
+        val serverClientId = try {
+            appContext.getString(R.string.default_web_client_id)
+        } catch (e: Exception) {
+            ""
+        }
         if (serverClientId.isBlank()) return
 
         val silentOption = GetGoogleIdOption.Builder()
@@ -206,6 +215,7 @@ class FirebaseAuthManager private constructor(private val appContext: Context) {
 
                 if (!snapshot.exists()) {
                     val timeStamp = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.getDefault()).format(Date())
+                    val prefs = AppPreferences(appContext)
                     val newProfile = UserProfile(
                         uid = user.uid,
                         displayName = user.displayName ?: "Perekam Handal",
@@ -214,18 +224,50 @@ class FirebaseAuthManager private constructor(private val appContext: Context) {
                         createdAt = timeStamp,
                         totalRecordings = 0,
                         totalDurationSeconds = 0L,
-                        preferredResolution = "1080p",
-                        preferredFps = 60,
-                        gamingModeEnabled = true
+                        preferredResolution = prefs.resolution,
+                        preferredFps = prefs.fps,
+                        gamingModeEnabled = prefs.isGamingMode
                     )
                     userDocRef.set(newProfile, SetOptions.merge()).await()
                     _authStatus.value = AuthStatus.Authenticated(user, newProfile)
                 } else {
                     val profile = snapshot.toObject(UserProfile::class.java)
+                    if (profile != null) {
+                        val prefs = AppPreferences(appContext)
+                        if (profile.preferredResolution.isNotBlank()) {
+                            prefs.resolution = profile.preferredResolution
+                        }
+                        if (profile.preferredFps > 0) {
+                            prefs.fps = profile.preferredFps
+                        }
+                        prefs.isGamingMode = profile.gamingModeEnabled
+                    }
                     _authStatus.value = AuthStatus.Authenticated(user, profile)
                 }
             } catch (e: Exception) {
                 Log.w(TAG, "UserProfile sync warning: ${e.message}")
+            }
+        }
+    }
+
+    /**
+     * Memperbarui konfigurasi preferensi pengguna ke Firestore agar tersimpan permanen di cloud.
+     */
+    fun updateUserPreferences(resolution: String? = null, fps: Int? = null, gamingMode: Boolean? = null) {
+        val user = auth.currentUser ?: return
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                val dbId = appContext.getString(R.string.firestore_database_id)
+                val db = FirebaseFirestore.getInstance(dbId)
+                val updates = mutableMapOf<String, Any>()
+                if (resolution != null) updates["preferredResolution"] = resolution
+                if (fps != null) updates["preferredFps"] = fps
+                if (gamingMode != null) updates["gamingModeEnabled"] = gamingMode
+                if (updates.isNotEmpty()) {
+                    db.collection("users").document(user.uid).set(updates, SetOptions.merge()).await()
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "Gagal backup preferensi pengguna ke cloud: ${e.message}")
             }
         }
     }

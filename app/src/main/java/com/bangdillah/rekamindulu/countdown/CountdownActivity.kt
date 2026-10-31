@@ -83,6 +83,12 @@ class CountdownActivity : AppCompatActivity() {
         }.start()
     }
 
+    @Deprecated("Deprecated in Java")
+    override fun onBackPressed() {
+        countdownTimer?.cancel()
+        super.onBackPressed()
+    }
+
     override fun onDestroy() {
         super.onDestroy()
         countdownTimer?.cancel()

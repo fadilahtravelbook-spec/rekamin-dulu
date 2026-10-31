@@ -57,18 +57,91 @@ class FirebaseVideoRepository(private val db: FirebaseFirestore) {
 
             recordingRef.set(video, SetOptions.merge()).await()
 
-            // Update statistik pengguna secara atomik di dokumen profil
+            // Update statistik pengguna secara atomik di dokumen profil dengan merge agar aman jika dokumen belum ada
             val userRef = db.collection("users").document(video.userId)
-            userRef.update(
+            userRef.set(
                 mapOf(
                     "totalRecordings" to FieldValue.increment(1),
                     "totalDurationSeconds" to FieldValue.increment(video.durationSeconds.toLong())
-                )
+                ),
+                SetOptions.merge()
             ).await()
 
             Log.i(TAG, "Video berhasil dicatat ke backend cloud: ${video.title} (${video.id})")
         } catch (e: Exception) {
             Log.e(TAG, "Gagal mencatat video ke Firestore: ${e.message}", e)
+        }
+    }
+
+    /**
+     * Sinkronisasi file rekaman tunggal yang baru selesai direkam atau diedit.
+     */
+    suspend fun syncSingleFile(context: Context, userId: String, file: File): Boolean {
+        if (userId.isBlank() || !file.exists() || file.length() < 10240) return false
+        val docId = file.nameWithoutExtension.replace("[^a-zA-Z0-9_-]".toRegex(), "_").ifBlank { "rec_${file.lastModified()}" }
+        val prefs = AppPreferences(context)
+
+        var durationMs = 0L
+        var width = 0
+        var height = 0
+        var retriever: MediaMetadataRetriever? = null
+        try {
+            retriever = MediaMetadataRetriever()
+            retriever.setDataSource(file.absolutePath)
+            durationMs = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: 0L
+            width = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)?.toIntOrNull() ?: 0
+            height = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)?.toIntOrNull() ?: 0
+        } catch (ignored: Exception) {
+        } finally {
+            try { retriever?.release() } catch (ignored: Exception) {}
+        }
+
+        val durSec = (durationMs / 1000).toInt()
+        val min = durSec / 60
+        val sec = durSec % 60
+        val formattedDur = String.format(Locale.getDefault(), "%02d:%02d", min, sec)
+        val timeStamp = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.getDefault()).format(Date(file.lastModified()))
+        val resString = if (width > 0 && height > 0) "${width}x${height}" else prefs.resolution
+
+        val recording = VideoRecording(
+            id = docId,
+            userId = userId,
+            title = file.nameWithoutExtension.replace("_", " "),
+            fileName = file.name,
+            durationSeconds = durSec,
+            durationFormatted = formattedDur,
+            fileSizeBytes = file.length(),
+            resolution = resString,
+            fps = prefs.fps,
+            encoder = prefs.videoEncoder,
+            hasAudio = prefs.audioSource != "MUTE",
+            audioSource = prefs.audioSource,
+            isGamingSession = prefs.isGamingMode,
+            createdAt = timeStamp,
+            localPath = file.absolutePath,
+            notes = "Rekaman tersimpan rapi & disinkronisasi ke Cloud Backend"
+        )
+
+        return try {
+            val docRef = db.collection("users")
+                .document(userId)
+                .collection("recordings")
+                .document(docId)
+            docRef.set(recording, SetOptions.merge()).await()
+
+            val userRef = db.collection("users").document(userId)
+            userRef.set(
+                mapOf(
+                    "totalRecordings" to FieldValue.increment(1),
+                    "totalDurationSeconds" to FieldValue.increment(durSec.toLong())
+                ),
+                SetOptions.merge()
+            ).await()
+            Log.i(TAG, "File tunggal berhasil disinkronkan ke cloud: ${file.name}")
+            true
+        } catch (e: Exception) {
+            Log.w(TAG, "Gagal sinkron file tunggal ${file.name}: ${e.message}")
+            false
         }
     }
 
@@ -93,7 +166,9 @@ class FirebaseVideoRepository(private val db: FirebaseFirestore) {
                 }
                 if (snapshot != null) {
                     val recordings = snapshot.documents.mapNotNull { doc ->
-                        doc.toObject(VideoRecording::class.java)
+                        doc.toObject(VideoRecording::class.java)?.apply {
+                            if (id.isBlank()) id = doc.id
+                        }
                     }
                     trySend(recordings)
                 }
@@ -105,7 +180,7 @@ class FirebaseVideoRepository(private val db: FirebaseFirestore) {
     /**
      * Menghapus rekaman dari Firestore.
      */
-    suspend fun deleteRecording(userId: String, recordingId: String) {
+    suspend fun deleteRecording(userId: String, recordingId: String, durationSeconds: Int = 0) {
         if (userId.isBlank() || recordingId.isBlank()) return
         try {
             db.collection("users")
@@ -115,6 +190,15 @@ class FirebaseVideoRepository(private val db: FirebaseFirestore) {
                 .delete()
                 .await()
             Log.i(TAG, "Rekaman $recordingId berhasil dihapus dari cloud")
+
+            val userRef = db.collection("users").document(userId)
+            val decrementMap = mutableMapOf<String, Any>(
+                "totalRecordings" to FieldValue.increment(-1)
+            )
+            if (durationSeconds > 0) {
+                decrementMap["totalDurationSeconds"] = FieldValue.increment(-durationSeconds.toLong())
+            }
+            userRef.set(decrementMap, SetOptions.merge()).await()
         } catch (e: Exception) {
             Log.e(TAG, "Gagal menghapus rekaman $recordingId dari cloud", e)
         }
@@ -123,19 +207,18 @@ class FirebaseVideoRepository(private val db: FirebaseFirestore) {
     /**
      * Memperbarui judul dan catatan rekaman.
      */
-    suspend fun updateRecordingInfo(userId: String, recordingId: String, newTitle: String, notes: String) {
+    suspend fun updateRecordingInfo(userId: String, recordingId: String, newTitle: String, notes: String = "") {
         if (userId.isBlank() || recordingId.isBlank()) return
         try {
+            val updates = mutableMapOf<String, Any>("title" to newTitle)
+            if (notes.isNotBlank()) {
+                updates["notes"] = notes
+            }
             db.collection("users")
                 .document(userId)
                 .collection("recordings")
                 .document(recordingId)
-                .update(
-                    mapOf(
-                        "title" to newTitle,
-                        "notes" to notes
-                    )
-                )
+                .set(updates, SetOptions.merge())
                 .await()
         } catch (e: Exception) {
             Log.e(TAG, "Gagal update info rekaman: ${e.message}", e)
@@ -157,7 +240,7 @@ class FirebaseVideoRepository(private val db: FirebaseFirestore) {
         for (file in localFiles) {
             if (!file.exists() || file.length() < 10240) continue
 
-            val docId = file.nameWithoutExtension.replace(" ", "_")
+            val docId = file.nameWithoutExtension.replace("[^a-zA-Z0-9_-]".toRegex(), "_").ifBlank { "rec_${file.lastModified()}" }
             val docRef = db.collection("users")
                 .document(userId)
                 .collection("recordings")
