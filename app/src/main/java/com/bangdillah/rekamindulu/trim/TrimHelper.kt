@@ -113,9 +113,10 @@ object TrimHelper {
             val bufferInfo = MediaCodec.BufferInfo()
             val totalDurationUs = (endUs - startUs).coerceAtLeast(1L)
 
-            val firstPtsMap = HashMap<Int, Long>()
+            var referenceBasePts = -1L
             val lastWrittenPtsMap = HashMap<Int, Long>()
             var videoKeyFrameFound = (videoTrackIndex == -1)
+            val tracksEnded = HashSet<Int>()
 
             while (true) {
                 val trackIndex = extractor.sampleTrackIndex
@@ -135,9 +136,10 @@ object TrimHelper {
                 val sampleTime = extractor.sampleTime
                 val flags = extractor.sampleFlags
 
-                // Stop condition: frame beyond endUs
+                // Stop condition: track beyond endUs
                 if (sampleTime > endUs) {
-                    if (trackIndex == videoTrackIndex || videoTrackIndex == -1) {
+                    tracksEnded.add(trackIndex)
+                    if (tracksEnded.size >= indexMap.size || (trackIndex == videoTrackIndex && tracksEnded.contains(trackIndex))) {
                         break
                     }
                     extractor.advance()
@@ -146,8 +148,9 @@ object TrimHelper {
 
                 // Video track MUST start with a keyframe so decoders don't fail/show black screen
                 if (trackIndex == videoTrackIndex && !videoKeyFrameFound) {
-                    if ((flags and MediaCodec.BUFFER_FLAG_KEY_FRAME) != 0) {
+                    if ((flags and MediaCodec.BUFFER_FLAG_KEY_FRAME) != 0 || (flags and MediaExtractor.SAMPLE_FLAG_SYNC) != 0) {
                         videoKeyFrameFound = true
+                        referenceBasePts = sampleTime
                     } else {
                         extractor.advance()
                         continue
@@ -160,9 +163,18 @@ object TrimHelper {
                     continue
                 }
 
+                if (referenceBasePts == -1L) {
+                    referenceBasePts = sampleTime
+                }
+
+                // Audio frames before referenceBasePts must be dropped to preserve perfect lipsync
+                if (sampleTime < referenceBasePts) {
+                    extractor.advance()
+                    continue
+                }
+
                 if (bufferInfo.size > 0) {
-                    val firstPts = firstPtsMap.getOrPut(muxerTrackIndex) { sampleTime }
-                    val rebasedPts = (sampleTime - firstPts).coerceAtLeast(0L)
+                    val rebasedPts = (sampleTime - referenceBasePts).coerceAtLeast(0L)
                     val lastPts = lastWrittenPtsMap[muxerTrackIndex] ?: -1L
                     val finalPts = if (rebasedPts > lastPts) rebasedPts else lastPts + 1000L
                     val codecFlags = if ((flags and MediaExtractor.SAMPLE_FLAG_SYNC) != 0) {

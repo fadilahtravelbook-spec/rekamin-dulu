@@ -90,10 +90,20 @@ object AudioExtractorHelper {
 
             extractor.selectTrack(audioTrackIndex)
 
+            // Dapatkan durasi akurat dari track audio atau metadata container video
             val durationUs = try {
-                audioFormat.getLong(MediaFormat.KEY_DURATION)
+                if (audioFormat.containsKey(MediaFormat.KEY_DURATION)) {
+                    val trackDur = audioFormat.getLong(MediaFormat.KEY_DURATION)
+                    if (trackDur > 0L) trackDur else getContainerDurationUs(inputFile)
+                } else {
+                    getContainerDurationUs(inputFile)
+                }
             } catch (e: Exception) {
-                1000000L
+                getContainerDurationUs(inputFile)
+            }
+
+            if (outputFile.exists()) {
+                outputFile.delete()
             }
 
             muxer = MediaMuxer(outputFile.absolutePath, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
@@ -138,12 +148,21 @@ object AudioExtractorHelper {
                     lastWrittenPts = pts
 
                     if (durationUs > 0) {
-                        val progress = ((bufferInfo.presentationTimeUs * 100) / durationUs).toInt().coerceIn(0, 100)
+                        val progress = ((pts * 100) / durationUs).toInt().coerceIn(0, 100)
                         progressCallback?.invoke(progress)
                     }
                 }
 
                 extractor.advance()
+            }
+
+            // Jika tidak ada frame audio yang valid ditulis, bersihkan file agar tidak tersisa file 0 byte corrupt
+            if (lastWrittenPts == -1L) {
+                Log.w(TAG, "Tidak ada data audio yang terbaca dari track audio video")
+                if (outputFile.exists()) {
+                    outputFile.delete()
+                }
+                return Pair(false, null)
             }
 
             progressCallback?.invoke(100)
@@ -185,4 +204,19 @@ object AudioExtractorHelper {
             }
         }
     }
+
+    private fun getContainerDurationUs(file: File): Long {
+        if (!file.exists()) return 1000000L
+        val retriever = android.media.MediaMetadataRetriever()
+        return try {
+            retriever.setDataSource(file.absolutePath)
+            val durMs = retriever.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: 1000L
+            (durMs * 1000L).coerceAtLeast(1000000L)
+        } catch (e: Exception) {
+            1000000L
+        } finally {
+            try { retriever.release() } catch (ignored: Exception) {}
+        }
+    }
 }
+

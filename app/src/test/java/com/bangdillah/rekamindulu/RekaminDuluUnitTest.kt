@@ -15,10 +15,52 @@ class RekaminDuluUnitTest {
         assertEquals(MediaRecorder.AudioSource.CAMCORDER, MicrophoneSelector.getAudioSource("camcorder"))
         assertEquals(MediaRecorder.AudioSource.VOICE_COMMUNICATION, MicrophoneSelector.getAudioSource("voice_comm"))
         assertEquals(MediaRecorder.AudioSource.VOICE_COMMUNICATION, MicrophoneSelector.getAudioSource("bluetooth"))
+        assertEquals(MediaRecorder.AudioSource.VOICE_COMMUNICATION, MicrophoneSelector.getAudioSource("headset"))
+        assertEquals(MediaRecorder.AudioSource.VOICE_RECOGNITION, MicrophoneSelector.getAudioSource("voice_recognition"))
         assertEquals(MediaRecorder.AudioSource.MIC, MicrophoneSelector.getAudioSource("mic"))
         assertEquals(MediaRecorder.AudioSource.MIC, MicrophoneSelector.getAudioSource("usb"))
+        assertEquals(MediaRecorder.AudioSource.MIC, MicrophoneSelector.getAudioSource("default"))
         assertEquals(MediaRecorder.AudioSource.MIC, MicrophoneSelector.getAudioSource("unknown_source"))
     }
+
+    @Test
+    fun testMicrophoneSelectorDisplayNames() {
+        val camDesc = MicrophoneSelector.getDisplayName("camcorder")
+        assertTrue(camDesc.contains("Camcorder", ignoreCase = true))
+
+        val btDesc = MicrophoneSelector.getDisplayName("bluetooth")
+        assertTrue(btDesc.contains("Headset", ignoreCase = true) || btDesc.contains("Bluetooth", ignoreCase = true))
+
+        val recDesc = MicrophoneSelector.getDisplayName("voice_recognition")
+        assertTrue(recDesc.contains("Voice Recognition", ignoreCase = true) || recDesc.contains("Peredam", ignoreCase = true))
+
+        val defaultDesc = MicrophoneSelector.getDisplayName("default")
+        assertTrue(defaultDesc.contains("Default", ignoreCase = true))
+    }
+
+    @Test
+    fun testAudioHelperConstants() {
+        assertEquals(44100, com.bangdillah.rekamindulu.audio.AudioHelper.DEFAULT_SAMPLE_RATE)
+        assertEquals(48000, com.bangdillah.rekamindulu.audio.AudioHelper.HIGH_RES_SAMPLE_RATE)
+    }
+
+    @Test
+    fun testAudioSourcePreferencesMapping() {
+        fun computeAudioSource(micOn: Boolean, internalOn: Boolean): String {
+            return when {
+                micOn && internalOn -> "BOTH"
+                micOn -> "MIC"
+                internalOn -> "INTERNAL"
+                else -> "MUTE"
+            }
+        }
+
+        assertEquals("BOTH", computeAudioSource(micOn = true, internalOn = true))
+        assertEquals("MIC", computeAudioSource(micOn = true, internalOn = false))
+        assertEquals("INTERNAL", computeAudioSource(micOn = false, internalOn = true))
+        assertEquals("MUTE", computeAudioSource(micOn = false, internalOn = false))
+    }
+
 
     @Test
     fun testFileExtensionValidation() {

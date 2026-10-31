@@ -196,8 +196,8 @@ open class ScreenRecordingService : Service() {
             val prefs = AppPreferences(this)
             val hasMicPermission = ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
             val wantsAudio = prefs.audioSource != "MUTE"
-            // Bila mode Hanya Audio Game (INTERNAL) dipilih, prioritaskan MEDIA_PROJECTION murni agar tidak bentrok dengan izin mic di Android 14
-            val fgsType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && hasMicPermission && wantsAudio && prefs.audioSource != "INTERNAL") {
+            // Deklarasikan FOREGROUND_SERVICE_TYPE_MICROPHONE jika merekam audio apapun (MIC, BOTH, atau INTERNAL) untuk kepatuhan Android 14+
+            val fgsType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && hasMicPermission && wantsAudio) {
                 ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION or ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
             } else {
                 ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION
@@ -587,24 +587,39 @@ open class ScreenRecordingService : Service() {
                     if (withAudio) {
                         try {
                             setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
-                            // Jalur internal & mic menggunakan 48kHz (standar native audio HAL Android)
-                            // 48kHz menghindari resampling perangkat lunak CPU di AudioFlinger yang menyebabkan buffer stall
-                            val sampleRate = 48000
-                            val audioBitrate = 128000
-                            setAudioChannels(1) // Kompatibilitas universal
-                            setAudioSamplingRate(sampleRate)
-                            setAudioEncodingBitRate(audioBitrate)
-                        } catch (eAac: Exception) {
-                            Log.w(TAG, "Konfigurasi audio encoder AAC standar gagal, mencoba parameter aman", eAac)
+
+                            // Kanal: Utamakan stereo (2) untuk audio game internal, mono (1) untuk mic/fallback
+                            val desiredChannels = if (isInternalOnly) 2 else 1
                             try {
-                                setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
-                                setAudioChannels(1)
-                                setAudioSamplingRate(16000)
-                                setAudioEncodingBitRate(64000)
-                            } catch (eSafeAac: Exception) {
-                                Log.w(TAG, "Audio encoder tidak dapat diaktifkan: ${eSafeAac.message}")
-                                return false
+                                setAudioChannels(desiredChannels)
+                            } catch (eChan: Exception) {
+                                try { setAudioChannels(1) } catch (ignored: Exception) {}
                             }
+
+                            // Frekuensi sampling bertingkat: 48000Hz (Hi-Fi) -> 44100Hz (CD Standar Universal) -> 16000Hz (Aman)
+                            var sampleRateConfigured = false
+                            for (rate in intArrayOf(48000, 44100, 16000)) {
+                                try {
+                                    setAudioSamplingRate(rate)
+                                    sampleRateConfigured = true
+                                    break
+                                } catch (eRate: Exception) {
+                                    Log.w(TAG, "Audio sampling rate $rate Hz tidak didukung: ${eRate.message}")
+                                }
+                            }
+
+                            // Bitrate audio adaptif: 128kbps -> 96kbps -> 64kbps
+                            for (bitrate in intArrayOf(128000, 96000, 64000)) {
+                                try {
+                                    setAudioEncodingBitRate(bitrate)
+                                    break
+                                } catch (eBitrate: Exception) {
+                                    Log.w(TAG, "Audio encoding bitrate $bitrate bps tidak didukung: ${eBitrate.message}")
+                                }
+                            }
+                        } catch (eAac: Exception) {
+                            Log.w(TAG, "Gagal menginisialisasi audio encoder AAC: ${eAac.message}")
+                            return false
                         }
                     }
 
@@ -784,8 +799,16 @@ open class ScreenRecordingService : Service() {
                     setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
                     setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
                     setAudioChannels(1)
-                    setAudioSamplingRate(48000)
-                    setAudioEncodingBitRate(128000)
+                    try {
+                        setAudioSamplingRate(44100)
+                    } catch (eRate: Exception) {
+                        try { setAudioSamplingRate(48000) } catch (ignored: Exception) {}
+                    }
+                    try {
+                        setAudioEncodingBitRate(128000)
+                    } catch (eBitrate: Exception) {
+                        try { setAudioEncodingBitRate(64000) } catch (ignored: Exception) {}
+                    }
                     setVideoEncoder(MediaRecorder.VideoEncoder.H264)
                     setOutputFile(filePath)
                     setVideoSize(safeW, safeH)
@@ -847,6 +870,11 @@ open class ScreenRecordingService : Service() {
             currentActiveFilePath = null
             isPaused = false
             timerHandler.removeCallbacks(timerRunnable)
+
+            try {
+                val audioManager = getSystemService(Context.AUDIO_SERVICE) as? android.media.AudioManager
+                audioManager?.isMicrophoneMute = false
+            } catch (ignored: Exception) {}
 
             unregisterScreenOffReceiver()
             releaseWakeLock()
@@ -973,8 +1001,9 @@ open class ScreenRecordingService : Service() {
                                     val sec = durationSec % 60
                                     val formattedDur = String.format(Locale.getDefault(), "%02d:%02d", min, sec)
                                     val timeStamp = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.getDefault()).format(java.util.Date())
+                                    val docId = savedFile.nameWithoutExtension.replace("[^a-zA-Z0-9_-]".toRegex(), "_").ifBlank { "rec_${savedFile.lastModified()}" }
                                     val rec = com.bangdillah.rekamindulu.backend.VideoRecording(
-                                        id = savedFile.nameWithoutExtension.replace(" ", "_"),
+                                        id = docId,
                                         userId = currentUser.uid,
                                         title = savedFile.nameWithoutExtension.replace("_", " "),
                                         fileName = savedFile.name,
@@ -1110,7 +1139,12 @@ open class ScreenRecordingService : Service() {
                     }
                 }
             }
-            registerReceiver(screenOffReceiver, IntentFilter(Intent.ACTION_SCREEN_OFF))
+            ContextCompat.registerReceiver(
+                this,
+                screenOffReceiver,
+                IntentFilter(Intent.ACTION_SCREEN_OFF),
+                ContextCompat.RECEIVER_NOT_EXPORTED
+            )
         }
     }
 
@@ -1262,6 +1296,10 @@ open class ScreenRecordingService : Service() {
         if (isRecording || isPaused) {
             stopRecording()
         }
+        try {
+            val audioManager = getSystemService(Context.AUDIO_SERVICE) as? android.media.AudioManager
+            audioManager?.isMicrophoneMute = false
+        } catch (ignored: Exception) {}
         unregisterScreenOffReceiver()
         releaseWakeLock()
     }

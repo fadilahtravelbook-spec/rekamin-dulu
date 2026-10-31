@@ -17,6 +17,8 @@ import android.widget.VideoView
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.FileProvider
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import com.bangdillah.rekamindulu.R
 import com.bangdillah.rekamindulu.audio.AudioExtractorHelper
 import com.bangdillah.rekamindulu.trim.TrimActivity
@@ -83,6 +85,26 @@ class PlayerActivity : AppCompatActivity() {
         topBar = findViewById(R.id.player_top_bar)
         bottomPanel = findViewById(R.id.player_bottom_panel)
         btnSpeed = findViewById(R.id.btn_playback_speed)
+
+        findViewById<View>(R.id.player_root_layout)?.let { root ->
+            ViewCompat.setOnApplyWindowInsetsListener(root) { _, insets ->
+                val statusBarHeight = insets.getInsets(WindowInsetsCompat.Type.statusBars()).top
+                val navBarHeight = insets.getInsets(WindowInsetsCompat.Type.navigationBars()).bottom
+                topBar?.setPadding(
+                    topBar?.paddingLeft ?: 0,
+                    statusBarHeight + (8 * resources.displayMetrics.density).toInt(),
+                    topBar?.paddingRight ?: 0,
+                    topBar?.paddingBottom ?: 0
+                )
+                bottomPanel?.setPadding(
+                    bottomPanel?.paddingLeft ?: 0,
+                    bottomPanel?.paddingTop ?: 0,
+                    bottomPanel?.paddingRight ?: 0,
+                    navBarHeight + (12 * resources.displayMetrics.density).toInt()
+                )
+                insets
+            }
+        }
 
         if (savedInstanceState != null) {
             restoredPosition = savedInstanceState.getInt("KEY_PLAYBACK_POSITION", 0)

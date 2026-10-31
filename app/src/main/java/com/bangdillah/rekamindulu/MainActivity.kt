@@ -578,6 +578,9 @@ open class MainActivity : AppCompatActivity() {
                 val stateStr = facecamStates[facecamStateIndex]
                 appPreferences.facecamMode = stateStr
                 updateAudioToggleViews()
+                if (stateStr != "OFF" && ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
+                    runtimePermissionLauncher.launch(arrayOf(Manifest.permission.CAMERA))
+                }
                 showSnackbar("Mode Kamera Wajah: $stateStr")
             }
         }
@@ -1310,6 +1313,9 @@ open class MainActivity : AppCompatActivity() {
         val permissions = mutableListOf<String>()
         if (isMicOn || isGameAudioOn || appPreferences.audioSource != "MUTE") {
             permissions.add(Manifest.permission.RECORD_AUDIO)
+        }
+        if (appPreferences.facecamMode != "OFF") {
+            permissions.add(Manifest.permission.CAMERA)
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             permissions.add(Manifest.permission.POST_NOTIFICATIONS)

@@ -17,8 +17,12 @@ import android.widget.SeekBar
 import android.widget.TextView
 import android.widget.Toast
 import android.widget.VideoView
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.launch
 import com.bangdillah.rekamindulu.R
 import com.bangdillah.rekamindulu.library.LibraryActivity
 import com.bangdillah.rekamindulu.player.PlayerActivity
@@ -34,6 +38,12 @@ class TrimActivity : AppCompatActivity() {
 
     companion object {
         private const val REQUEST_CODE_PICK_VIDEO = 3001
+    }
+
+    private val pickVideoLauncher = registerForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+        if (uri != null) {
+            handlePickedUri(uri)
+        }
     }
 
     private var videoView: VideoView? = null
@@ -110,12 +120,16 @@ class TrimActivity : AppCompatActivity() {
         }
 
         findViewById<Button>(R.id.btn_browse)?.setOnClickListener {
-            val intent = Intent(Intent.ACTION_GET_CONTENT).apply {
-                type = "video/*"
-                addCategory(Intent.CATEGORY_OPENABLE)
+            try {
+                pickVideoLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.VideoOnly))
+            } catch (e: Exception) {
+                val intent = Intent(Intent.ACTION_GET_CONTENT).apply {
+                    type = "video/*"
+                    addCategory(Intent.CATEGORY_OPENABLE)
+                }
+                @Suppress("DEPRECATION")
+                startActivityForResult(Intent.createChooser(intent, "Pilih Video yang Akan Dipotong"), REQUEST_CODE_PICK_VIDEO)
             }
-            @Suppress("DEPRECATION")
-            startActivityForResult(Intent.createChooser(intent, "Pilih Video yang Akan Dipotong"), REQUEST_CODE_PICK_VIDEO)
         }
 
         btnPreviewPlay?.setOnClickListener {
@@ -291,12 +305,10 @@ class TrimActivity : AppCompatActivity() {
                     val authManager = com.bangdillah.rekamindulu.backend.FirebaseAuthManager.getInstance(this@TrimActivity)
                     val currentUser = authManager.currentUser
                     if (currentUser != null) {
-                        Thread {
+                        lifecycleScope.launch {
                             val repo = com.bangdillah.rekamindulu.backend.FirebaseVideoRepository(this@TrimActivity)
-                            kotlinx.coroutines.runBlocking {
-                                repo.syncSingleFile(this@TrimActivity, currentUser.uid, outputFile)
-                            }
-                        }.start()
+                            repo.syncSingleFile(this@TrimActivity, currentUser.uid, outputFile)
+                        }
                     }
 
                     MaterialAlertDialogBuilder(this@TrimActivity)

@@ -645,8 +645,20 @@ class FloatingOverlayService : Service() {
                 else -> "MIC"
             }
             prefs.audioSource = next
+
+            // Mute / Unmute hardware mic stream via AudioManager secara instan saat perekaman aktif
+            val isMute = (next == "INTERNAL" || next == "MUTE")
+            try {
+                val audioManager = getSystemService(Context.AUDIO_SERVICE) as? android.media.AudioManager
+                audioManager?.isMicrophoneMute = isMute
+            } catch (ignored: Exception) {}
+
             syncMicButtonUi()
-            val msg = if (next == "BOTH" || next == "MIC") "🎙️ Mikrofon Aktif" else "🔇 Mikrofon Dimatikan (Mute)"
+            val msg = if (next == "BOTH" || next == "MIC") {
+                if (ScreenRecordingService.isRecording) "🎙️ Suara Mikrofon Aktif (On Air)" else "🎙️ Mikrofon Aktif"
+            } else {
+                if (ScreenRecordingService.isRecording) "🔇 Suara Mikrofon Disenyapkan (Mute)" else "🔇 Mikrofon Dimatikan (Mute)"
+            }
             Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
         }
         overlayView?.findViewById<View>(R.id.btn_overlay_mic)?.setOnClickListener(onMicClick)
@@ -813,14 +825,14 @@ class FloatingOverlayService : Service() {
 
     private fun sendServiceCommand(intent: Intent) {
         try {
-            startService(intent)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                startForegroundService(intent)
+            } else {
+                startService(intent)
+            }
         } catch (e: Exception) {
             try {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                    startForegroundService(intent)
-                } else {
-                    startService(intent)
-                }
+                startService(intent)
             } catch (ignored: Exception) {}
         }
     }
@@ -913,6 +925,12 @@ class FloatingOverlayService : Service() {
     fun stopOverlay() {
         if (isStopping) return
         isStopping = true
+
+        try {
+            val audioManager = getSystemService(Context.AUDIO_SERVICE) as? android.media.AudioManager
+            audioManager?.isMicrophoneMute = false
+        } catch (ignored: Exception) {}
+
         handler.removeCallbacks(timerRunnable)
         handler.removeCallbacks(autoCollapseRunnable)
         handler.removeCallbacks(idleDimRunnable)
