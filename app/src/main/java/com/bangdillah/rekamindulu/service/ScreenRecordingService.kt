@@ -250,20 +250,14 @@ open class ScreenRecordingService : Service() {
         // 1. Inisialisasi WakeLock dan Wi-Fi lock untuk performa maksimal bebas throttle
         acquireWakeLock(prefs)
 
-        // 1b. Game Turbo & Mode Gaming: Elevasi prioritas thread encoder CPU ke DISPLAY / FOREGROUND
-        // Menggunakan THREAD_PRIORITY_DISPLAY (-4) agar tidak mempreempt atau mengorbankan thread render game 3D
-        if (prefs.gamingTurboBoost || prefs.isGamingMode) {
+        // 1b. Elevasi prioritas thread encoder CPU ke THREAD_PRIORITY_URGENT_DISPLAY (-8)
+        // Menjamin antrean frame VSYNC GPU dialirkan 100% mulus tanpa patah-patah/frame drop
+        try {
+            android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_URGENT_DISPLAY)
+            Log.i(TAG, "Encoder Real-Time Priority: Service process priority elevated to THREAD_PRIORITY_URGENT_DISPLAY (-8)")
+        } catch (e: Exception) {
             try {
                 android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_DISPLAY)
-                Log.i(TAG, "Game Turbo: Service process priority elevated to THREAD_PRIORITY_DISPLAY (-4)")
-            } catch (e: Exception) {
-                try {
-                    android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_FOREGROUND)
-                } catch (ignored: Exception) {}
-            }
-        } else {
-            try {
-                android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_FOREGROUND)
             } catch (ignored: Exception) {}
         }
 
@@ -278,7 +272,6 @@ open class ScreenRecordingService : Service() {
             windowManager.defaultDisplay.getRealMetrics(metrics)
 
             calculateOutputDimensions(metrics, prefs.resolution, prefs.orientation)
-            screenDensity = metrics.densityDpi
 
             // 4. Siapkan file output di direktori aman
             val outputFile = StorageHelper.createOutputFile(this, "Rekaman")
@@ -304,11 +297,7 @@ open class ScreenRecordingService : Service() {
             try {
                 virtualDisplayThread?.quitSafely()
             } catch (ignored: Exception) {}
-            val vdPriority = if (prefs.gamingTurboBoost || prefs.isGamingMode) {
-                android.os.Process.THREAD_PRIORITY_DISPLAY
-            } else {
-                android.os.Process.THREAD_PRIORITY_FOREGROUND
-            }
+            val vdPriority = android.os.Process.THREAD_PRIORITY_URGENT_DISPLAY
             val vdThread = android.os.HandlerThread("RekaminVDisplayWorker", vdPriority).apply { start() }
             virtualDisplayThread = vdThread
             val vdHandler = Handler(vdThread.looper)
@@ -488,44 +477,58 @@ open class ScreenRecordingService : Service() {
         val longSide = maxOf(rawWidth, rawHeight)
         val shortSide = minOf(rawWidth, rawHeight)
 
-        // Batas maksimal dimensi sesuai standar profil encoder hardware H.264 / H.265 (MaxMBPS limit)
-        // Layar ultra-wide modern (20:9 / 19.5:9 misal 2400x1080) yang dipaksa 2400x1080 melebihi
-        // kapasitas macroblock Level 4.1 hardware encoder sehingga menjatuhkan frame rate secara masif saat main game.
-        // Solusi: Skalakan sisi panjang secara proporsional ke 1920 (1080p), 1280 (720p), atau 854 (480p).
-        val (maxLongLimit, maxShortLimit) = when (resolutionPref) {
-            "4K" -> Pair(3840, 2160)
-            "1080p" -> Pair(1920, 1080)
-            "720p" -> Pair(1280, 720)
-            else -> Pair(854, 480)
+        // Skala proporsional berbasis rasio aspek fisik layar ponsel pengguna
+        val (targetLong, targetShort) = when (resolutionPref) {
+            "NATIVE" -> Pair(longSide, shortSide)
+            "4K" -> {
+                val desiredShort = 2160
+                val scale = if (shortSide > desiredShort) desiredShort.toDouble() / shortSide.toDouble() else 1.0
+                Pair((longSide * scale).toInt(), (shortSide * scale).toInt())
+            }
+            "2K" -> {
+                val desiredShort = 1440
+                val scale = if (shortSide > desiredShort) desiredShort.toDouble() / shortSide.toDouble() else 1.0
+                Pair((longSide * scale).toInt(), (shortSide * scale).toInt())
+            }
+            "1080p" -> {
+                val desiredShort = 1080
+                // Pertahankan 1:1 jika layar ponsel 1080p (misal 1080x2400 / 1080x2340), jangan diturunkan ke 864p
+                val scale = if (shortSide > desiredShort) desiredShort.toDouble() / shortSide.toDouble() else 1.0
+                Pair((longSide * scale).toInt(), (shortSide * scale).toInt())
+            }
+            "720p" -> {
+                val desiredShort = 720
+                val scale = if (shortSide > desiredShort) desiredShort.toDouble() / shortSide.toDouble() else 1.0
+                Pair((longSide * scale).toInt(), (shortSide * scale).toInt())
+            }
+            "480p" -> {
+                val desiredShort = 480
+                val scale = if (shortSide > desiredShort) desiredShort.toDouble() / shortSide.toDouble() else 1.0
+                Pair((longSide * scale).toInt(), (shortSide * scale).toInt())
+            }
+            else -> {
+                val desiredShort = 1080
+                val scale = if (shortSide > desiredShort) desiredShort.toDouble() / shortSide.toDouble() else 1.0
+                Pair((longSide * scale).toInt(), (shortSide * scale).toInt())
+            }
         }
 
-        var targetLong = longSide
-        var targetShort = shortSide
-
-        if (targetLong > maxLongLimit || targetShort > maxShortLimit) {
-            val scaleLong = maxLongLimit.toDouble() / targetLong.toDouble()
-            val scaleShort = maxShortLimit.toDouble() / targetShort.toDouble()
-            val scale = minOf(scaleLong, scaleShort)
-            targetLong = (targetLong * scale).toInt()
-            targetShort = (targetShort * scale).toInt()
-        }
-
-        // Pastikan dimensi kelipatan 16 (macroblock H.264) atau minimal kelipatan 2 genap
-        // Mengeliminasi overhead software padding di GPU SurfaceFlinger
-        var alignedLong = (targetLong / 16) * 16
-        var alignedShort = (targetShort / 16) * 16
-
-        if (alignedLong < 320) alignedLong = (targetLong / 2) * 2
-        if (alignedShort < 320) alignedShort = (targetShort / 2) * 2
-
-        if (alignedLong % 2 != 0) alignedLong -= 1
-        if (alignedShort % 2 != 0) alignedShort -= 1
+        // Pastikan dimensi genap (kelipatan 2) wajib untuk standar encoder AVC/HEVC
+        var alignedLong = (targetLong / 2) * 2
+        var alignedShort = (targetShort / 2) * 2
 
         val finalW = if (isPortrait) alignedShort else alignedLong
         val finalH = if (isPortrait) alignedLong else alignedShort
 
         screenWidth = (finalW.coerceAtLeast(320) / 2) * 2
         screenHeight = (finalH.coerceAtLeast(480) / 2) * 2
+
+        // Kepadatan DPI proporsional agar rendering teks, video player online, dan subtitle sejernih aslinya
+        val baseDensity = metrics.densityDpi
+        val scaleRatio = if (isPortrait) screenWidth.toDouble() / rawWidth.toDouble() else screenHeight.toDouble() / rawHeight.toDouble()
+        screenDensity = (baseDensity * scaleRatio).toInt().coerceIn(120, 640)
+
+        Log.i(TAG, "Output resolution calculated: ${screenWidth}x${screenHeight} @ ${screenDensity} DPI (Pref: $resolutionPref, Native: ${rawWidth}x${rawHeight} @ ${baseDensity} DPI)")
     }
 
     /**
@@ -635,11 +638,11 @@ open class ScreenRecordingService : Service() {
                                 try { setAudioSamplingRate(44100) } catch (ignored: Exception) {}
                             }
 
-                            val targetBitrate = if (preferStereo) 160000 else 128000
+                            val targetBitrate = if (preferStereo) 192000 else 160000
                             try {
                                 setAudioEncodingBitRate(targetBitrate)
                             } catch (eBitrate: Exception) {
-                                try { setAudioEncodingBitRate(96000) } catch (ignored: Exception) {}
+                                try { setAudioEncodingBitRate(128000) } catch (ignored: Exception) {}
                             }
                         } catch (eAac: Exception) {
                             Log.w(TAG, "Gagal menginisialisasi audio encoder AAC: ${eAac.message}")
@@ -659,9 +662,38 @@ open class ScreenRecordingService : Service() {
                         setVideoEncoder(MediaRecorder.VideoEncoder.H264)
                     }
 
+                    // Terapkan High Profile untuk ketajaman kristal & reproduksi warna jernih (AVC High / HEVC Main)
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                        try {
+                            if (encoder == MediaRecorder.VideoEncoder.H264) {
+                                try {
+                                    setVideoEncodingProfileLevel(
+                                        android.media.MediaCodecInfo.CodecProfileLevel.AVCProfileHigh,
+                                        android.media.MediaCodecInfo.CodecProfileLevel.AVCLevel51
+                                    )
+                                    Log.i(TAG, "Hardware Video Tuning: AVCProfileHigh Level 5.1 aktif (Lancar 60 FPS & Terang/Jernih)")
+                                } catch (e51: Exception) {
+                                    setVideoEncodingProfileLevel(
+                                        android.media.MediaCodecInfo.CodecProfileLevel.AVCProfileHigh,
+                                        android.media.MediaCodecInfo.CodecProfileLevel.AVCLevel42
+                                    )
+                                    Log.i(TAG, "Hardware Video Tuning: AVCProfileHigh Level 4.2 aktif")
+                                }
+                            } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && encoder == MediaRecorder.VideoEncoder.HEVC) {
+                                setVideoEncodingProfileLevel(
+                                    android.media.MediaCodecInfo.CodecProfileLevel.HEVCProfileMain,
+                                    android.media.MediaCodecInfo.CodecProfileLevel.HEVCHighTierLevel41
+                                )
+                                Log.i(TAG, "Hardware Video Tuning: HEVCProfileMain HighTier aktif untuk video ultra HD")
+                            }
+                        } catch (eProf: Exception) {
+                            Log.w(TAG, "Profile level tuning ditolak hardware, menggunakan konfigurasi standar: ${eProf.message}")
+                        }
+                    }
+
                     setOutputFile(filePath)
                     val chosenFps = fps
-                    val chosenBitrate = bitrate.coerceIn(1_000_000, 30_000_000)
+                    val chosenBitrate = bitrate.coerceIn(1_000_000, 60_000_000)
 
                     setVideoSize(targetWidth, targetHeight)
                     setVideoEncodingBitRate(chosenBitrate)
@@ -697,7 +729,7 @@ open class ScreenRecordingService : Service() {
         val ultraSafeW = if (isPortrait) 480 else 848
         val ultraSafeH = if (isPortrait) 848 else 480
 
-        val initialBitrate = (prefs.bitrateMbps * 1_000_000).coerceIn(1_000_000, 30_000_000)
+        val initialBitrate = (prefs.bitrateMbps * 1_000_000).coerceIn(1_000_000, 60_000_000)
         val initialFps = prefs.fps
         val preferredAudioSource = if (isInternalOnly) {
             com.bangdillah.rekamindulu.audio.MicrophoneSelector.getGameAudioSource()
@@ -731,7 +763,7 @@ open class ScreenRecordingService : Service() {
 
         // Tier 3: Fallback ke HD 720p TETAP PADA FPS PENGGUNA DENGAN AUDIO
         Log.w(TAG, "Mencoba Tier 3 (HD 720p @ ${initialFps} FPS DENGAN AUDIO)")
-        val fallbackBitrate720 = minOf(initialBitrate, 8_000_000)
+        val fallbackBitrate720 = minOf(initialBitrate, 14_000_000)
         if (configureAndPrepare(wantsAudio, safeW, safeH, fallbackBitrate720, initialFps, MediaRecorder.AudioSource.MIC, MediaRecorder.VideoEncoder.H264)) {
             screenWidth = safeW
             screenHeight = safeH

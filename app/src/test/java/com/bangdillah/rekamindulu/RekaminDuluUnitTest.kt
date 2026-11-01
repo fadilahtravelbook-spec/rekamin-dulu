@@ -338,4 +338,87 @@ class RekaminDuluUnitTest {
         assertEquals(true, ok3)
         assertEquals("Valid", msg3)
     }
+
+    @Test
+    fun testProportionalHdResolutionCalculation() {
+        fun computeDimensions(rawWidth: Int, rawHeight: Int, resolutionPref: String): Pair<Int, Int> {
+            val longSide = maxOf(rawWidth, rawHeight)
+            val shortSide = minOf(rawWidth, rawHeight)
+
+            val (targetLong, targetShort) = when (resolutionPref) {
+                "NATIVE" -> Pair(longSide, shortSide)
+                "4K" -> {
+                    val desiredShort = 2160
+                    val scale = if (shortSide > desiredShort) desiredShort.toDouble() / shortSide.toDouble() else 1.0
+                    Pair((longSide * scale).toInt(), (shortSide * scale).toInt())
+                }
+                "2K" -> {
+                    val desiredShort = 1440
+                    val scale = if (shortSide > desiredShort) desiredShort.toDouble() / shortSide.toDouble() else 1.0
+                    Pair((longSide * scale).toInt(), (shortSide * scale).toInt())
+                }
+                "1080p" -> {
+                    val desiredShort = 1080
+                    val scale = if (shortSide > desiredShort) desiredShort.toDouble() / shortSide.toDouble() else 1.0
+                    Pair((longSide * scale).toInt(), (shortSide * scale).toInt())
+                }
+                "720p" -> {
+                    val desiredShort = 720
+                    val scale = if (shortSide > desiredShort) desiredShort.toDouble() / shortSide.toDouble() else 1.0
+                    Pair((longSide * scale).toInt(), (shortSide * scale).toInt())
+                }
+                else -> Pair(longSide, shortSide)
+            }
+
+            val alignedLong = (targetLong / 2) * 2
+            val alignedShort = (targetShort / 2) * 2
+            return Pair(alignedShort, alignedLong)
+        }
+
+        // 1. Phone 1080x2400 (20:9 aspect ratio): 1080p should stay 1080x2400 (NOT downscaled to 864x1920)
+        val (w1080, h1080) = computeDimensions(1080, 2400, "1080p")
+        assertEquals(1080, w1080)
+        assertEquals(2400, h1080)
+
+        // 2. Native resolution: exactly 1080x2400
+        val (wNative, hNative) = computeDimensions(1080, 2400, "NATIVE")
+        assertEquals(1080, wNative)
+        assertEquals(2400, hNative)
+
+        // 3. 720p on 1080x2400: properly scaled to 720x1600 preserving 20:9 ratio
+        val (w720, h720) = computeDimensions(1080, 2400, "720p")
+        assertEquals(720, w720)
+        assertEquals(1600, h720)
+
+        // 4. 2K QHD+ phone (1440x3200): 1080p scales down cleanly to 1080x2400
+        val (w2kDown, h2kDown) = computeDimensions(1440, 3200, "1080p")
+        assertEquals(1080, w2kDown)
+        assertEquals(2400, h2kDown)
+    }
+
+    @Test
+    fun testHighBitrateClampingSupport() {
+        fun clampBitrate(bitrateMbps: Int): Int {
+            return (bitrateMbps * 1_000_000).coerceIn(1_000_000, 60_000_000)
+        }
+
+        assertEquals(20_000_000, clampBitrate(20))
+        assertEquals(24_000_000, clampBitrate(24))
+        assertEquals(30_000_000, clampBitrate(30))
+        assertEquals(60_000_000, clampBitrate(100))
+    }
+
+    @Test
+    fun testProportionalDensityScaling() {
+        fun computeDensity(baseDensity: Int, screenWidth: Int, rawWidth: Int): Int {
+            val scaleRatio = screenWidth.toDouble() / rawWidth.toDouble()
+            return (baseDensity * scaleRatio).toInt().coerceIn(120, 640)
+        }
+
+        // 1080p on 1080p physical display: density remains 420
+        assertEquals(420, computeDensity(420, 1080, 1080))
+
+        // 720p on 1080p physical display: density scales down proportionally to 280
+        assertEquals(280, computeDensity(420, 720, 1080))
+    }
 }

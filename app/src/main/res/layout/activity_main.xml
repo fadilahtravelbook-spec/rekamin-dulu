@@ -385,21 +385,21 @@
                         android:layout_height="wrap_content"
                         android:gravity="center"
                         android:orientation="vertical"
-                        android:paddingHorizontal="20dp"
-                        android:paddingVertical="22dp"
+                        android:paddingHorizontal="18dp"
+                        android:paddingVertical="20dp"
                         android:visibility="visible">
 
-                        <!-- Top Studio Tag -->
+                        <!-- Top Studio Telemetry Pill -->
                         <LinearLayout
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:layout_marginBottom="18dp"
+                            android:layout_marginBottom="14dp"
                             android:background="@drawable/bg_chip_pill"
                             android:backgroundTint="@color/colorPrimaryContainer"
                             android:gravity="center_vertical"
                             android:orientation="horizontal"
-                            android:paddingHorizontal="12dp"
-                            android:paddingVertical="4dp">
+                            android:paddingHorizontal="14dp"
+                            android:paddingVertical="5dp">
 
                             <View
                                 android:layout_width="8dp"
@@ -408,29 +408,32 @@
                                 android:backgroundTint="@color/colorSuccess" />
 
                             <TextView
+                                android:id="@+id/text_studio_pro_tag"
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:layout_marginStart="6dp"
-                                android:text="STUDIO PEREKAM • FULL HD"
+                                android:layout_marginStart="8dp"
+                                android:text="STUDIO PRO • REAL HD 1080P • 60 FPS"
                                 android:textColor="@color/colorPrimary"
                                 android:textSize="11sp"
                                 android:textStyle="bold" />
                         </LinearLayout>
 
-                        <!-- Glowing Tactile Recording Disc -->
+                        <!-- Glowing Tactile Recording Disc with breathing pulse -->
                         <FrameLayout
-                            android:layout_width="92dp"
-                            android:layout_height="92dp"
-                            android:layout_marginBottom="18dp"
+                            android:id="@+id/disc_outer_glow"
+                            android:layout_width="94dp"
+                            android:layout_height="94dp"
+                            android:layout_marginBottom="16dp"
                             android:background="@drawable/ic_play_circle_bg"
-                            android:backgroundTint="#126C5CE7">
+                            android:backgroundTint="#166C5CE7">
 
                             <FrameLayout
+                                android:id="@+id/disc_inner_glow"
                                 android:layout_width="76dp"
                                 android:layout_height="76dp"
                                 android:layout_gravity="center"
                                 android:background="@drawable/ic_play_circle_bg"
-                                android:backgroundTint="#206C5CE7">
+                                android:backgroundTint="#246C5CE7">
 
                                 <ImageView
                                     android:id="@+id/img_start_stop_icon"
@@ -446,14 +449,14 @@
                         <com.google.android.material.button.MaterialButton
                             android:id="@+id/btn_start_stop"
                             android:layout_width="match_parent"
-                            android:layout_height="54dp"
+                            android:layout_height="56dp"
                             android:backgroundTint="@color/colorPrimary"
-                            android:text="Start Recording"
+                            android:text="Mulai Merekam Layar (1080p HD)"
                             android:textColor="@color/colorOnPrimary"
-                            android:textSize="16sp"
+                            android:textSize="15.5sp"
                             android:textStyle="bold"
-                            app:cornerRadius="27dp"
-                            app:elevation="3dp"
+                            app:cornerRadius="28dp"
+                            app:elevation="4dp"
                             app:icon="@drawable/ic_record"
                             app:iconGravity="textStart"
                             app:iconPadding="10dp"
@@ -463,16 +466,153 @@
                             android:id="@+id/text_start_record_label"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:layout_marginTop="10dp"
+                            android:layout_marginTop="8dp"
                             android:text="Tekan tombol untuk mulai merekam layar &amp; audio"
                             android:textColor="@color/textCaption"
                             android:textSize="12sp" />
 
+                        <!-- Quick Resolution Chips Selector Row -->
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="14dp"
+                            android:gravity="center"
+                            android:orientation="horizontal">
+
+                            <TextView
+                                android:id="@+id/chip_quick_1080p"
+                                android:layout_width="0dp"
+                                android:layout_height="34dp"
+                                android:layout_marginEnd="4dp"
+                                android:layout_weight="1"
+                                android:background="@drawable/bg_chip_pill"
+                                android:backgroundTint="@color/colorPrimary"
+                                android:clickable="true"
+                                android:focusable="true"
+                                android:foreground="?attr/selectableItemBackground"
+                                android:gravity="center"
+                                android:text="★ 1080p Real HD"
+                                android:textColor="@color/colorOnPrimary"
+                                android:textSize="11sp"
+                                android:textStyle="bold" />
+
+                            <TextView
+                                android:id="@+id/chip_quick_720p"
+                                android:layout_width="0dp"
+                                android:layout_height="34dp"
+                                android:layout_marginHorizontal="2dp"
+                                android:layout_weight="1"
+                                android:background="@drawable/bg_chip_pill"
+                                android:backgroundTint="@color/colorSurfaceVariant"
+                                android:clickable="true"
+                                android:focusable="true"
+                                android:foreground="?attr/selectableItemBackground"
+                                android:gravity="center"
+                                android:text="720p HD"
+                                android:textColor="@color/textTitle"
+                                android:textSize="11sp"
+                                android:textStyle="bold" />
+
+                            <TextView
+                                android:id="@+id/chip_quick_native"
+                                android:layout_width="0dp"
+                                android:layout_height="34dp"
+                                android:layout_marginStart="4dp"
+                                android:layout_weight="1"
+                                android:background="@drawable/bg_chip_pill"
+                                android:backgroundTint="@color/colorSurfaceVariant"
+                                android:clickable="true"
+                                android:focusable="true"
+                                android:foreground="?attr/selectableItemBackground"
+                                android:gravity="center"
+                                android:text="Layar Asli"
+                                android:textColor="@color/textTitle"
+                                android:textSize="11sp"
+                                android:textStyle="bold" />
+                        </LinearLayout>
+
+                        <!-- Quick Audio Source Selector Row -->
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="8dp"
+                            android:gravity="center"
+                            android:orientation="horizontal">
+
+                            <TextView
+                                android:id="@+id/chip_quick_audio_online"
+                                android:layout_width="0dp"
+                                android:layout_height="32dp"
+                                android:layout_marginEnd="3dp"
+                                android:layout_weight="1.2"
+                                android:background="@drawable/bg_chip_pill"
+                                android:backgroundTint="@color/colorPrimaryContainer"
+                                android:clickable="true"
+                                android:focusable="true"
+                                android:foreground="?attr/selectableItemBackground"
+                                android:gravity="center"
+                                android:text="🎵 Video Online"
+                                android:textColor="@color/colorPrimary"
+                                android:textSize="10.5sp"
+                                android:textStyle="bold" />
+
+                            <TextView
+                                android:id="@+id/chip_quick_audio_both"
+                                android:layout_width="0dp"
+                                android:layout_height="32dp"
+                                android:layout_marginHorizontal="2dp"
+                                android:layout_weight="1.1"
+                                android:background="@drawable/bg_chip_pill"
+                                android:backgroundTint="@color/colorSurfaceVariant"
+                                android:clickable="true"
+                                android:focusable="true"
+                                android:foreground="?attr/selectableItemBackground"
+                                android:gravity="center"
+                                android:text="🎙️+🎵 Mic+Audio"
+                                android:textColor="@color/textTitle"
+                                android:textSize="10.5sp"
+                                android:textStyle="bold" />
+
+                            <TextView
+                                android:id="@+id/chip_quick_audio_mic"
+                                android:layout_width="0dp"
+                                android:layout_height="32dp"
+                                android:layout_marginHorizontal="2dp"
+                                android:layout_weight="1"
+                                android:background="@drawable/bg_chip_pill"
+                                android:backgroundTint="@color/colorSurfaceVariant"
+                                android:clickable="true"
+                                android:focusable="true"
+                                android:foreground="?attr/selectableItemBackground"
+                                android:gravity="center"
+                                android:text="🎙️ Mic"
+                                android:textColor="@color/textTitle"
+                                android:textSize="10.5sp"
+                                android:textStyle="bold" />
+
+                            <TextView
+                                android:id="@+id/chip_quick_audio_mute"
+                                android:layout_width="0dp"
+                                android:layout_height="32dp"
+                                android:layout_marginStart="3dp"
+                                android:layout_weight="0.8"
+                                android:background="@drawable/bg_chip_pill"
+                                android:backgroundTint="@color/colorSurfaceVariant"
+                                android:clickable="true"
+                                android:focusable="true"
+                                android:foreground="?attr/selectableItemBackground"
+                                android:gravity="center"
+                                android:text="🔇 Mute"
+                                android:textColor="@color/textTitle"
+                                android:textSize="10.5sp"
+                                android:textStyle="bold" />
+                        </LinearLayout>
+
                         <TextView
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:layout_marginTop="4dp"
-                            android:text="✓ Tanpa Watermark • ✓ Bebas Batas Durasi • ✓ 60 FPS"
+                            android:layout_marginTop="10dp"
+                            android:text="✓ Tanpa Watermark • ✓ Bebas Batas Durasi • ✓ 60 FPS Super Jernih"
                             android:textColor="@color/colorPrimary"
                             android:textSize="11sp"
                             android:textStyle="bold" />
@@ -501,6 +641,7 @@
                             android:paddingVertical="6dp">
 
                             <ImageView
+                                android:id="@+id/img_hero_live_dot"
                                 android:layout_width="14dp"
                                 android:layout_height="14dp"
                                 android:contentDescription="Live Dot"
@@ -523,6 +664,7 @@
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:layout_marginTop="12dp"
+                            android:fontFamily="monospace"
                             android:text="00:00"
                             android:textColor="@color/textTitle"
                             android:textSize="48sp"
@@ -534,9 +676,10 @@
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:layout_marginTop="2dp"
-                            android:text="1080p FHD • 60 FPS • Audio Aktif"
+                            android:text="1080p Real HD • 60 FPS • 24 Mbps • Audio Aktif"
                             android:textColor="@color/textCaption"
-                            android:textSize="12sp" />
+                            android:textSize="12sp"
+                            android:textStyle="bold" />
 
                         <!-- ACTION BUTTONS ROW (JEDA & STOP) -->
                         <LinearLayout
@@ -695,7 +838,7 @@
                                 android:layout_width="20dp"
                                 android:layout_height="20dp"
                                 android:layout_gravity="center"
-                                android:contentDescription="Audio Game"
+                                android:contentDescription="Audio Internal Video dan Game"
                                 android:src="@drawable/ic_game"
                                 app:tint="@color/colorPrimary" />
                         </FrameLayout>
@@ -704,7 +847,7 @@
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:layout_marginTop="6dp"
-                            android:text="Audio Game"
+                            android:text="Audio Video/Game"
                             android:textColor="@color/textTitle"
                             android:textSize="12sp"
                             android:textStyle="bold" />

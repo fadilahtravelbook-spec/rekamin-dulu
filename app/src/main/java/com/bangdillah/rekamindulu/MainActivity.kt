@@ -8,12 +8,16 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.media.projection.MediaProjectionManager
+import android.animation.ValueAnimator
 import android.os.Build
 import android.os.Bundle
 import android.os.CountDownTimer
 import android.os.Environment
 import android.os.Handler
 import android.os.Looper
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.os.VibratorManager
 import android.text.InputType
 import android.util.Log
 import android.view.View
@@ -377,6 +381,70 @@ open class MainActivity : AppCompatActivity() {
         updateAudioToggleViews()
     }
 
+    fun performHapticFeedback(view: View? = null, milliseconds: Long = 40) {
+        try {
+            view?.performHapticFeedback(android.view.HapticFeedbackConstants.CONTEXT_CLICK)
+            val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                val vm = getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as? VibratorManager
+                vm?.defaultVibrator
+            } else {
+                @Suppress("DEPRECATION")
+                getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                vibrator?.vibrate(VibrationEffect.createOneShot(milliseconds, VibrationEffect.DEFAULT_AMPLITUDE))
+            } else {
+                @Suppress("DEPRECATION")
+                vibrator?.vibrate(milliseconds)
+            }
+        } catch (ignored: Exception) {}
+    }
+
+    private fun animateButtonPress(view: View, onComplete: () -> Unit) {
+        performHapticFeedback(view, 45)
+        view.animate()
+            .scaleX(0.95f)
+            .scaleY(0.95f)
+            .setDuration(70)
+            .withEndAction {
+                view.animate()
+                    .scaleX(1.0f)
+                    .scaleY(1.0f)
+                    .setDuration(80)
+                    .withEndAction {
+                        onComplete()
+                    }
+                    .start()
+            }
+            .start()
+    }
+
+    private var breathingAnimator: ValueAnimator? = null
+
+    private fun startBreathingGlowAnimation() {
+        val outerDisc = findViewById<FrameLayout>(R.id.disc_outer_glow) ?: return
+        if (breathingAnimator != null) return
+        breathingAnimator = ValueAnimator.ofFloat(1.0f, 1.07f, 1.0f).apply {
+            duration = 2200
+            repeatCount = ValueAnimator.INFINITE
+            repeatMode = ValueAnimator.RESTART
+            addUpdateListener { anim ->
+                val scale = anim.animatedValue as Float
+                outerDisc.scaleX = scale
+                outerDisc.scaleY = scale
+            }
+            start()
+        }
+    }
+
+    private fun stopBreathingGlowAnimation() {
+        breathingAnimator?.cancel()
+        breathingAnimator = null
+        val outerDisc = findViewById<FrameLayout>(R.id.disc_outer_glow)
+        outerDisc?.scaleX = 1.0f
+        outerDisc?.scaleY = 1.0f
+    }
+
     private fun updateAudioToggleViews() {
         val toggleMic = findViewById<Button>(R.id.toggle_mic)
         val toggleGameAudio = findViewById<Button>(R.id.toggle_game_audio)
@@ -435,6 +503,34 @@ open class MainActivity : AppCompatActivity() {
                 setTextColor(ContextCompat.getColor(this@MainActivity, R.color.textCaption))
             }
         }
+
+        // Update 4 quick audio chips in the studio hero deck
+        val chipOnline = findViewById<TextView>(R.id.chip_quick_audio_online)
+        val chipBoth = findViewById<TextView>(R.id.chip_quick_audio_both)
+        val chipMic = findViewById<TextView>(R.id.chip_quick_audio_mic)
+        val chipMute = findViewById<TextView>(R.id.chip_quick_audio_mute)
+
+        val isOnline = !isMicOn && isGameAudioOn
+        val isBoth = isMicOn && isGameAudioOn
+        val isMicOnly = isMicOn && !isGameAudioOn
+        val isMute = !isMicOn && !isGameAudioOn
+
+        fun styleQuickChip(chip: TextView?, isSelected: Boolean) {
+            chip?.apply {
+                if (isSelected) {
+                    backgroundTintList = ContextCompat.getColorStateList(this@MainActivity, R.color.colorPrimaryContainer)
+                    setTextColor(ContextCompat.getColor(this@MainActivity, R.color.colorPrimary))
+                } else {
+                    backgroundTintList = ContextCompat.getColorStateList(this@MainActivity, R.color.colorSurfaceVariant)
+                    setTextColor(ContextCompat.getColor(this@MainActivity, R.color.textTitle))
+                }
+            }
+        }
+
+        styleQuickChip(chipOnline, isOnline)
+        styleQuickChip(chipBoth, isBoth)
+        styleQuickChip(chipMic, isMicOnly)
+        styleQuickChip(chipMute, isMute)
     }
 
 
@@ -535,13 +631,123 @@ open class MainActivity : AppCompatActivity() {
             showQualityPickerDialog()
         }
 
-        // Tap central glowing disc to start/stop
-        findViewById<View>(R.id.img_start_stop_icon)?.setOnClickListener {
-            if (ScreenRecordingService.isRecording) {
-                stopScreenCapture()
-            } else {
-                startScreenCapture()
+        // Tap central glowing disc to start/stop with haptic response
+        findViewById<View>(R.id.img_start_stop_icon)?.setOnClickListener { v ->
+            animateButtonPress(v) {
+                if (ScreenRecordingService.isRecording) {
+                    stopScreenCapture()
+                } else {
+                    startScreenCapture()
+                }
             }
+        }
+
+        // Quick Resolution Chips in Studio Hero Deck
+        findViewById<View>(R.id.chip_quick_1080p)?.setOnClickListener { v ->
+            if (ScreenRecordingService.isRecording) {
+                showSnackbar("⚠️ Resolusi terkunci saat perekaman sedang aktif")
+                return@setOnClickListener
+            }
+            performHapticFeedback(v, 30)
+            appPreferences.resolution = "1080p"
+            appPreferences.fps = 60
+            appPreferences.bitrateMbps = 20
+            appPreferences.isGamingMode = true
+            appPreferences.fpsStabilizerEnabled = true
+            updateResolutionBadge()
+            updateFpsStabilizerView()
+            showSnackbar("★ 1080p Real HD 60 FPS diaktifkan (Gambar Jernih & Terang)")
+        }
+
+        findViewById<View>(R.id.chip_quick_720p)?.setOnClickListener { v ->
+            if (ScreenRecordingService.isRecording) {
+                showSnackbar("⚠️ Resolusi terkunci saat perekaman sedang aktif")
+                return@setOnClickListener
+            }
+            performHapticFeedback(v, 30)
+            appPreferences.resolution = "720p"
+            appPreferences.fps = 60
+            appPreferences.bitrateMbps = 10
+            appPreferences.isGamingMode = true
+            appPreferences.fpsStabilizerEnabled = true
+            updateResolutionBadge()
+            updateFpsStabilizerView()
+            showSnackbar("720p HD 60 FPS diaktifkan (Optimal & Ringan)")
+        }
+
+        findViewById<View>(R.id.chip_quick_native)?.setOnClickListener { v ->
+            if (ScreenRecordingService.isRecording) {
+                showSnackbar("⚠️ Resolusi terkunci saat perekaman sedang aktif")
+                return@setOnClickListener
+            }
+            performHapticFeedback(v, 30)
+            appPreferences.resolution = "NATIVE"
+            appPreferences.fps = 60
+            appPreferences.bitrateMbps = 24
+            appPreferences.isGamingMode = true
+            appPreferences.fpsStabilizerEnabled = true
+            updateResolutionBadge()
+            updateFpsStabilizerView()
+            showSnackbar("Resolusi Layar Asli 1:1 Pixel Match diaktifkan")
+        }
+
+        // Quick Audio Chips in Studio Hero Deck
+        findViewById<View>(R.id.chip_quick_audio_online)?.setOnClickListener { v ->
+            if (ScreenRecordingService.isRecording) {
+                showSnackbar("⚠️ Kanal audio terkunci saat perekaman sedang aktif")
+                return@setOnClickListener
+            }
+            performHapticFeedback(v, 30)
+            isMicOn = false
+            isGameAudioOn = true
+            syncAudioPreferences()
+            updateAudioToggleViews()
+            showSnackbar("🎵 Audio Video/Game Online Aktif (Suara jernih tanpa noise mikrofon)")
+        }
+
+        findViewById<View>(R.id.chip_quick_audio_both)?.setOnClickListener { v ->
+            if (ScreenRecordingService.isRecording) {
+                showSnackbar("⚠️ Kanal audio terkunci saat perekaman sedang aktif")
+                return@setOnClickListener
+            }
+            performHapticFeedback(v, 30)
+            isMicOn = true
+            isGameAudioOn = true
+            if (!hasAudioRecordingPermission()) {
+                runtimePermissionLauncher.launch(arrayOf(Manifest.permission.RECORD_AUDIO))
+            }
+            syncAudioPreferences()
+            updateAudioToggleViews()
+            showSnackbar("🎙️+🎵 Mikrofon & Audio Video/Game Keduanya Aktif")
+        }
+
+        findViewById<View>(R.id.chip_quick_audio_mic)?.setOnClickListener { v ->
+            if (ScreenRecordingService.isRecording) {
+                showSnackbar("⚠️ Kanal audio terkunci saat perekaman sedang aktif")
+                return@setOnClickListener
+            }
+            performHapticFeedback(v, 30)
+            isMicOn = true
+            isGameAudioOn = false
+            if (!hasAudioRecordingPermission()) {
+                runtimePermissionLauncher.launch(arrayOf(Manifest.permission.RECORD_AUDIO))
+            }
+            syncAudioPreferences()
+            updateAudioToggleViews()
+            showSnackbar("🎙️ Suara Mikrofon Saja Diaktifkan")
+        }
+
+        findViewById<View>(R.id.chip_quick_audio_mute)?.setOnClickListener { v ->
+            if (ScreenRecordingService.isRecording) {
+                showSnackbar("⚠️ Kanal audio terkunci saat perekaman sedang aktif")
+                return@setOnClickListener
+            }
+            performHapticFeedback(v, 30)
+            isMicOn = false
+            isGameAudioOn = false
+            syncAudioPreferences()
+            updateAudioToggleViews()
+            showSnackbar("🔇 Mute: Rekaman Tanpa Suara")
         }
 
         // Toggle Mic Audio Recording (tap button or whole card)
@@ -699,52 +905,37 @@ open class MainActivity : AppCompatActivity() {
     private fun showQualityPickerDialog() {
         val currentPreset = when {
             appPreferences.resolution == "1080p" && appPreferences.fps >= 60 -> "1080p_60"
-            appPreferences.resolution == "1080p" && appPreferences.fps == 30 -> "1080p_30"
-            appPreferences.resolution == "4K" -> "4K_30"
-            appPreferences.resolution == "720p" -> "720p_30"
+            appPreferences.resolution == "720p" && appPreferences.fps >= 60 -> "720p_60"
+            appPreferences.resolution == "NATIVE" && appPreferences.fps >= 60 -> "native_60"
             else -> "custom"
         }
 
         val options = listOf(
             SelectionOption(
                 value = "1080p_60",
-                title = "1080p Gaming & Ultra Smooth (60 FPS • 12 Mbps)",
-                subtitle = "Rekomendasi Utama: 60 FPS Terkunci, Mulus Tanpa Lag & Frame Drop",
-                badgeLabel = "60FPS",
+                title = "1080p Full HD Real HD (Rekomendasi Utama)",
+                subtitle = "Gambar Terang, Super Jernih, Detail Tajam & 60 FPS Mulus Tanpa Patah-Patah",
+                badgeLabel = "REAL HD",
                 isRecommended = true
             ),
             SelectionOption(
                 value = "720p_60",
-                title = "720p Esports Super Ringan (60 FPS • 8 Mbps)",
-                subtitle = "Optimal untuk Game Berat: 60 FPS Sangat Mulus, HP Dingin & Baterai Awet",
-                badgeLabel = "60FPS",
-                isRecommended = false
-            ),
-            SelectionOption(
-                value = "1080p_30",
-                title = "1080p Standar (30 FPS • 8 Mbps)",
-                subtitle = "Hemat Baterai & Efisien untuk Tutorial Ringan",
-                badgeLabel = "1080p",
-                isRecommended = false
-            ),
-            SelectionOption(
-                value = "4K_30",
-                title = "4K Ultra HD (30 FPS • 20 Mbps)",
-                subtitle = "Ketajaman Tertinggi untuk Layar Ponsel Flagship",
-                badgeLabel = "4K",
-                isRecommended = false
-            ),
-            SelectionOption(
-                value = "720p_30",
-                title = "720p HD (30 FPS • 5 Mbps)",
-                subtitle = "Ringan & Sangat Hemat Penyimpanan / Baterai",
+                title = "720p HD Optimal (60 FPS • 10 Mbps)",
+                subtitle = "Optimal & Ringan: 60 FPS Sangat Mulus, HP Dingin & Hemat Baterai",
                 badgeLabel = "720p",
+                isRecommended = false
+            ),
+            SelectionOption(
+                value = "native_60",
+                title = "Resolusi Layar Asli (60 FPS • 24 Mbps)",
+                subtitle = "Ketajaman 100% Piksel Layar • 1:1 Pixel Match Tanpa Downscale",
+                badgeLabel = "ASLI",
                 isRecommended = false
             ),
             SelectionOption(
                 value = "custom",
                 title = "Kustomisasi Lanjutan di Pengaturan",
-                subtitle = "Atur Bitrate manual, Format Codec H.265 & Tuning Mikrofon",
+                subtitle = "Atur Bitrate hingga 30 Mbps, Format Codec H.265 & Tuning Mikrofon",
                 badgeLabel = "⚙️",
                 isRecommended = false
             )
@@ -754,60 +945,60 @@ open class MainActivity : AppCompatActivity() {
             context = this,
             iconRes = R.drawable.ic_video,
             title = "Pilih Kualitas Rekaman Layar",
-            subtitle = "Pilih preset profil rekaman atau sesuaikan konfigurasi",
+            subtitle = "Pilih preset profil kualitas video atau sesuaikan konfigurasi",
             options = options,
             selectedValue = currentPreset
         ) { selectedPreset ->
             when (selectedPreset) {
-                "1080p_60" -> {
-                    appPreferences.resolution = "1080p"
+                "native_60" -> {
+                    appPreferences.resolution = "NATIVE"
                     appPreferences.fps = 60
-                    appPreferences.bitrateMbps = 12
+                    appPreferences.bitrateMbps = 24
                     appPreferences.isGamingMode = true
                     appPreferences.fpsStabilizerEnabled = true
                     updateResolutionBadge()
                     updateFpsStabilizerView()
-                    showSnackbar("Preset 1080p 60FPS diterapkan (Mode Gaming & Stabilisator Aktif)")
+                    showSnackbar("Preset Layar Asli 60FPS 24Mbps diterapkan (Super Jernih 1:1)")
+                }
+                "1080p_60" -> {
+                    appPreferences.resolution = "1080p"
+                    appPreferences.fps = 60
+                    appPreferences.bitrateMbps = 20
+                    appPreferences.isGamingMode = true
+                    appPreferences.fpsStabilizerEnabled = true
+                    updateResolutionBadge()
+                    updateFpsStabilizerView()
+                    showSnackbar("Preset 1080p 60FPS 20Mbps diterapkan (Mode Gaming HD)")
+                }
+                "2k_60" -> {
+                    appPreferences.resolution = "2K"
+                    appPreferences.fps = 60
+                    appPreferences.bitrateMbps = 28
+                    appPreferences.isGamingMode = true
+                    appPreferences.fpsStabilizerEnabled = true
+                    updateResolutionBadge()
+                    updateFpsStabilizerView()
+                    showSnackbar("Preset 2K Quad HD 60FPS 28Mbps diterapkan (Ultra Jernih)")
+                }
+                "4k_30" -> {
+                    appPreferences.resolution = "4K"
+                    appPreferences.fps = 30
+                    appPreferences.bitrateMbps = 30
+                    appPreferences.isGamingMode = false
+                    appPreferences.fpsStabilizerEnabled = false
+                    updateResolutionBadge()
+                    updateFpsStabilizerView()
+                    showSnackbar("Preset 4K Ultra HD diterapkan (30 Mbps)")
                 }
                 "720p_60" -> {
                     appPreferences.resolution = "720p"
                     appPreferences.fps = 60
-                    appPreferences.bitrateMbps = 8
+                    appPreferences.bitrateMbps = 10
                     appPreferences.isGamingMode = true
                     appPreferences.fpsStabilizerEnabled = true
                     updateResolutionBadge()
                     updateFpsStabilizerView()
                     showSnackbar("Preset 720p 60FPS Esports diterapkan (Ringan, Adem & Mulus)")
-                }
-                "1080p_30" -> {
-                    appPreferences.resolution = "1080p"
-                    appPreferences.fps = 30
-                    appPreferences.bitrateMbps = 8
-                    appPreferences.isGamingMode = false
-                    appPreferences.fpsStabilizerEnabled = false
-                    updateResolutionBadge()
-                    updateFpsStabilizerView()
-                    showSnackbar("Preset 1080p 30FPS diterapkan")
-                }
-                "4K_30" -> {
-                    appPreferences.resolution = "4K"
-                    appPreferences.fps = 30
-                    appPreferences.bitrateMbps = 20
-                    appPreferences.isGamingMode = false
-                    appPreferences.fpsStabilizerEnabled = false
-                    updateResolutionBadge()
-                    updateFpsStabilizerView()
-                    showSnackbar("Preset 4K Ultra HD diterapkan")
-                }
-                "720p_30" -> {
-                    appPreferences.resolution = "720p"
-                    appPreferences.fps = 30
-                    appPreferences.bitrateMbps = 5
-                    appPreferences.isGamingMode = false
-                    appPreferences.fpsStabilizerEnabled = false
-                    updateResolutionBadge()
-                    updateFpsStabilizerView()
-                    showSnackbar("Preset 720p 30FPS diterapkan")
                 }
                 "custom" -> {
                     startActivity(Intent(this, SettingsActivity::class.java))
@@ -823,13 +1014,46 @@ open class MainActivity : AppCompatActivity() {
 
     private fun updateResolutionBadge() {
         val badgeRes = findViewById<TextView>(R.id.text_resolution_badge)
+        val studioTag = findViewById<TextView>(R.id.text_studio_pro_tag)
+        val resPref = appPreferences.resolution
+        val resLabel = when (resPref) {
+            "NATIVE" -> "Layar Asli"
+            "1080p" -> "1080p Real HD"
+            else -> resPref
+        }
         badgeRes?.text = String.format(
             Locale.getDefault(),
             "%s • %d FPS • %d Mbps",
-            appPreferences.resolution,
+            resLabel,
             appPreferences.fps,
             appPreferences.bitrateMbps
         )
+        studioTag?.text = "STUDIO PRO • ${resLabel.uppercase()} • ${appPreferences.fps} FPS"
+
+        if (!ScreenRecordingService.isRecording) {
+            findViewById<Button>(R.id.btn_start_stop)?.text = "Mulai Merekam Layar ($resLabel)"
+        }
+
+        // Style the 3 quick resolution chips in the studio hero deck
+        val chip1080p = findViewById<TextView>(R.id.chip_quick_1080p)
+        val chip720p = findViewById<TextView>(R.id.chip_quick_720p)
+        val chipNative = findViewById<TextView>(R.id.chip_quick_native)
+
+        fun styleResChip(chip: TextView?, isSelected: Boolean) {
+            chip?.apply {
+                if (isSelected) {
+                    backgroundTintList = ContextCompat.getColorStateList(this@MainActivity, R.color.colorPrimary)
+                    setTextColor(ContextCompat.getColor(this@MainActivity, R.color.colorOnPrimary))
+                } else {
+                    backgroundTintList = ContextCompat.getColorStateList(this@MainActivity, R.color.colorSurfaceVariant)
+                    setTextColor(ContextCompat.getColor(this@MainActivity, R.color.textTitle))
+                }
+            }
+        }
+
+        styleResChip(chip1080p, resPref == "1080p")
+        styleResChip(chip720p, resPref == "720p")
+        styleResChip(chipNative, resPref == "NATIVE")
     }
 
     private fun updateFpsStabilizerView() {
@@ -861,22 +1085,15 @@ open class MainActivity : AppCompatActivity() {
     }
 
     private fun setupDashboardCards() {
-        // Dedicated Start/Stop Button linked to ScreenRecordingService
+        // Dedicated Start/Stop Button linked to ScreenRecordingService with tactile bounce
         val btnStartStop = findViewById<Button>(R.id.btn_start_stop)
-        btnStartStop?.setOnClickListener {
-            if (ScreenRecordingService.isRecording) {
-                stopScreenCapture()
-            } else {
-                startScreenCapture()
-            }
-        }
-
-        val cardStartRecord = findViewById<View>(R.id.card_start_record)
-        cardStartRecord?.setOnClickListener {
-            if (ScreenRecordingService.isRecording) {
-                stopScreenCapture()
-            } else {
-                startScreenCapture()
+        btnStartStop?.setOnClickListener { v ->
+            animateButtonPress(v) {
+                if (ScreenRecordingService.isRecording) {
+                    stopScreenCapture()
+                } else {
+                    startScreenCapture()
+                }
             }
         }
 
@@ -1236,6 +1453,7 @@ open class MainActivity : AppCompatActivity() {
         val floatingBtnPause = findViewById<MaterialButton>(R.id.btn_floating_pause)
 
         if (ScreenRecordingService.isRecording) {
+            stopBreathingGlowAnimation()
             banner?.visibility = View.VISIBLE
             floatingPill?.visibility = View.VISIBLE
             layoutIdle?.visibility = View.GONE
@@ -1246,8 +1464,14 @@ open class MainActivity : AppCompatActivity() {
             val formattedTime = com.bangdillah.rekamindulu.floating.FloatingOverlayService.formatDuration(sec)
 
             textHeroTimer?.text = formattedTime
+            val imgLiveDot = findViewById<ImageView>(R.id.img_hero_live_dot)
+
+            val btnHeroStop = findViewById<Button>(R.id.btn_hero_stop_recording)
+            btnHeroStop?.isEnabled = true
+            btnHeroStop?.text = "⏹️ Hentikan & Simpan"
 
             if (isPaused) {
+                imgLiveDot?.alpha = 0.4f
                 textTimer?.text = "⏸️ Perekaman Dijeda • Durasi: $formattedTime"
                 btnPause?.text = "Lanjut"
                 headerStatus?.text = "⏸️ DIJEDA • $formattedTime"
@@ -1263,13 +1487,16 @@ open class MainActivity : AppCompatActivity() {
                 textHeroBadge?.text = "⏸️ REKAMAN DIJEDA"
                 textHeroBadge?.setTextColor(ContextCompat.getColor(this, R.color.colorWarning))
                 btnHeroPause?.text = "▶️ Lanjutkan"
-                textHeroInfo?.text = "${appPreferences.resolution} • ${appPreferences.fps} FPS • Perekaman Dijeda"
+                val resDisplay = if (appPreferences.resolution == "NATIVE") "Layar Asli" else if (appPreferences.resolution == "1080p") "1080p Real HD" else appPreferences.resolution
+                textHeroInfo?.text = "$resDisplay • ${appPreferences.fps} FPS • Perekaman Dijeda"
             } else {
+                imgLiveDot?.alpha = 1.0f
+                val resDisplay = if (appPreferences.resolution == "NATIVE") "Layar Asli" else if (appPreferences.resolution == "1080p") "1080p Real HD" else appPreferences.resolution
                 textTimer?.text = String.format(
                     Locale.getDefault(),
                     "Durasi: %s • %s %dFPS",
                     formattedTime,
-                    appPreferences.resolution,
+                    resDisplay,
                     appPreferences.fps
                 )
                 btnPause?.text = "Jeda"
@@ -1279,21 +1506,28 @@ open class MainActivity : AppCompatActivity() {
                 floatingPill?.strokeColor = 0xFFFF4757.toInt()
                 floatingStatus?.text = "SEDANG MEREKAM"
                 floatingStatus?.setTextColor(0xFFFF6B6B.toInt())
-                floatingTimer?.text = "$formattedTime • ${appPreferences.resolution} ${appPreferences.fps}FPS"
+                floatingTimer?.text = "$formattedTime • $resDisplay ${appPreferences.fps}FPS"
                 floatingBtnPause?.text = "Jeda"
                 floatingBtnPause?.setIconResource(R.drawable.ic_pause)
 
                 textHeroBadge?.text = "🔴 SEDANG MEREKAM AKTIF"
                 textHeroBadge?.setTextColor(ContextCompat.getColor(this, R.color.colorError))
                 btnHeroPause?.text = "⏸️ Jeda"
-                val audioDesc = if (isMicOn && isGameAudioOn) "Mikrofon & Audio Game Aktif" else if (isMicOn) "Mikrofon Aktif" else if (isGameAudioOn) "Audio Game Aktif" else "Mute"
-                textHeroInfo?.text = "${appPreferences.resolution} • ${appPreferences.fps} FPS • $audioDesc"
+                val audioDesc = when {
+                    isMicOn && isGameAudioOn -> "Mikrofon & Audio Video/Game Aktif"
+                    isMicOn -> "Mikrofon Aktif"
+                    isGameAudioOn -> "Audio Jernih Video/Game Online"
+                    else -> "Mute (Tanpa Suara)"
+                }
+                textHeroInfo?.text = "$resDisplay • ${appPreferences.fps} FPS • ${appPreferences.bitrateMbps} Mbps • $audioDesc"
             }
             startRecordLabel?.text = "Sedang Merekam • Tekan tombol untuk Berhenti & Simpan"
+            btnStartStop?.isEnabled = true
             btnStartStop?.text = "Hentikan & Simpan Rekaman"
             btnStartStop?.backgroundTintList = ContextCompat.getColorStateList(this, R.color.colorError)
             imgStartStopIcon?.setImageResource(R.drawable.ic_close)
         } else {
+            startBreathingGlowAnimation()
             banner?.visibility = View.GONE
             floatingPill?.visibility = View.GONE
             layoutIdle?.visibility = View.VISIBLE
@@ -1302,7 +1536,13 @@ open class MainActivity : AppCompatActivity() {
             headerStatus?.text = "● Siap Merekam • Status Optimal"
             headerStatus?.setTextColor(ContextCompat.getColor(this, R.color.colorSuccess))
             startRecordLabel?.text = "Tekan tombol untuk mulai merekam layar & audio"
-            btnStartStop?.text = "Start Recording"
+            val resDisplay = when (appPreferences.resolution) {
+                "NATIVE" -> "Layar Asli"
+                "1080p" -> "1080p Real HD"
+                else -> appPreferences.resolution
+            }
+            btnStartStop?.isEnabled = true
+            btnStartStop?.text = "Mulai Merekam Layar ($resDisplay)"
             btnStartStop?.backgroundTintList = ContextCompat.getColorStateList(this, R.color.colorPrimary)
             imgStartStopIcon?.setImageResource(R.drawable.ic_record)
         }

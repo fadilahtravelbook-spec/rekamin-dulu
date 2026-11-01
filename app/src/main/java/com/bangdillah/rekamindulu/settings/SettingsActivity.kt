@@ -200,7 +200,7 @@ class SettingsActivity : AppCompatActivity() {
             if (isChecked) {
                 // Boost parameters for gaming
                 appPreferences.fps = 60
-                appPreferences.bitrateMbps = 12
+                appPreferences.bitrateMbps = 24
                 appPreferences.fpsStabilizerEnabled = true
                 appPreferences.gamingTurboBoost = true
                 appPreferences.hardwareAccelerationEnabled = true
@@ -208,13 +208,13 @@ class SettingsActivity : AppCompatActivity() {
                 toggleTurboBoost?.isChecked = true
                 toggleHardwareAcceleration?.isChecked = true
                 updateUIValues(skipGamingSwitch = true)
-                Toast.makeText(this, "⚡ Mode Gaming Pro Aktif: 60 FPS & 12 Mbps (Stabilisator + Turbo CPU + GPU HW)", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "⚡ Mode Gaming Pro Aktif: 60 FPS & 24 Mbps Super HD (Stabilisator + Turbo CPU + GPU HW)", Toast.LENGTH_SHORT).show()
             } else {
-                appPreferences.fps = 30
-                appPreferences.bitrateMbps = 8
+                appPreferences.fps = 60
+                appPreferences.bitrateMbps = 16
                 appPreferences.fpsStabilizerEnabled = false
                 updateUIValues(skipGamingSwitch = true)
-                Toast.makeText(this, "Mode Standar: 30 FPS & 8 Mbps", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "Mode Standar: 60 FPS & 16 Mbps HD", Toast.LENGTH_SHORT).show()
             }
             com.bangdillah.rekamindulu.backend.FirebaseAuthManager.getInstance(this).updateUserPreferences(
                 fps = appPreferences.fps,
@@ -516,28 +516,28 @@ class SettingsActivity : AppCompatActivity() {
         val options = listOf(
             SelectionOption(
                 value = "1080p",
-                title = "1080p Full HD",
-                subtitle = "1920×1080 • Standar YouTube, TikTok & Gaming",
-                badgeLabel = "1080p",
+                title = "1080p Full HD Real HD (Rekomendasi)",
+                subtitle = "Gambar Terang, Super Jernih, Detail Tajam & 60 FPS Mulus Tanpa Patah-Patah",
+                badgeLabel = "REAL HD",
                 isRecommended = true
             ),
             SelectionOption(
-                value = "4K",
-                title = "4K Ultra HD",
-                subtitle = "3840×2160 (2160p) • Kualitas Tertinggi & Super Tajam",
-                badgeLabel = "4K",
-                isRecommended = false
-            ),
-            SelectionOption(
                 value = "720p",
-                title = "720p HD",
-                subtitle = "1280×720 • Ringan & Hemat Kapasitas Memori",
+                title = "720p HD (Optimal & Mulus)",
+                subtitle = "1280×720 • Ringan, Adem, Hemat Baterai & Mulus 60 FPS",
                 badgeLabel = "720p",
                 isRecommended = false
             ),
             SelectionOption(
+                value = "NATIVE",
+                title = "Resolusi Layar Asli (100% Piksel HP)",
+                subtitle = "Ketajaman 1:1 Sesuai Layar Ponsel • Tanpa Downscale",
+                badgeLabel = "ASLI",
+                isRecommended = false
+            ),
+            SelectionOption(
                 value = "480p",
-                title = "480p SD",
+                title = "480p SD (Hemat Penyimpanan)",
                 subtitle = "854×480 • Hemat Kuota, Baterai & Ukuran Ringan",
                 badgeLabel = "480p",
                 isRecommended = false
@@ -557,7 +557,8 @@ class SettingsActivity : AppCompatActivity() {
             com.bangdillah.rekamindulu.backend.FirebaseAuthManager.getInstance(this).updateUserPreferences(
                 resolution = selectedResolution
             )
-            Toast.makeText(this, "Resolusi diubah ke $selectedResolution", Toast.LENGTH_SHORT).show()
+            val resName = if (selectedResolution == "NATIVE") "Resolusi Layar Asli (100%)" else selectedResolution
+            Toast.makeText(this, "Resolusi diubah ke $resName", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -618,31 +619,38 @@ class SettingsActivity : AppCompatActivity() {
     private fun showBitrateDialog() {
         val options = listOf(
             SelectionOption(
-                value = 12,
-                title = "12 Mbps (High Definition)",
-                subtitle = "Video Jernih & Detail Tajam Tanpa Pecah",
-                badgeLabel = "12M",
+                value = 30,
+                title = "30 Mbps (Ultra HD Crystal Clear)",
+                subtitle = "Detail Piksel Sempurna Tanpa Kompresi Pecah / Buram",
+                badgeLabel = "30M",
+                isRecommended = false
+            ),
+            SelectionOption(
+                value = 24,
+                title = "24 Mbps (Super HD - Rekomendasi Utama)",
+                subtitle = "Sangat Jernih, Tajam & Halus untuk Gameplay 60 FPS",
+                badgeLabel = "24M",
                 isRecommended = true
             ),
             SelectionOption(
-                value = 16,
-                title = "16 Mbps (Maksimal)",
-                subtitle = "Kompresi Minimal untuk Kualitas Grafis Tertinggi",
-                badgeLabel = "16M",
+                value = 18,
+                title = "18 Mbps (High Definition Jernih)",
+                subtitle = "Video Jernih & Seimbang untuk Segala Kebutuhan",
+                badgeLabel = "18M",
+                isRecommended = false
+            ),
+            SelectionOption(
+                value = 12,
+                title = "12 Mbps (Standar HD)",
+                subtitle = "Kompresi Efisien untuk Durasi Rekaman Panjang",
+                badgeLabel = "12M",
                 isRecommended = false
             ),
             SelectionOption(
                 value = 8,
-                title = "8 Mbps (Seimbang)",
-                subtitle = "Standar Efisien untuk Perekaman Durasi Panjang",
+                title = "8 Mbps (Hemat Ruang)",
+                subtitle = "Ukuran File Lebih Kecil & Cepat Dibagikan",
                 badgeLabel = "8M",
-                isRecommended = false
-            ),
-            SelectionOption(
-                value = 4,
-                title = "4 Mbps (Hemat Ruang)",
-                subtitle = "Ukuran File Sangat Kecil & Cepat Dibagikan",
-                badgeLabel = "4M",
                 isRecommended = false
             )
         )
@@ -664,17 +672,17 @@ class SettingsActivity : AppCompatActivity() {
     private fun showCodecDialog() {
         val options = listOf(
             SelectionOption(
-                value = "H264",
-                title = "H.264 / AVC",
-                subtitle = "Kompatibel Luas (Semua Pemutar, WhatsApp, & Media Sosial)",
-                badgeLabel = "H264",
+                value = "H265",
+                title = "H.265 / HEVC (Ultra HD & Lebih Jernih)",
+                subtitle = "Kompresi Modern: Detail Lebih Tajam, Warna Jernih & Hemat Memori ~40%",
+                badgeLabel = "H265",
                 isRecommended = true
             ),
             SelectionOption(
-                value = "H265",
-                title = "H.265 / HEVC",
-                subtitle = "Kompresi Modern (Hemat Ukuran ~40% dengan Kualitas Sama)",
-                badgeLabel = "H265",
+                value = "H264",
+                title = "H.264 / AVC (High Profile)",
+                subtitle = "Kompatibilitas Luas dengan High Profile 4.2 Super Tajam",
+                badgeLabel = "H264",
                 isRecommended = false
             )
         )
