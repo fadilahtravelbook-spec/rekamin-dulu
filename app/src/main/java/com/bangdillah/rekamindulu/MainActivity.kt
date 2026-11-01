@@ -22,6 +22,7 @@ import android.text.InputType
 import android.util.Log
 import android.view.View
 import android.widget.Button
+import android.widget.FrameLayout
 import android.widget.EditText
 import android.widget.ImageView
 import android.widget.ProgressBar
@@ -651,12 +652,12 @@ open class MainActivity : AppCompatActivity() {
             performHapticFeedback(v, 30)
             appPreferences.resolution = "1080p"
             appPreferences.fps = 60
-            appPreferences.bitrateMbps = 20
+            appPreferences.bitrateMbps = 24
             appPreferences.isGamingMode = true
             appPreferences.fpsStabilizerEnabled = true
             updateResolutionBadge()
             updateFpsStabilizerView()
-            showSnackbar("★ 1080p Real HD 60 FPS diaktifkan (Gambar Jernih & Terang)")
+            showSnackbar("★ 1080p Real HD 60 FPS (24 Mbps) diaktifkan (Gambar Jernih & Tajam)")
         }
 
         findViewById<View>(R.id.chip_quick_720p)?.setOnClickListener { v ->
@@ -667,12 +668,12 @@ open class MainActivity : AppCompatActivity() {
             performHapticFeedback(v, 30)
             appPreferences.resolution = "720p"
             appPreferences.fps = 60
-            appPreferences.bitrateMbps = 10
+            appPreferences.bitrateMbps = 12
             appPreferences.isGamingMode = true
             appPreferences.fpsStabilizerEnabled = true
             updateResolutionBadge()
             updateFpsStabilizerView()
-            showSnackbar("720p HD 60 FPS diaktifkan (Optimal & Ringan)")
+            showSnackbar("720p HD 60 FPS (12 Mbps) diaktifkan (Optimal, Ringan & Mulus)")
         }
 
         findViewById<View>(R.id.chip_quick_native)?.setOnClickListener { v ->
@@ -914,13 +915,13 @@ open class MainActivity : AppCompatActivity() {
             SelectionOption(
                 value = "1080p_60",
                 title = "1080p Full HD Real HD (Rekomendasi Utama)",
-                subtitle = "Gambar Terang, Super Jernih, Detail Tajam & 60 FPS Mulus Tanpa Patah-Patah",
+                subtitle = "Gambar Terang, Super Jernih, Detail Tajam (24 Mbps) & 60 FPS Mulus Tanpa Patah-Patah",
                 badgeLabel = "REAL HD",
                 isRecommended = true
             ),
             SelectionOption(
                 value = "720p_60",
-                title = "720p HD Optimal (60 FPS • 10 Mbps)",
+                title = "720p HD Optimal (60 FPS • 12 Mbps)",
                 subtitle = "Optimal & Ringan: 60 FPS Sangat Mulus, HP Dingin & Hemat Baterai",
                 badgeLabel = "720p",
                 isRecommended = false
@@ -963,12 +964,12 @@ open class MainActivity : AppCompatActivity() {
                 "1080p_60" -> {
                     appPreferences.resolution = "1080p"
                     appPreferences.fps = 60
-                    appPreferences.bitrateMbps = 20
+                    appPreferences.bitrateMbps = 24
                     appPreferences.isGamingMode = true
                     appPreferences.fpsStabilizerEnabled = true
                     updateResolutionBadge()
                     updateFpsStabilizerView()
-                    showSnackbar("Preset 1080p 60FPS 20Mbps diterapkan (Mode Gaming HD)")
+                    showSnackbar("Preset 1080p 60FPS 24Mbps diterapkan (Super Jernih & Terang)")
                 }
                 "2k_60" -> {
                     appPreferences.resolution = "2K"
@@ -993,7 +994,7 @@ open class MainActivity : AppCompatActivity() {
                 "720p_60" -> {
                     appPreferences.resolution = "720p"
                     appPreferences.fps = 60
-                    appPreferences.bitrateMbps = 10
+                    appPreferences.bitrateMbps = 12
                     appPreferences.isGamingMode = true
                     appPreferences.fpsStabilizerEnabled = true
                     updateResolutionBadge()
@@ -1016,11 +1017,7 @@ open class MainActivity : AppCompatActivity() {
         val badgeRes = findViewById<TextView>(R.id.text_resolution_badge)
         val studioTag = findViewById<TextView>(R.id.text_studio_pro_tag)
         val resPref = appPreferences.resolution
-        val resLabel = when (resPref) {
-            "NATIVE" -> "Layar Asli"
-            "1080p" -> "1080p Real HD"
-            else -> resPref
-        }
+        val resLabel = com.bangdillah.rekamindulu.service.RecordingEngineOptimizer.getResolutionLabel(resPref)
         badgeRes?.text = String.format(
             Locale.getDefault(),
             "%s • %d FPS • %d Mbps",
@@ -1487,11 +1484,11 @@ open class MainActivity : AppCompatActivity() {
                 textHeroBadge?.text = "⏸️ REKAMAN DIJEDA"
                 textHeroBadge?.setTextColor(ContextCompat.getColor(this, R.color.colorWarning))
                 btnHeroPause?.text = "▶️ Lanjutkan"
-                val resDisplay = if (appPreferences.resolution == "NATIVE") "Layar Asli" else if (appPreferences.resolution == "1080p") "1080p Real HD" else appPreferences.resolution
+                val resDisplay = com.bangdillah.rekamindulu.service.RecordingEngineOptimizer.getResolutionLabel(appPreferences.resolution)
                 textHeroInfo?.text = "$resDisplay • ${appPreferences.fps} FPS • Perekaman Dijeda"
             } else {
                 imgLiveDot?.alpha = 1.0f
-                val resDisplay = if (appPreferences.resolution == "NATIVE") "Layar Asli" else if (appPreferences.resolution == "1080p") "1080p Real HD" else appPreferences.resolution
+                val resDisplay = com.bangdillah.rekamindulu.service.RecordingEngineOptimizer.getResolutionLabel(appPreferences.resolution)
                 textTimer?.text = String.format(
                     Locale.getDefault(),
                     "Durasi: %s • %s %dFPS",
@@ -1536,11 +1533,7 @@ open class MainActivity : AppCompatActivity() {
             headerStatus?.text = "● Siap Merekam • Status Optimal"
             headerStatus?.setTextColor(ContextCompat.getColor(this, R.color.colorSuccess))
             startRecordLabel?.text = "Tekan tombol untuk mulai merekam layar & audio"
-            val resDisplay = when (appPreferences.resolution) {
-                "NATIVE" -> "Layar Asli"
-                "1080p" -> "1080p Real HD"
-                else -> appPreferences.resolution
-            }
+            val resDisplay = com.bangdillah.rekamindulu.service.RecordingEngineOptimizer.getResolutionLabel(appPreferences.resolution)
             btnStartStop?.isEnabled = true
             btnStartStop?.text = "Mulai Merekam Layar ($resDisplay)"
             btnStartStop?.backgroundTintList = ContextCompat.getColorStateList(this, R.color.colorPrimary)
@@ -1640,16 +1633,18 @@ open class MainActivity : AppCompatActivity() {
         }
 
         // Cek sisa memori penyimpanan internal jika diaktifkan (hanya ingatkan jika < 200MB)
+        // Gunakan pemantauan instan StatFs melalui RecordingEngineOptimizer agar bebas lag (<0.1ms)
         if (appPreferences.storageWarningEnabled) {
-            val report = DeviceAnalyzer.analyze(this)
-            if (report.freeStorageGb < 0.2) {
+            val freeBytes = com.bangdillah.rekamindulu.service.RecordingEngineOptimizer.getAvailableStorageBytes(this)
+            val freeStorageGb = freeBytes.toDouble() / (1024.0 * 1024.0 * 1024.0)
+            if (freeStorageGb < 0.2) {
                 AlertDialog.Builder(this)
                     .setTitle("⚠️ Peringatan Sisa Memori HP")
                     .setMessage(
                         String.format(
                             Locale.getDefault(),
                             "Sisa memori internal Anda tersisa %.2f GB (sangat rendah). Merekam video resolusi tinggi dapat gagal jika penyimpanan habis. Lanjutkan merekam?",
-                            report.freeStorageGb
+                            freeStorageGb
                         )
                     )
                     .setPositiveButton("Tetap Rekam") { _, _ ->

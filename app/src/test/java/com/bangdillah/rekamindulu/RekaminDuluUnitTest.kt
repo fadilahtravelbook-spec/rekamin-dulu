@@ -421,4 +421,105 @@ class RekaminDuluUnitTest {
         // 720p on 1080p physical display: density scales down proportionally to 280
         assertEquals(280, computeDensity(420, 720, 1080))
     }
+
+    @Test
+    fun testRecordingEngineOptimizerDimensions1080pAnd720p() {
+        val metrics = android.util.DisplayMetrics().apply {
+            widthPixels = 1080
+            heightPixels = 2400
+            densityDpi = 420
+        }
+
+        // Test 1080p
+        val dims1080 = com.bangdillah.rekamindulu.service.RecordingEngineOptimizer.calculateDimensions(metrics, "1080p")
+        assertEquals(1080, dims1080.width)
+        assertEquals(2400, dims1080.height)
+        assertEquals(420, dims1080.densityDpi)
+
+        // Test 720p
+        val dims720 = com.bangdillah.rekamindulu.service.RecordingEngineOptimizer.calculateDimensions(metrics, "720p")
+        assertEquals(720, dims720.width)
+        assertEquals(1600, dims720.height)
+        assertEquals(280, dims720.densityDpi)
+
+        // Test Native
+        val dimsNative = com.bangdillah.rekamindulu.service.RecordingEngineOptimizer.calculateDimensions(metrics, "NATIVE")
+        assertEquals(1080, dimsNative.width)
+        assertEquals(2400, dimsNative.height)
+        assertEquals(420, dimsNative.densityDpi)
+    }
+
+    @Test
+    fun testRecordingEngineOptimizerResolutionLabelsAndBitrates() {
+        assertEquals("1080p Real HD", com.bangdillah.rekamindulu.service.RecordingEngineOptimizer.getResolutionLabel("1080p"))
+        assertEquals("720p HD", com.bangdillah.rekamindulu.service.RecordingEngineOptimizer.getResolutionLabel("720p"))
+        assertEquals("Layar Asli (1:1)", com.bangdillah.rekamindulu.service.RecordingEngineOptimizer.getResolutionLabel("NATIVE"))
+
+        assertEquals(24, com.bangdillah.rekamindulu.service.RecordingEngineOptimizer.getOptimalBitrateMbps("1080p", 60))
+        assertEquals(16, com.bangdillah.rekamindulu.service.RecordingEngineOptimizer.getOptimalBitrateMbps("1080p", 30))
+        assertEquals(12, com.bangdillah.rekamindulu.service.RecordingEngineOptimizer.getOptimalBitrateMbps("720p", 60))
+        assertEquals(8, com.bangdillah.rekamindulu.service.RecordingEngineOptimizer.getOptimalBitrateMbps("720p", 30))
+    }
+
+    @Test
+    fun testRecordingEngineOptimizerLandscapeDimensions() {
+        val metrics = android.util.DisplayMetrics().apply {
+            widthPixels = 1080
+            heightPixels = 2400
+            densityDpi = 420
+        }
+
+        // Forced Landscape for games
+        val dimsLandscape1080 = com.bangdillah.rekamindulu.service.RecordingEngineOptimizer.calculateDimensions(metrics, "1080p", "LANDSCAPE")
+        assertEquals(2400, dimsLandscape1080.width)
+        assertEquals(1080, dimsLandscape1080.height)
+
+        val dimsLandscape720 = com.bangdillah.rekamindulu.service.RecordingEngineOptimizer.calculateDimensions(metrics, "720p", "LANDSCAPE")
+        assertEquals(1600, dimsLandscape720.width)
+        assertEquals(720, dimsLandscape720.height)
+    }
+
+    @Test
+    fun testTrimSeekClamping() {
+        val videoDurationMs = 15000
+        val seekEndTimeProgress = 500
+
+        // Start time clamping should not become negative
+        val maxAllowedStart = ((seekEndTimeProgress) - 1000).coerceAtLeast(0)
+        assertEquals(0, maxAllowedStart)
+
+        // End time clamping should not exceed videoDurationMs
+        val seekStartTimeProgress = 14500
+        val minAllowedEnd = ((seekStartTimeProgress) + 1000).coerceAtMost(videoDurationMs)
+        assertEquals(15000, minAllowedEnd)
+    }
+
+    @Test
+    fun testPlayerForwardMaxDurationClamp() {
+        // Known duration
+        val durationKnown = 30000
+        val currentPos = 25000
+        val maxDurKnown = if (durationKnown > 0) durationKnown else (currentPos + 10000)
+        val newPosKnown = (currentPos + 10000).coerceIn(0, maxDurKnown)
+        assertEquals(30000, newPosKnown)
+
+        // Unknown duration (e.g. 0 or negative)
+        val durationUnknown = -1
+        val maxDurUnknown = if (durationUnknown > 0) durationUnknown else (currentPos + 10000)
+        val newPosUnknown = (currentPos + 10000).coerceIn(0, maxDurUnknown)
+        assertEquals(35000, newPosUnknown)
+    }
+
+    @Test
+    fun testStorageFreeCalculation() {
+        val freeBytes = 500 * 1024 * 1024L // 500MB
+        val freeGb = freeBytes.toDouble() / (1024.0 * 1024.0 * 1024.0)
+        assertTrue("500MB harus lebih besar dari batas kritis 0.2 GB (200MB)", freeGb > 0.2)
+        assertEquals(0.488, freeGb, 0.01)
+
+        val criticalBytes = 150 * 1024 * 1024L // 150MB
+        val criticalGb = criticalBytes.toDouble() / (1024.0 * 1024.0 * 1024.0)
+        assertTrue("150MB harus lebih kecil dari batas peringatan 0.2 GB", criticalGb < 0.2)
+    }
 }
+

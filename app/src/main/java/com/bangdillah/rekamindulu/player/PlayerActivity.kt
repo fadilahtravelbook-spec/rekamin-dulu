@@ -205,7 +205,8 @@ class PlayerActivity : AppCompatActivity() {
 
         findViewById<ImageView>(R.id.btn_forward)?.setOnClickListener {
             videoView?.let { vv ->
-                val newPos = (vv.currentPosition + 10000).coerceAtMost(vv.duration)
+                val maxDur = if (vv.duration > 0) vv.duration else (vv.currentPosition + 10000)
+                val newPos = (vv.currentPosition + 10000).coerceIn(0, maxDur)
                 vv.seekTo(newPos)
                 seekBar?.progress = newPos
                 currentTimeText?.text = formatTime(newPos)

@@ -30,6 +30,7 @@ class LibraryAdapter(
     companion object {
         data class MetaItem(val durationText: String, val resolutionText: String, val hasVideo: Boolean, val durMs: Long)
         private val metadataCache = HashMap<String, MetaItem>()
+        private val metadataExecutor = java.util.concurrent.Executors.newFixedThreadPool(2)
 
         fun invalidateCache(filePath: String) {
             metadataCache.remove(filePath)
@@ -64,68 +65,102 @@ class LibraryAdapter(
         private val btnDelete: Button = view.findViewById(R.id.btn_item_delete)
 
         fun bind(file: File) {
+            itemView.tag = file.absolutePath
             titleView.text = file.nameWithoutExtension.replace("_", " ")
 
             val fileSizeMb = file.length() / (1024.0 * 1024.0)
             val dateFormatted = dateFormat.format(Date(file.lastModified()))
 
-            // Extract duration and resolution from metadata (cached to ensure smooth scrolling)
-            var cached = metadataCache[file.absolutePath]
+            // Extract duration and resolution from metadata (cached to ensure smooth 60 FPS scrolling)
+            val cached = metadataCache[file.absolutePath]
 
-            if (cached == null) {
-                var retriever: MediaMetadataRetriever? = null
-                try {
-                    retriever = MediaMetadataRetriever()
-                    retriever.setDataSource(file.absolutePath)
-                    val durMs = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: 0L
-                    val width = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)
-                    val height = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)
-                    val hasVideo = "yes".equals(
-                        retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_HAS_VIDEO),
-                        ignoreCase = true
-                    )
+            if (cached != null) {
+                durationView.text = String.format(
+                    Locale.getDefault(),
+                    "%s • %.1f MB • %s\n%s",
+                    cached.durationText,
+                    fileSizeMb,
+                    cached.resolutionText,
+                    dateFormatted
+                )
+                if (file.length() > 10240 && cached.hasVideo) {
+                    val targetUs = if (cached.durMs > 1000L) 500000L else 0L
+                    val requestOptions = RequestOptions()
+                        .frame(targetUs)
+                        .set(VideoDecoder.FRAME_OPTION, MediaMetadataRetriever.OPTION_CLOSEST)
 
-                    val sec = (durMs / 1000).toInt()
-                    val min = sec / 60
-                    val durationText = String.format(Locale.getDefault(), "%02d:%02d", min, sec % 60)
-                    val resolutionText = if (width != null && height != null) "${width}x${height}" else "1080p"
-                    cached = MetaItem(durationText, resolutionText, hasVideo && width != null, durMs)
-                    metadataCache[file.absolutePath] = cached
-                } catch (e: Exception) {
-                    cached = MetaItem("00:00", "1080p", false, 0L)
-                    metadataCache[file.absolutePath] = cached
-                } finally {
-                    try {
-                        retriever?.release()
-                    } catch (ignored: Exception) {}
+                    Glide.with(itemView.context)
+                        .asBitmap()
+                        .apply(requestOptions)
+                        .load(file)
+                        .placeholder(R.drawable.ic_video_placeholder)
+                        .error(R.drawable.ic_video_placeholder)
+                        .into(thumbnailView)
+                } else {
+                    thumbnailView.setImageResource(R.drawable.ic_video_placeholder)
                 }
-            }
-
-            val meta = cached ?: MetaItem("00:00", "1080p", false, 0L)
-            durationView.text = String.format(
-                Locale.getDefault(),
-                "%s • %.1f MB • %s\n%s",
-                meta.durationText,
-                fileSizeMb,
-                meta.resolutionText,
-                dateFormatted
-            )
-
-            if (file.length() > 10240 && meta.hasVideo) {
-                val targetUs = if (meta.durMs > 1000L) 500000L else 0L
-                val requestOptions = RequestOptions()
-                    .frame(targetUs)
-                    .set(VideoDecoder.FRAME_OPTION, MediaMetadataRetriever.OPTION_CLOSEST)
-
-                Glide.with(itemView.context)
-                    .asBitmap()
-                    .apply(requestOptions)
-                    .load(file)
-                    .placeholder(R.drawable.ic_video_placeholder)
-                    .error(R.drawable.ic_video_placeholder)
-                    .into(thumbnailView)
             } else {
+                durationView.text = String.format(
+                    Locale.getDefault(),
+                    "%.1f MB\n%s",
+                    fileSizeMb,
+                    dateFormatted
+                )
                 thumbnailView.setImageResource(R.drawable.ic_video_placeholder)
+
+                metadataExecutor.execute {
+                    var retriever: MediaMetadataRetriever? = null
+                    val itemMeta = try {
+                        retriever = MediaMetadataRetriever()
+                        retriever.setDataSource(file.absolutePath)
+                        val durMs = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: 0L
+                        val width = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)
+                        val height = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)
+                        val hasVideo = "yes".equals(
+                            retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_HAS_VIDEO),
+                            ignoreCase = true
+                        )
+
+                        val sec = (durMs / 1000).toInt()
+                        val min = sec / 60
+                        val durationText = String.format(Locale.getDefault(), "%02d:%02d", min, sec % 60)
+                        val resolutionText = if (width != null && height != null) "${width}x${height}" else "1080p"
+                        MetaItem(durationText, resolutionText, hasVideo && width != null, durMs)
+                    } catch (e: Exception) {
+                        MetaItem("00:00", "1080p", false, 0L)
+                    } finally {
+                        try { retriever?.release() } catch (ignored: Exception) {}
+                    }
+
+                    metadataCache[file.absolutePath] = itemMeta
+
+                    itemView.post {
+                        if (itemView.tag == file.absolutePath) {
+                            durationView.text = String.format(
+                                Locale.getDefault(),
+                                "%s • %.1f MB • %s\n%s",
+                                itemMeta.durationText,
+                                fileSizeMb,
+                                itemMeta.resolutionText,
+                                dateFormatted
+                            )
+                            if (file.length() > 10240 && itemMeta.hasVideo) {
+                                val targetUs = if (itemMeta.durMs > 1000L) 500000L else 0L
+                                val requestOptions = RequestOptions()
+                                    .frame(targetUs)
+                                    .set(VideoDecoder.FRAME_OPTION, MediaMetadataRetriever.OPTION_CLOSEST)
+
+                                Glide.with(itemView.context)
+                                    .asBitmap()
+                                    .apply(requestOptions)
+                                    .load(file)
+                                    .placeholder(R.drawable.ic_video_placeholder)
+                                    .error(R.drawable.ic_video_placeholder)
+                                    .into(thumbnailView)
+                            }
+                        }
+                    }
+                }
             }
 
             itemView.setOnClickListener {

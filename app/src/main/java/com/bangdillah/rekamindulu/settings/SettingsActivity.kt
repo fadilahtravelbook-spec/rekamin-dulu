@@ -432,12 +432,7 @@ class SettingsActivity : AppCompatActivity() {
     }
 
     private fun updateUIValues(skipGamingSwitch: Boolean = false, skipAppLockSwitch: Boolean = false) {
-        textResolutionVal?.text = when (appPreferences.resolution) {
-            "4K" -> "4K UHD"
-            "1080p" -> "1080p FHD"
-            "720p" -> "720p HD"
-            else -> "480p SD"
-        }
+        textResolutionVal?.text = com.bangdillah.rekamindulu.service.RecordingEngineOptimizer.getResolutionLabel(appPreferences.resolution)
 
         textFpsVal?.text = "${appPreferences.fps} FPS"
         textBitrateVal?.text = "${appPreferences.bitrateMbps} Mbps"
@@ -516,29 +511,29 @@ class SettingsActivity : AppCompatActivity() {
         val options = listOf(
             SelectionOption(
                 value = "1080p",
-                title = "1080p Full HD Real HD (Rekomendasi)",
-                subtitle = "Gambar Terang, Super Jernih, Detail Tajam & 60 FPS Mulus Tanpa Patah-Patah",
+                title = "1080p Full HD Real HD (Rekomendasi Utama)",
+                subtitle = "Ketajaman Kristal, Detail Super Tajam (24 Mbps) & 60 FPS Mulus Bebas Patah",
                 badgeLabel = "REAL HD",
                 isRecommended = true
             ),
             SelectionOption(
                 value = "720p",
                 title = "720p HD (Optimal & Mulus)",
-                subtitle = "1280×720 • Ringan, Adem, Hemat Baterai & Mulus 60 FPS",
+                subtitle = "Ringan, Adem, Hemat Baterai (12 Mbps) & Mulus 60 FPS Sangat Lancar",
                 badgeLabel = "720p",
                 isRecommended = false
             ),
             SelectionOption(
                 value = "NATIVE",
                 title = "Resolusi Layar Asli (100% Piksel HP)",
-                subtitle = "Ketajaman 1:1 Sesuai Layar Ponsel • Tanpa Downscale",
+                subtitle = "Ketajaman 1:1 Sesuai Layar Ponsel • Tanpa Downscale (24 Mbps • 60 FPS)",
                 badgeLabel = "ASLI",
                 isRecommended = false
             ),
             SelectionOption(
                 value = "480p",
                 title = "480p SD (Hemat Penyimpanan)",
-                subtitle = "854×480 • Hemat Kuota, Baterai & Ukuran Ringan",
+                subtitle = "Ukuran File Paling Ringan & Hemat Kuota (6 Mbps)",
                 badgeLabel = "480p",
                 isRecommended = false
             )
@@ -548,17 +543,39 @@ class SettingsActivity : AppCompatActivity() {
             context = this,
             iconRes = R.drawable.ic_video,
             title = "Pilih Resolusi Video",
-            subtitle = "Pilih resolusi layar sesuai kapasitas memori & kebutuhan konten",
+            subtitle = "Pilih resolusi layar populer sesuai kebutuhan konten & game",
             options = options,
             selectedValue = appPreferences.resolution
         ) { selectedResolution ->
             appPreferences.resolution = selectedResolution
+            when (selectedResolution) {
+                "1080p" -> {
+                    appPreferences.bitrateMbps = 24
+                    appPreferences.fps = 60
+                    appPreferences.isGamingMode = true
+                    appPreferences.fpsStabilizerEnabled = true
+                }
+                "720p" -> {
+                    appPreferences.bitrateMbps = 12
+                    appPreferences.fps = 60
+                    appPreferences.isGamingMode = true
+                    appPreferences.fpsStabilizerEnabled = true
+                }
+                "NATIVE" -> {
+                    appPreferences.bitrateMbps = 24
+                    appPreferences.fps = 60
+                    appPreferences.isGamingMode = true
+                    appPreferences.fpsStabilizerEnabled = true
+                }
+            }
             updateUIValues()
             com.bangdillah.rekamindulu.backend.FirebaseAuthManager.getInstance(this).updateUserPreferences(
-                resolution = selectedResolution
+                resolution = selectedResolution,
+                fps = appPreferences.fps,
+                gamingMode = appPreferences.isGamingMode
             )
             val resName = if (selectedResolution == "NATIVE") "Resolusi Layar Asli (100%)" else selectedResolution
-            Toast.makeText(this, "Resolusi diubah ke $resName", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "Resolusi diubah ke $resName (FPS & Bitrate diselaraskan)", Toast.LENGTH_SHORT).show()
         }
     }
 

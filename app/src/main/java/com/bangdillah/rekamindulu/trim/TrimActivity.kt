@@ -146,37 +146,41 @@ class TrimActivity : AppCompatActivity() {
         seekStartTime?.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
                 if (fromUser) {
-                    if (progress >= (seekEndTime?.progress ?: videoDurationMs)) {
-                        seekStartTime?.progress = (seekEndTime?.progress ?: 1000) - 1000
+                    val maxAllowed = ((seekEndTime?.progress ?: videoDurationMs) - 1000).coerceAtLeast(0)
+                    if (progress > maxAllowed) {
+                        seekStartTime?.progress = maxAllowed
                         return
                     }
-                    startTrimMs = progress.toLong()
-                    textStartTimeVal?.text = formatTime(progress)
-                    videoView?.seekTo(progress)
+                    startTrimMs = progress.toLong().coerceIn(0L, videoDurationMs.toLong())
+                    textStartTimeVal?.text = formatTime(startTrimMs.toInt())
                     updateSummary()
                 }
             }
 
             override fun onStartTrackingTouch(seekBar: SeekBar?) {}
-            override fun onStopTrackingTouch(seekBar: SeekBar?) {}
+            override fun onStopTrackingTouch(seekBar: SeekBar?) {
+                seekBar?.let { videoView?.seekTo(it.progress) }
+            }
         })
 
         seekEndTime?.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
                 if (fromUser) {
-                    if (progress <= (seekStartTime?.progress ?: 0)) {
-                        seekEndTime?.progress = (seekStartTime?.progress ?: 0) + 1000
+                    val minAllowed = ((seekStartTime?.progress ?: 0) + 1000).coerceAtMost(videoDurationMs)
+                    if (progress < minAllowed) {
+                        seekEndTime?.progress = minAllowed
                         return
                     }
-                    endTrimMs = progress.toLong()
-                    textEndTimeVal?.text = formatTime(progress)
-                    videoView?.seekTo(progress)
+                    endTrimMs = progress.toLong().coerceIn(0L, videoDurationMs.toLong())
+                    textEndTimeVal?.text = formatTime(endTrimMs.toInt())
                     updateSummary()
                 }
             }
 
             override fun onStartTrackingTouch(seekBar: SeekBar?) {}
-            override fun onStopTrackingTouch(seekBar: SeekBar?) {}
+            override fun onStopTrackingTouch(seekBar: SeekBar?) {
+                seekBar?.let { videoView?.seekTo(it.progress) }
+            }
         })
 
         btnApplyTrim?.setOnClickListener {

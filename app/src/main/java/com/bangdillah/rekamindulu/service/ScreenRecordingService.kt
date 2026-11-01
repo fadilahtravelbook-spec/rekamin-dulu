@@ -130,10 +130,9 @@ open class ScreenRecordingService : Service() {
                     stopRecording()
                     return
                 }
-                // Cek kapasitas storage setiap 10 detik hanya saat perekaman aktif berjalan
+                // Cek kapasitas storage setiap 10 detik tanpa overhead codec scanner atau binder lag
                 if (!isPaused && elapsedSeconds % 10 == 0) {
-                    val report = DeviceAnalyzer.analyze(this@ScreenRecordingService)
-                    if (report.freeStorageGb < 0.1) {
+                    if (RecordingEngineOptimizer.isStorageCriticallyLow(this@ScreenRecordingService)) {
                         Log.e(TAG, "Storage critically low (<100MB), auto-stopping recording")
                         stopRecording()
                         return
@@ -466,69 +465,11 @@ open class ScreenRecordingService : Service() {
     }
 
     protected fun calculateOutputDimensions(metrics: DisplayMetrics, resolutionPref: String, orientationPref: String = "AUTO") {
-        val rawWidth = metrics.widthPixels.coerceAtLeast(320)
-        val rawHeight = metrics.heightPixels.coerceAtLeast(480)
-        val isPortrait = when (orientationPref) {
-            "LANDSCAPE" -> false
-            "PORTRAIT" -> true
-            else -> rawHeight >= rawWidth
-        }
-
-        val longSide = maxOf(rawWidth, rawHeight)
-        val shortSide = minOf(rawWidth, rawHeight)
-
-        // Skala proporsional berbasis rasio aspek fisik layar ponsel pengguna
-        val (targetLong, targetShort) = when (resolutionPref) {
-            "NATIVE" -> Pair(longSide, shortSide)
-            "4K" -> {
-                val desiredShort = 2160
-                val scale = if (shortSide > desiredShort) desiredShort.toDouble() / shortSide.toDouble() else 1.0
-                Pair((longSide * scale).toInt(), (shortSide * scale).toInt())
-            }
-            "2K" -> {
-                val desiredShort = 1440
-                val scale = if (shortSide > desiredShort) desiredShort.toDouble() / shortSide.toDouble() else 1.0
-                Pair((longSide * scale).toInt(), (shortSide * scale).toInt())
-            }
-            "1080p" -> {
-                val desiredShort = 1080
-                // Pertahankan 1:1 jika layar ponsel 1080p (misal 1080x2400 / 1080x2340), jangan diturunkan ke 864p
-                val scale = if (shortSide > desiredShort) desiredShort.toDouble() / shortSide.toDouble() else 1.0
-                Pair((longSide * scale).toInt(), (shortSide * scale).toInt())
-            }
-            "720p" -> {
-                val desiredShort = 720
-                val scale = if (shortSide > desiredShort) desiredShort.toDouble() / shortSide.toDouble() else 1.0
-                Pair((longSide * scale).toInt(), (shortSide * scale).toInt())
-            }
-            "480p" -> {
-                val desiredShort = 480
-                val scale = if (shortSide > desiredShort) desiredShort.toDouble() / shortSide.toDouble() else 1.0
-                Pair((longSide * scale).toInt(), (shortSide * scale).toInt())
-            }
-            else -> {
-                val desiredShort = 1080
-                val scale = if (shortSide > desiredShort) desiredShort.toDouble() / shortSide.toDouble() else 1.0
-                Pair((longSide * scale).toInt(), (shortSide * scale).toInt())
-            }
-        }
-
-        // Pastikan dimensi genap (kelipatan 2) wajib untuk standar encoder AVC/HEVC
-        var alignedLong = (targetLong / 2) * 2
-        var alignedShort = (targetShort / 2) * 2
-
-        val finalW = if (isPortrait) alignedShort else alignedLong
-        val finalH = if (isPortrait) alignedLong else alignedShort
-
-        screenWidth = (finalW.coerceAtLeast(320) / 2) * 2
-        screenHeight = (finalH.coerceAtLeast(480) / 2) * 2
-
-        // Kepadatan DPI proporsional agar rendering teks, video player online, dan subtitle sejernih aslinya
-        val baseDensity = metrics.densityDpi
-        val scaleRatio = if (isPortrait) screenWidth.toDouble() / rawWidth.toDouble() else screenHeight.toDouble() / rawHeight.toDouble()
-        screenDensity = (baseDensity * scaleRatio).toInt().coerceIn(120, 640)
-
-        Log.i(TAG, "Output resolution calculated: ${screenWidth}x${screenHeight} @ ${screenDensity} DPI (Pref: $resolutionPref, Native: ${rawWidth}x${rawHeight} @ ${baseDensity} DPI)")
+        val dims = RecordingEngineOptimizer.calculateDimensions(metrics, resolutionPref, orientationPref)
+        screenWidth = dims.width
+        screenHeight = dims.height
+        screenDensity = dims.densityDpi
+        Log.i(TAG, "Output resolution calculated: ${screenWidth}x${screenHeight} @ ${screenDensity} DPI (Pref: $resolutionPref)")
     }
 
     /**
@@ -663,36 +604,10 @@ open class ScreenRecordingService : Service() {
                     }
 
                     // Terapkan High Profile untuk ketajaman kristal & reproduksi warna jernih (AVC High / HEVC Main)
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                        try {
-                            if (encoder == MediaRecorder.VideoEncoder.H264) {
-                                try {
-                                    setVideoEncodingProfileLevel(
-                                        android.media.MediaCodecInfo.CodecProfileLevel.AVCProfileHigh,
-                                        android.media.MediaCodecInfo.CodecProfileLevel.AVCLevel51
-                                    )
-                                    Log.i(TAG, "Hardware Video Tuning: AVCProfileHigh Level 5.1 aktif (Lancar 60 FPS & Terang/Jernih)")
-                                } catch (e51: Exception) {
-                                    setVideoEncodingProfileLevel(
-                                        android.media.MediaCodecInfo.CodecProfileLevel.AVCProfileHigh,
-                                        android.media.MediaCodecInfo.CodecProfileLevel.AVCLevel42
-                                    )
-                                    Log.i(TAG, "Hardware Video Tuning: AVCProfileHigh Level 4.2 aktif")
-                                }
-                            } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && encoder == MediaRecorder.VideoEncoder.HEVC) {
-                                setVideoEncodingProfileLevel(
-                                    android.media.MediaCodecInfo.CodecProfileLevel.HEVCProfileMain,
-                                    android.media.MediaCodecInfo.CodecProfileLevel.HEVCHighTierLevel41
-                                )
-                                Log.i(TAG, "Hardware Video Tuning: HEVCProfileMain HighTier aktif untuk video ultra HD")
-                            }
-                        } catch (eProf: Exception) {
-                            Log.w(TAG, "Profile level tuning ditolak hardware, menggunakan konfigurasi standar: ${eProf.message}")
-                        }
-                    }
+                    RecordingEngineOptimizer.applyHighQualityEncoderTuning(this, encoder)
 
                     setOutputFile(filePath)
-                    val chosenFps = fps
+                    val chosenFps = if (prefs.isGamingMode || prefs.fpsStabilizerEnabled) maxOf(fps, 60) else fps
                     val chosenBitrate = bitrate.coerceIn(1_000_000, 60_000_000)
 
                     setVideoSize(targetWidth, targetHeight)
@@ -729,8 +644,9 @@ open class ScreenRecordingService : Service() {
         val ultraSafeW = if (isPortrait) 480 else 848
         val ultraSafeH = if (isPortrait) 848 else 480
 
-        val initialBitrate = (prefs.bitrateMbps * 1_000_000).coerceIn(1_000_000, 60_000_000)
-        val initialFps = prefs.fps
+        val optimizedProfile = RecordingEngineOptimizer.getOptimizedProfile(resources.displayMetrics, prefs)
+        val initialBitrate = optimizedProfile.targetBitrateBps
+        val initialFps = optimizedProfile.targetFps
         val preferredAudioSource = if (isInternalOnly) {
             com.bangdillah.rekamindulu.audio.MicrophoneSelector.getGameAudioSource()
         } else {
@@ -808,7 +724,7 @@ open class ScreenRecordingService : Service() {
         val prefs = AppPreferences(this)
         val hasMicPermission = ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
         val wantsAudio = prefs.audioSource != "MUTE" && hasMicPermission
-        val targetFps = prefs.fps
+        val targetFps = if (prefs.isGamingMode || prefs.fpsStabilizerEnabled) maxOf(prefs.fps, 60) else prefs.fps
         val targetBitrate = (prefs.bitrateMbps * 1_000_000).coerceIn(1_000_000, 30_000_000)
 
         try {
@@ -953,11 +869,28 @@ open class ScreenRecordingService : Service() {
             // 1. Beri jeda pengaman SEBELUM perekaman dihentikan agar hardware encoder menerima frame & audio yang cukup (min 1.2 detik)
             val elapsedDuration = System.currentTimeMillis() - startTimeMillis
             if (startTimeMillis > 0L && elapsedDuration in 0..1200) {
-                try {
-                    Thread.sleep(1200 - elapsedDuration)
-                } catch (ignored: InterruptedException) {}
+                val remainingMs = 1200 - elapsedDuration
+                if (Looper.myLooper() == Looper.getMainLooper()) {
+                    timerHandler.postDelayed({
+                        finalizeStopRecording(prefs)
+                    }, remainingMs)
+                    return
+                } else {
+                    try {
+                        Thread.sleep(remainingMs)
+                    } catch (ignored: InterruptedException) {}
+                }
             }
 
+            finalizeStopRecording(prefs)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error in stopRecording", e)
+            isStopping = false
+        }
+    }
+
+    private fun finalizeStopRecording(prefs: AppPreferences) {
+        try {
             // 2. Finalisasi MediaRecorder TERLEBIH DAHULU sementara Surface dari VirtualDisplay masih aktif dan valid!
             // Urutan ini sangat krusial dalam arsitektur MediaProjection Android:
             // MediaRecorder membutuhkan Surface aktif untuk menulis penutup container MP4 (moov atom, timescale, duration, sample tables).
