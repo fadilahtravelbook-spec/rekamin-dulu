@@ -50,6 +50,7 @@ class PlayerActivity : AppCompatActivity() {
     private var restoredWasPlaying = true
 
     private var areControlsVisible = true
+    private var extractProgressDialog: AlertDialog? = null
 
     private val handler = Handler(Looper.getMainLooper())
     private val updateSeekRunnable = object : Runnable {
@@ -110,7 +111,7 @@ class PlayerActivity : AppCompatActivity() {
         if (savedInstanceState != null) {
             restoredPosition = savedInstanceState.getInt("KEY_PLAYBACK_POSITION", 0)
             restoredWasPlaying = savedInstanceState.getBoolean("KEY_WAS_PLAYING", true)
-            currentSpeedIndex = savedInstanceState.getInt("KEY_SPEED_INDEX", 2)
+            currentSpeedIndex = savedInstanceState.getInt("KEY_SPEED_INDEX", 2).coerceIn(speedValues.indices)
         }
 
         if (currentSpeedIndex != 2) {
@@ -261,19 +262,23 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     private fun showControls() {
-        topBar?.animate()?.alpha(1f)?.setDuration(200)?.withStartAction {
-            topBar?.visibility = View.VISIBLE
-        }?.start()
+        topBar?.animate()?.cancel()
+        bottomPanel?.animate()?.cancel()
 
-        bottomPanel?.animate()?.alpha(1f)?.setDuration(200)?.withStartAction {
-            bottomPanel?.visibility = View.VISIBLE
-        }?.start()
+        topBar?.visibility = View.VISIBLE
+        topBar?.animate()?.alpha(1f)?.setDuration(200)?.withEndAction(null)?.start()
+
+        bottomPanel?.visibility = View.VISIBLE
+        bottomPanel?.animate()?.alpha(1f)?.setDuration(200)?.withEndAction(null)?.start()
 
         areControlsVisible = true
         scheduleControlsAutoHide()
     }
 
     private fun hideControls() {
+        topBar?.animate()?.cancel()
+        bottomPanel?.animate()?.cancel()
+
         topBar?.animate()?.alpha(0f)?.setDuration(200)?.withEndAction {
             topBar?.visibility = View.GONE
         }?.start()
@@ -460,11 +465,13 @@ class PlayerActivity : AppCompatActivity() {
 
     private fun extractAudioFromVideo(file: File) {
         if (isFinishing || isDestroyed) return
+        try { extractProgressDialog?.dismiss() } catch (ignored: Exception) {}
         val progressDialog = MaterialAlertDialogBuilder(this)
             .setTitle("Mengekstrak Audio 🎵")
             .setMessage("Memeriksa trek audio dari ${file.name}...")
             .setCancelable(false)
             .create()
+        extractProgressDialog = progressDialog
         try {
             progressDialog.show()
         } catch (ignored: Exception) {}
@@ -576,6 +583,8 @@ class PlayerActivity : AppCompatActivity() {
         super.onDestroy()
         handler.removeCallbacks(updateSeekRunnable)
         handler.removeCallbacks(hideControlsRunnable)
+        try { extractProgressDialog?.dismiss() } catch (ignored: Exception) {}
+        extractProgressDialog = null
         videoView?.stopPlayback()
     }
 

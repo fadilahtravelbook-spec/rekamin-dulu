@@ -19,6 +19,30 @@ object TrimHelper {
     private const val DEFAULT_BUFFER_SIZE = 1024 * 1024 // 1 MB buffer
 
     /**
+     * Membuat file output pemotongan tanpa penumpukan prefiks "Trim_Trim_..."
+     * serta menghindari tabrakan nama jika dipanggil berulang pada detik yang sama.
+     */
+    fun createTrimOutputFile(outputDir: File, rawSourceName: String, timeStamp: String): File {
+        var stripped = rawSourceName.trim()
+        while (stripped.startsWith("Trim_", ignoreCase = true)) {
+            stripped = stripped.substring(5)
+        }
+        val cleanBase = stripped
+            .replace("[^a-zA-Z0-9._-]".toRegex(), "_")
+            .trim('_')
+            .ifEmpty { "Video" }
+            .take(40)
+        val baseName = "Trim_${cleanBase}_$timeStamp"
+        var candidate = File(outputDir, "$baseName.mp4")
+        var counter = 1
+        while (candidate.exists()) {
+            candidate = File(outputDir, "${baseName}_$counter.mp4")
+            counter++
+        }
+        return candidate
+    }
+
+    /**
      * Memotong video dari startMs sampai endMs dan menyimpannya ke outputFile.
      * @return Pair<Boolean, String> (status sukses, pesan hasil)
      */
@@ -139,7 +163,7 @@ object TrimHelper {
                 // Stop condition: track beyond endUs
                 if (sampleTime > endUs) {
                     tracksEnded.add(trackIndex)
-                    if (tracksEnded.size >= indexMap.size || (trackIndex == videoTrackIndex && tracksEnded.contains(trackIndex))) {
+                    if (tracksEnded.size >= indexMap.size || sampleTime > endUs + 500_000L) {
                         break
                     }
                     extractor.advance()

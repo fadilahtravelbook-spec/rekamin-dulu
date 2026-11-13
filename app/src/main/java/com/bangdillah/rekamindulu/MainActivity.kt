@@ -18,6 +18,7 @@ import android.os.Looper
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
+import android.text.InputFilter
 import android.text.InputType
 import android.util.Log
 import android.view.View
@@ -107,9 +108,21 @@ open class MainActivity : AppCompatActivity() {
     val runtimePermissionLauncher: ActivityResultLauncher<Array<String>> = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
+        val cameraDenied = permissions.containsKey(Manifest.permission.CAMERA) &&
+            permissions[Manifest.permission.CAMERA] != true &&
+            ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED
+        if (cameraDenied && appPreferences.facecamMode != "OFF") {
+            facecamStateIndex = 0
+            appPreferences.facecamMode = "OFF"
+            updateAudioToggleViews()
+            showSnackbar("Izin kamera ditolak — Facecam dinonaktifkan")
+        }
+
         val audioGranted = permissions[Manifest.permission.RECORD_AUDIO] ?: hasAudioRecordingPermission()
         if (audioGranted) {
-            showSnackbar("🎤 Izin audio mikrofon diberikan")
+            if (isMicOn || isGameAudioOn) {
+                showSnackbar("🎤 Izin audio mikrofon diberikan")
+            }
             initiateScreenCaptureFlow()
         } else {
             // Audio permission denied by user
@@ -483,10 +496,12 @@ open class MainActivity : AppCompatActivity() {
 
     private fun checkAppLock() {
         if (appPreferences.isAppLockEnabled && appPreferences.appLockPin.isNotEmpty() && !isSessionUnlocked) {
+            if (appLockDialog?.isShowing == true) return
             val input = EditText(this).apply {
                 inputType = InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_VARIATION_PASSWORD
-                hint = "Masukkan 4 angka PIN"
+                hint = "Masukkan PIN (4-6 angka)"
                 maxLines = 1
+                filters = arrayOf(InputFilter.LengthFilter(6))
                 setPadding(48, 36, 48, 36)
                 setTextColor(ContextCompat.getColor(this@MainActivity, R.color.textTitle))
                 setHintTextColor(ContextCompat.getColor(this@MainActivity, R.color.textCaption))
@@ -524,6 +539,7 @@ open class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+        checkAppLock()
         findViewById<BottomNavigationView>(R.id.bottom_navigation)?.selectedItemId = R.id.nav_home
         initAudioSettings()
         updateHardwareMetrics()
@@ -1161,6 +1177,7 @@ open class MainActivity : AppCompatActivity() {
         findViewById<View>(R.id.btn_home_create_demo)?.setOnClickListener {
             Toast.makeText(this, "Membuat video demo MP4...", Toast.LENGTH_SHORT).show()
             StorageHelper.generateDemoVideo(this) { file ->
+                if (isFinishing || isDestroyed) return@generateDemoVideo
                 if (file != null) {
                     Toast.makeText(this, "Video demo berhasil dibuat!", Toast.LENGTH_SHORT).show()
                     updateHomeRecordingsList()
@@ -1557,7 +1574,9 @@ open class MainActivity : AppCompatActivity() {
                 textHeroBadge?.setTextColor(ContextCompat.getColor(this, R.color.colorError))
                 btnHeroPause?.text = "⏸️ Jeda"
                 val audioDesc = when {
+                    isMicOn && isGameAudioOn && ScreenRecordingService.isMicMuted -> "Audio Game Aktif (Mic Dibisukan)"
                     isMicOn && isGameAudioOn -> "Mikrofon & Audio Video/Game Aktif"
+                    isMicOn && ScreenRecordingService.isMicMuted -> "Mikrofon Dibisukan"
                     isMicOn -> "Mikrofon Aktif"
                     isGameAudioOn -> "Audio Jernih Video/Game Online"
                     else -> "Mute (Tanpa Suara)"

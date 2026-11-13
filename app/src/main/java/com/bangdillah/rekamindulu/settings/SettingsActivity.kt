@@ -8,6 +8,7 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.text.InputFilter
 import android.text.InputType
 import android.view.View
 import android.widget.Button
@@ -18,9 +19,10 @@ import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import com.bangdillah.rekamindulu.HomeActivity
+import com.bangdillah.rekamindulu.MainActivity
 import com.bangdillah.rekamindulu.R
-import com.bangdillah.rekamindulu.floating.FloatingOverlayService
 import com.bangdillah.rekamindulu.library.LibraryActivity
+import com.bangdillah.rekamindulu.service.RecordingEngineOptimizer
 import com.bangdillah.rekamindulu.service.ScreenRecordingService
 import com.bangdillah.rekamindulu.utils.AppPreferences
 import com.bangdillah.rekamindulu.utils.SaveTransitionDialog
@@ -30,6 +32,7 @@ import com.bangdillah.rekamindulu.utils.SpecAnalysisDialog
 import com.google.android.material.bottomnavigation.BottomNavigationView
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.materialswitch.MaterialSwitch
+import java.io.File
 import java.util.Locale
 
 class SettingsActivity : AppCompatActivity() {
@@ -40,6 +43,7 @@ class SettingsActivity : AppCompatActivity() {
     private var textFpsVal: TextView? = null
     private var textBitrateVal: TextView? = null
     private var textCodecVal: TextView? = null
+    private var textOrientationVal: TextView? = null
     private var textAudioVal: TextView? = null
     private var textMicTypeVal: TextView? = null
     private var textCountdownVal: TextView? = null
@@ -79,11 +83,12 @@ class SettingsActivity : AppCompatActivity() {
         override fun onReceive(context: Context?, intent: Intent?) {
             when (intent?.action) {
                 ScreenRecordingService.ACTION_RECORDING_STOPPED -> {
+                    MainActivity.hasPendingSaveDialog = false
                     val path = intent.getStringExtra(ScreenRecordingService.EXTRA_FILE_PATH)
                         ?: ScreenRecordingService.lastRecordedFilePath
                     updateUIValues()
                     updateRecordingIndicator()
-                    if (!path.isNullOrEmpty()) {
+                    if (!path.isNullOrEmpty() && File(path).exists() && File(path).length() > 10240) {
                         SaveTransitionDialog.show(this@SettingsActivity, path)
                     }
                 }
@@ -112,7 +117,8 @@ class SettingsActivity : AppCompatActivity() {
         if (appPreferences.isAppLockEnabled && appPreferences.appLockPin.isNotEmpty() && !HomeActivity.isSessionUnlocked) {
             val input = EditText(this).apply {
                 inputType = InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_VARIATION_PASSWORD
-                hint = "Masukkan 4 angka PIN"
+                hint = "Masukkan PIN (4-6 angka)"
+                filters = arrayOf(InputFilter.LengthFilter(6))
                 maxLines = 1
                 setPadding(48, 36, 48, 36)
                 setTextColor(ContextCompat.getColor(this@SettingsActivity, R.color.textTitle))
@@ -180,6 +186,7 @@ class SettingsActivity : AppCompatActivity() {
         textFpsVal = findViewById(R.id.text_setting_fps_val)
         textBitrateVal = findViewById(R.id.text_setting_bitrate_val)
         textCodecVal = findViewById(R.id.text_setting_codec_val)
+        textOrientationVal = findViewById(R.id.text_setting_orientation_val)
         textAudioVal = findViewById(R.id.text_setting_audio_val)
         textMicTypeVal = findViewById(R.id.text_setting_mic_type_val)
         textCountdownVal = findViewById(R.id.text_setting_countdown_val)
@@ -392,6 +399,11 @@ class SettingsActivity : AppCompatActivity() {
             if (ensureNotRecording()) showCodecDialog()
         }
 
+        // Orientation picker
+        findViewById<View>(R.id.row_setting_orientation)?.setOnClickListener {
+            if (ensureNotRecording()) showOrientationDialog()
+        }
+
         // Audio Source picker
         findViewById<View>(R.id.row_setting_audio_source)?.setOnClickListener {
             if (ensureNotRecording()) showAudioSourceDialog()
@@ -480,6 +492,12 @@ class SettingsActivity : AppCompatActivity() {
                 "H.265 (HEVC)"
             } else {
                 "H.264 (AVC)"
+            }
+
+            textOrientationVal?.text = when (appPreferences.orientation) {
+                "LANDSCAPE" -> "Lanskap"
+                "PORTRAIT" -> "Potret"
+                else -> "Otomatis"
             }
 
             textAudioVal?.text = when (appPreferences.audioSource) {
@@ -757,6 +775,46 @@ class SettingsActivity : AppCompatActivity() {
         }
     }
 
+    private fun showOrientationDialog() {
+        val options = listOf(
+            SelectionOption(
+                value = "AUTO",
+                title = "Otomatis (Ikuti Layar)",
+                subtitle = "Menyesuaikan orientasi layar ponsel saat mulai merekam",
+                badgeLabel = "AUTO",
+                isRecommended = true
+            ),
+            SelectionOption(
+                value = "LANDSCAPE",
+                title = "Lanskap / Game Horisontal",
+                subtitle = "Kunci kanvas 16:9 / 20:9 horisontal untuk gameplay & video lebar",
+                badgeLabel = "LAND",
+                isRecommended = false
+            ),
+            SelectionOption(
+                value = "PORTRAIT",
+                title = "Potret Vertikal (Shorts / TikTok / Reels)",
+                subtitle = "Kunci kanvas vertikal penuh untuk konten video pendek",
+                badgeLabel = "PORT",
+                isRecommended = false
+            )
+        )
+
+        SelectionBottomSheetDialog.show(
+            context = this,
+            iconRes = R.drawable.ic_device,
+            title = "Orientasi Perekaman Video",
+            subtitle = "Tentukan orientasi kanvas keluaran video MP4",
+            options = options,
+            selectedValue = appPreferences.orientation
+        ) { selectedOrientation ->
+            appPreferences.orientation = selectedOrientation
+            updateUIValues()
+            val label = RecordingEngineOptimizer.getOrientationLabel(selectedOrientation)
+            Toast.makeText(this, "Orientasi disetel ke $label", Toast.LENGTH_SHORT).show()
+        }
+    }
+
     private fun showAudioSourceDialog() {
         val options = listOf(
             SelectionOption(
@@ -901,35 +959,45 @@ class SettingsActivity : AppCompatActivity() {
     private fun showSetPinDialog(callback: ((Boolean) -> Unit)? = null) {
         val input = EditText(this).apply {
             inputType = InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_VARIATION_PASSWORD
-            hint = "Masukkan 4 angka PIN"
+            hint = "Masukkan PIN (4-6 angka)"
+            filters = arrayOf(InputFilter.LengthFilter(6))
             maxLines = 1
             setPadding(56, 40, 56, 40)
             setTextColor(ContextCompat.getColor(this@SettingsActivity, R.color.textTitle))
             setHintTextColor(ContextCompat.getColor(this@SettingsActivity, R.color.textCaption))
         }
 
-        MaterialAlertDialogBuilder(this)
+        val dialog = MaterialAlertDialogBuilder(this)
             .setIcon(R.drawable.ic_lock)
             .setTitle("Atur PIN Keamanan")
-            .setMessage("PIN ini akan diminta saat membuka aplikasi untuk mengamankan rekaman video Anda:")
+            .setMessage("PIN ini akan diminta saat membuka aplikasi untuk mengamankan rekaman video Anda (4-6 angka):")
             .setView(input)
-            .setPositiveButton("Simpan") { _, _ ->
+            .setPositiveButton("Simpan", null)
+            .setNegativeButton("Batal") { _, _ ->
+                callback?.invoke(false)
+            }
+            .setOnCancelListener {
+                callback?.invoke(false)
+            }
+            .create()
+
+        dialog.setOnShowListener {
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE)?.setOnClickListener {
                 val pin = input.text.toString().trim()
                 if (pin.length < 4) {
-                    Toast.makeText(this, "PIN minimal 4 angka", Toast.LENGTH_SHORT).show()
-                    callback?.invoke(false)
+                    input.error = "PIN minimal 4 angka"
                 } else {
                     appPreferences.appLockPin = pin
                     appPreferences.isAppLockEnabled = true
+                    HomeActivity.isSessionUnlocked = true
                     updateUIValues()
+                    dialog.dismiss()
                     Toast.makeText(this, "PIN keamanan berhasil disimpan!", Toast.LENGTH_SHORT).show()
                     callback?.invoke(true)
                 }
             }
-            .setNegativeButton("Batal") { _, _ ->
-                callback?.invoke(false)
-            }
-            .show()
+        }
+        dialog.show()
     }
 
     private fun showCountdownDialog() {

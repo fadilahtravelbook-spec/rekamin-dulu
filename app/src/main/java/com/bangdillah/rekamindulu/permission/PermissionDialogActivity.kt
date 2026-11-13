@@ -58,7 +58,6 @@ class PermissionDialogActivity : AppCompatActivity() {
         val dm = resources.displayMetrics
         val maxWidthPx = (400 * dm.density).toInt()
         val targetWidth = (dm.widthPixels * 0.90f).toInt().coerceAtMost(maxWidthPx)
-        val maxHeightPx = (dm.heightPixels * 0.90f).toInt()
 
         window.setLayout(targetWidth, WindowManager.LayoutParams.WRAP_CONTENT)
         window.setGravity(Gravity.CENTER)
@@ -90,8 +89,10 @@ class PermissionDialogActivity : AppCompatActivity() {
     ) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         if (requestCode == REQUEST_CODE_PERMISSIONS) {
-            val audioIndex = permissions.indexOf(Manifest.permission.RECORD_AUDIO)
-            val audioGranted = audioIndex != -1 && grantResults.getOrNull(audioIndex) == PackageManager.PERMISSION_GRANTED
+            val audioGranted = ContextCompat.checkSelfPermission(
+                this,
+                Manifest.permission.RECORD_AUDIO
+            ) == PackageManager.PERMISSION_GRANTED
 
             if (audioGranted) {
                 Toast.makeText(this, "✓ Izin mikrofon berhasil diaktifkan", Toast.LENGTH_SHORT).show()

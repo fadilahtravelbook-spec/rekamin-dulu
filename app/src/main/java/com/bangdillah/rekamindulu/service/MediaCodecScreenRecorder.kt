@@ -10,9 +10,12 @@ import android.media.MediaCodecInfo
 import android.media.MediaFormat
 import android.media.MediaMuxer
 import android.media.MediaRecorder
+import android.media.audiofx.AcousticEchoCanceler
+import android.media.audiofx.NoiseSuppressor
 import android.media.projection.MediaProjection
 import android.os.Build
 import android.os.Bundle
+import android.os.Process
 import android.util.DisplayMetrics
 import android.util.Log
 import android.view.Surface
@@ -20,6 +23,7 @@ import androidx.core.content.ContextCompat
 import com.bangdillah.rekamindulu.audio.AudioHelper
 import com.bangdillah.rekamindulu.audio.MicrophoneSelector
 import com.bangdillah.rekamindulu.utils.AppPreferences
+import com.bangdillah.rekamindulu.utils.HardwareEncoderHelper
 import java.nio.ByteBuffer
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.locks.ReentrantLock
@@ -126,6 +130,8 @@ class MediaCodecScreenRecorder(
 
     private var micAudioRecord: AudioRecord? = null
     private var playbackAudioRecord: AudioRecord? = null
+    private var micNoiseSuppressor: NoiseSuppressor? = null
+    private var micEchoCanceler: AcousticEchoCanceler? = null
     private var micChannelCount: Int = 1
     private var playbackChannelCount: Int = 2
     private var audioChannelCount: Int = 1
@@ -235,6 +241,13 @@ class MediaCodecScreenRecorder(
         videoEncoder = null
 
         return try {
+            val useHardwareAccel = prefs.hardwareAccelerationEnabled
+            val hwCap = if (useHardwareAccel) {
+                HardwareEncoderHelper.findBestHardwareEncoder(mimeType)
+            } else {
+                null
+            }
+
             val format = MediaFormat.createVideoFormat(mimeType, width, height).apply {
                 setInteger(
                     MediaFormat.KEY_COLOR_FORMAT,
@@ -243,7 +256,13 @@ class MediaCodecScreenRecorder(
                 setInteger(MediaFormat.KEY_BIT_RATE, bitrateBps.coerceIn(1_000_000, 60_000_000))
                 setInteger(MediaFormat.KEY_FRAME_RATE, fps.coerceIn(15, 120))
                 setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 1)
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && mimeType == MediaFormat.MIMETYPE_VIDEO_AVC) {
+                if (prefs.fpsStabilizerEnabled && (hwCap == null || hwCap.isCbrSupported)) {
+                    setInteger(
+                        MediaFormat.KEY_BITRATE_MODE,
+                        MediaCodecInfo.EncoderCapabilities.BITRATE_MODE_CBR
+                    )
+                }
+                if (useHardwareAccel && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && mimeType == MediaFormat.MIMETYPE_VIDEO_AVC) {
                     setInteger(
                         MediaFormat.KEY_PROFILE,
                         MediaCodecInfo.CodecProfileLevel.AVCProfileHigh
@@ -254,11 +273,22 @@ class MediaCodecScreenRecorder(
                     )
                 }
             }
-            val codec = MediaCodec.createEncoderByType(mimeType)
+
+            val codec = if (useHardwareAccel && hwCap != null && hwCap.isHardware) {
+                try {
+                    MediaCodec.createByCodecName(hwCap.codecName)
+                } catch (eName: Exception) {
+                    Log.w(TAG, "createByCodecName(${hwCap.codecName}) gagal, fallback createEncoderByType: ${eName.message}")
+                    MediaCodec.createEncoderByType(mimeType)
+                }
+            } else {
+                MediaCodec.createEncoderByType(mimeType)
+            }
+
             try {
                 codec.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
             } catch (eHigh: Exception) {
-                // Retry tanpa optional high profile keys jika chipset menolaknya
+                // Retry tanpa optional high profile / CBR keys jika chipset menolaknya
                 val basicFormat = MediaFormat.createVideoFormat(mimeType, width, height).apply {
                     setInteger(
                         MediaFormat.KEY_COLOR_FORMAT,
@@ -275,7 +305,10 @@ class MediaCodecScreenRecorder(
             codec.start()
             videoEncoder = codec
             inputSurface = surface
-            Log.i(TAG, "Video MediaCodec siap: $mimeType ${width}x${height} @ ${fps}FPS ($bitrateBps bps)")
+            Log.i(
+                TAG,
+                "Video MediaCodec siap (${codec.name}, hwAccel=$useHardwareAccel, cbr=${prefs.fpsStabilizerEnabled}): $mimeType ${width}x${height} @ ${fps}FPS ($bitrateBps bps)"
+            )
             true
         } catch (e: Exception) {
             Log.w(TAG, "Konfigurasi video $mimeType ${width}x${height} gagal: ${e.message}")
@@ -358,6 +391,10 @@ class MediaCodecScreenRecorder(
             pbRecord != null -> "INTERNAL"
             mRecord != null -> "MIC"
             else -> "MUTE"
+        }
+
+        if (mRecord != null && prefs.internalAudioStabilizer) {
+            attachMicStabilizerEffects(mRecord, enableAec = (effectiveAudioMode == "BOTH"))
         }
 
         if (effectiveAudioMode == "MUTE") {
@@ -510,12 +547,42 @@ class MediaCodecScreenRecorder(
         return cleanlyWritten
     }
 
+    private fun attachMicStabilizerEffects(record: AudioRecord, enableAec: Boolean) {
+        val sessionId = record.audioSessionId
+        if (sessionId == 0) return
+        try {
+            if (NoiseSuppressor.isAvailable()) {
+                micNoiseSuppressor = NoiseSuppressor.create(sessionId)?.apply {
+                    enabled = true
+                }
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "NoiseSuppressor tidak tersedia: ${e.message}")
+        }
+        if (enableAec) {
+            try {
+                if (AcousticEchoCanceler.isAvailable()) {
+                    micEchoCanceler = AcousticEchoCanceler.create(sessionId)?.apply {
+                        enabled = true
+                    }
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "AcousticEchoCanceler tidak tersedia: ${e.message}")
+            }
+        }
+    }
+
     private fun currentNormalizedPtsUs(): Long {
         val nowUs = System.nanoTime() / 1000L
         return (nowUs - recordingStartUs - totalPausedUs).coerceAtLeast(0L)
     }
 
     private fun drainVideoEncoderLoop() {
+        if (prefs.gamingTurboBoost) {
+            try {
+                Process.setThreadPriority(Process.THREAD_PRIORITY_URGENT_DISPLAY)
+            } catch (_: Exception) {}
+        }
         val encoder = videoEncoder ?: return
         val bufferInfo = MediaCodec.BufferInfo()
         var eosSeen = false
@@ -584,6 +651,11 @@ class MediaCodecScreenRecorder(
     }
 
     private fun captureAndFeedAudioLoop() {
+        if (prefs.gamingTurboBoost) {
+            try {
+                Process.setThreadPriority(Process.THREAD_PRIORITY_URGENT_AUDIO)
+            } catch (_: Exception) {}
+        }
         val encoder = audioEncoder ?: return
         val pb = playbackAudioRecord
         val mic = micAudioRecord
@@ -877,6 +949,11 @@ class MediaCodecScreenRecorder(
     fun releaseAll() {
         isRunning.set(false)
         stopRequested.set(true)
+
+        try { micNoiseSuppressor?.release() } catch (ignored: Exception) {}
+        micNoiseSuppressor = null
+        try { micEchoCanceler?.release() } catch (ignored: Exception) {}
+        micEchoCanceler = null
 
         try { playbackAudioRecord?.stop() } catch (ignored: Exception) {}
         try { playbackAudioRecord?.release() } catch (ignored: Exception) {}

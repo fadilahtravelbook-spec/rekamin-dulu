@@ -23,6 +23,7 @@ import androidx.core.content.FileProvider
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.bangdillah.rekamindulu.HomeActivity
+import com.bangdillah.rekamindulu.MainActivity
 import com.bangdillah.rekamindulu.R
 import com.bangdillah.rekamindulu.player.PlayerActivity
 import com.bangdillah.rekamindulu.service.ScreenRecordingService
@@ -64,15 +65,18 @@ class LibraryActivity : AppCompatActivity() {
         }
     }
 
+    private var extractProgressDialog: AlertDialog? = null
+
     private val recordingReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             when (intent?.action) {
                 ScreenRecordingService.ACTION_RECORDING_STOPPED -> {
+                    MainActivity.hasPendingSaveDialog = false
                     val path = intent.getStringExtra(ScreenRecordingService.EXTRA_FILE_PATH)
                         ?: ScreenRecordingService.lastRecordedFilePath
                     updateRecordingIndicator()
                     loadVideoFiles()
-                    if (!path.isNullOrEmpty()) {
+                    if (!path.isNullOrEmpty() && File(path).exists() && File(path).length() > 10240) {
                         SaveTransitionDialog.show(this@LibraryActivity, path) {
                             loadVideoFiles()
                         }
@@ -159,6 +163,13 @@ class LibraryActivity : AppCompatActivity() {
         }
     }
 
+    override fun onDestroy() {
+        super.onDestroy()
+        liveTimerHandler.removeCallbacksAndMessages(null)
+        try { extractProgressDialog?.dismiss() } catch (ignored: Exception) {}
+        extractProgressDialog = null
+    }
+
     private fun setupHeaderButtons() {
         findViewById<View>(R.id.btn_tambah_rekam)?.setOnClickListener {
             val intent = Intent(this, HomeActivity::class.java)
@@ -177,6 +188,7 @@ class LibraryActivity : AppCompatActivity() {
         findViewById<View>(R.id.btn_empty_demo)?.setOnClickListener {
             Toast.makeText(this, "Membuat video demo MP4...", Toast.LENGTH_SHORT).show()
             StorageHelper.generateDemoVideo(this) { file ->
+                if (isFinishing || isDestroyed) return@generateDemoVideo
                 if (file != null) {
                     Toast.makeText(this, "Video demo berhasil dibuat!", Toast.LENGTH_SHORT).show()
                     loadVideoFiles()
@@ -567,11 +579,13 @@ class LibraryActivity : AppCompatActivity() {
 
     private fun handleExtractAudio(file: File) {
         if (isFinishing || isDestroyed) return
+        try { extractProgressDialog?.dismiss() } catch (ignored: Exception) {}
         val progressDialog = MaterialAlertDialogBuilder(this)
             .setTitle("Mengekstrak Audio 🎵")
             .setMessage("Memeriksa trek audio dari ${file.name}...")
             .setCancelable(false)
             .create()
+        extractProgressDialog = progressDialog
         try {
             progressDialog.show()
         } catch (ignored: Exception) {}

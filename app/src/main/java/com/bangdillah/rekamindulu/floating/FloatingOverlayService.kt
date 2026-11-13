@@ -71,6 +71,8 @@ class FloatingOverlayService : Service() {
     private var cameraDevice: CameraDevice? = null
     private var cameraSession: CameraCaptureSession? = null
     private var previewSize: Size = Size(480, 640)
+    private var cameraSensorOrientation: Int = 90
+    private var cameraLensFacing: Int = CameraCharacteristics.LENS_FACING_FRONT
 
     private var isPaused = false
     private var isMinimized = true // Default minimized agar pemain game langsung bebas bermain tanpa terhalang!
@@ -282,6 +284,47 @@ class FloatingOverlayService : Service() {
                 else -> 0f
             }
         }
+
+        /**
+         * Menentukan label status audio untuk overlay panel HUD secara akurat
+         * dengan memperhitungkan kondisi live mute mikrofon.
+         */
+        fun resolveAudioStatusLabel(audioSource: String, isRecording: Boolean, isMicMuted: Boolean): String {
+            if (isRecording && isMicMuted) {
+                return when (audioSource) {
+                    "BOTH" -> "🔊 Audio Game (Mic Mute)"
+                    "MIC" -> "🔇 Mic Dibisukan"
+                    "INTERNAL" -> "🔊 Audio Game"
+                    else -> "🔇 Audio Mute"
+                }
+            }
+            return when (audioSource) {
+                "BOTH" -> "🎙️ Mic + 🔊 Game"
+                "MIC" -> "🎙️ Mic Aktif"
+                "INTERNAL" -> "🔊 Audio Game"
+                else -> "🔇 Audio Mute"
+            }
+        }
+
+        /**
+         * Ringkasan singkat kanal audio untuk baris detail FPS HUD.
+         */
+        fun resolveAudioSummarySuffix(audioSource: String, isRecording: Boolean, isMicMuted: Boolean): String {
+            if (isRecording && isMicMuted) {
+                return when (audioSource) {
+                    "BOTH" -> " • Audio: Game (Mic Mute)"
+                    "MIC" -> " • Audio: Mic Mute"
+                    "INTERNAL" -> " • Audio: Game"
+                    else -> " • Audio: Mute"
+                }
+            }
+            return when (audioSource) {
+                "INTERNAL" -> " • Audio: Game"
+                "MIC" -> " • Audio: Mic"
+                "BOTH" -> " • Audio: Mic+Game"
+                else -> " • Audio: Mute"
+            }
+        }
     }
 
     private data class FpsRating(
@@ -352,6 +395,12 @@ class FloatingOverlayService : Service() {
                 ScreenRecordingService.ACTION_RECORDING_STATUS_CHANGED -> {
                     syncOverlayStatus()
                 }
+                ScreenRecordingService.ACTION_SCREENSHOT_RESULT -> {
+                    overlayView?.findViewById<View>(R.id.overlay_container)?.let { container ->
+                        container.animate()?.cancel()
+                        container.alpha = transparencyLevels[transparencyIndex]
+                    }
+                }
             }
         }
     }
@@ -362,6 +411,7 @@ class FloatingOverlayService : Service() {
         val filter = IntentFilter().apply {
             addAction(ScreenRecordingService.ACTION_RECORDING_STATUS_CHANGED)
             addAction(ScreenRecordingService.ACTION_RECORDING_STOPPED)
+            addAction(ScreenRecordingService.ACTION_SCREENSHOT_RESULT)
         }
         ContextCompat.registerReceiver(
             this,
@@ -508,12 +558,11 @@ class FloatingOverlayService : Service() {
 
         val gpuLabel = if (prefs.hardwareAccelerationEnabled) " • GPU HW" else ""
         val turboLabel = if (prefs.gamingTurboBoost) " • Turbo CPU" else ""
-        val audioModeLabel = when (prefs.audioSource) {
-            "INTERNAL" -> " • Audio: Game"
-            "MIC" -> " • Audio: Mic"
-            "BOTH" -> " • Audio: Mic+Game"
-            else -> " • Audio: Mute"
-        }
+        val audioModeLabel = resolveAudioSummarySuffix(
+            audioSource = prefs.audioSource,
+            isRecording = ScreenRecordingService.isRecording,
+            isMicMuted = ScreenRecordingService.isMicMuted
+        )
         detailsText?.text = "Target: ${targetFps} FPS • Stabilitas: ${stabilityPct}% • Layar: ${hardwareHz}Hz${gpuLabel}${turboLabel}${audioModeLabel}"
         adviceText?.text = rating.advice
 
@@ -598,14 +647,11 @@ class FloatingOverlayService : Service() {
         val labelMic = overlayView?.findViewById<TextView>(R.id.label_overlay_mic)
         val audioStatusText = overlayView?.findViewById<TextView>(R.id.overlay_audio_status_text)
 
-        when {
-            ScreenRecordingService.isRecording && ScreenRecordingService.isMicMuted && prefs.audioSource == "INTERNAL" ->
-                audioStatusText?.text = "🔊 Audio Game (Mic Mute)"
-            prefs.audioSource == "BOTH" -> audioStatusText?.text = "🎙️ Mic + 🔊 Game"
-            prefs.audioSource == "MIC" -> audioStatusText?.text = "🎙️ Mic Aktif"
-            prefs.audioSource == "INTERNAL" -> audioStatusText?.text = "🔊 Audio Game"
-            else -> audioStatusText?.text = "🔇 Audio Mute"
-        }
+        audioStatusText?.text = resolveAudioStatusLabel(
+            audioSource = prefs.audioSource,
+            isRecording = ScreenRecordingService.isRecording,
+            isMicMuted = ScreenRecordingService.isMicMuted
+        )
 
         if (isMicActive) {
             btnMic?.setImageResource(R.drawable.ic_mic)
@@ -617,7 +663,7 @@ class FloatingOverlayService : Service() {
             btnMic?.setImageResource(R.drawable.ic_mic_off)
             btnMic?.imageTintList = ContextCompat.getColorStateList(this, R.color.colorError)
             btnMic?.backgroundTintList = ContextCompat.getColorStateList(this, R.color.colorErrorContainer)
-            labelMic?.text = "Mic Mute"
+            labelMic?.text = if (prefs.audioSource == "INTERNAL" || prefs.audioSource == "MUTE") "No Mic" else "Mic Mute"
             labelMic?.setTextColor(ContextCompat.getColor(this, R.color.colorError))
         }
     }
@@ -1290,6 +1336,8 @@ class FloatingOverlayService : Service() {
             }
 
             val chars = cameraManager.getCameraCharacteristics(selectedId)
+            cameraSensorOrientation = chars.get(CameraCharacteristics.SENSOR_ORIENTATION) ?: 90
+            cameraLensFacing = chars.get(CameraCharacteristics.LENS_FACING) ?: desiredFacing
             val streamMap = chars.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP)
             val sizes = streamMap?.getOutputSizes(SurfaceTexture::class.java)
             previewSize = sizes
@@ -1406,29 +1454,34 @@ class FloatingOverlayService : Service() {
         val rotationDegrees = computeFacecamRotationDegrees(rotation)
         val matrix = Matrix()
         val viewRect = RectF(0f, 0f, viewWidth.toFloat(), viewHeight.toFloat())
-        val bufferRect = RectF(0f, 0f, previewSize.height.toFloat(), previewSize.width.toFloat())
+        val isSensorSwapped = (cameraSensorOrientation == 90 || cameraSensorOrientation == 270)
+        val isDisplayLandscape = (rotation == Surface.ROTATION_90 || rotation == Surface.ROTATION_270)
+        val bufferWidth = if (isSensorSwapped xor isDisplayLandscape) {
+            previewSize.height.toFloat().coerceAtLeast(1f)
+        } else {
+            previewSize.width.toFloat().coerceAtLeast(1f)
+        }
+        val bufferHeight = if (isSensorSwapped xor isDisplayLandscape) {
+            previewSize.width.toFloat().coerceAtLeast(1f)
+        } else {
+            previewSize.height.toFloat().coerceAtLeast(1f)
+        }
+
         val centerX = viewRect.centerX()
         val centerY = viewRect.centerY()
 
-        if (rotation == Surface.ROTATION_90 || rotation == Surface.ROTATION_270) {
-            bufferRect.offset(centerX - bufferRect.centerX(), centerY - bufferRect.centerY())
-            matrix.setRectToRect(viewRect, bufferRect, Matrix.ScaleToFit.FILL)
-            val scale = maxOf(
-                viewHeight.toFloat() / previewSize.height.coerceAtLeast(1),
-                viewWidth.toFloat() / previewSize.width.coerceAtLeast(1)
-            )
-            matrix.postScale(scale, scale, centerX, centerY)
+        // Center-crop scale to prevent stretched/squished preview on any aspect ratio
+        val scaleX = viewWidth.toFloat() / bufferWidth
+        val scaleY = viewHeight.toFloat() / bufferHeight
+        val cropScale = maxOf(scaleX, scaleY)
+        val scaledWidth = bufferWidth * cropScale
+        val scaledHeight = bufferHeight * cropScale
+        matrix.setScale(scaledWidth / viewWidth.toFloat(), scaledHeight / viewHeight.toFloat(), centerX, centerY)
+
+        if (isDisplayLandscape) {
             matrix.postRotate(rotationDegrees, centerX, centerY)
-        } else {
-            val scaleX = previewSize.height.toFloat() / viewWidth.toFloat()
-            val scaleY = previewSize.width.toFloat() / viewHeight.toFloat()
-            val maxScale = maxOf(scaleX, scaleY)
-            if (maxScale > 0f && scaleX > 0f && scaleY > 0f) {
-                matrix.setScale(scaleX / maxScale, scaleY / maxScale, centerX, centerY)
-            }
-            if (rotationDegrees != 0f) {
-                matrix.postRotate(rotationDegrees, centerX, centerY)
-            }
+        } else if (rotation == Surface.ROTATION_180) {
+            matrix.postRotate(180f, centerX, centerY)
         }
         tv.setTransform(matrix)
     }

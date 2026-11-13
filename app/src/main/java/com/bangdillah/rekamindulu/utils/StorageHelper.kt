@@ -144,22 +144,33 @@ object StorageHelper {
     fun getAllVideoFiles(context: Context): List<File> {
         val result = mutableListOf<File>()
 
-        // 1. Direktori Publik
-        val publicDir = File(
-            Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES),
-            FOLDER_NAME
-        )
-        collectValidVideosFromDir(publicDir, result)
+        // 1. Direktori Publik (dijaga dengan try/catch untuk strict scoped storage Android 10+)
+        var publicDirPath: String? = null
+        try {
+            @Suppress("DEPRECATION")
+            val moviesRoot = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES)
+            if (moviesRoot != null) {
+                val publicDir = File(moviesRoot, FOLDER_NAME)
+                publicDirPath = publicDir.absolutePath
+                collectValidVideosFromDir(publicDir, result)
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Skipping legacy public directory scan", e)
+        }
 
-        // 2. Direktori Fallback Eksternal
-        val fallbackDir = File(context.getExternalFilesDir(Environment.DIRECTORY_MOVIES), FOLDER_NAME)
-        if (fallbackDir.exists() && fallbackDir.absolutePath != publicDir.absolutePath) {
+        // 2. Direktori Fallback Eksternal (utama app-specific)
+        val extMovies = context.getExternalFilesDir(Environment.DIRECTORY_MOVIES)
+        val fallbackDir = if (extMovies != null) File(extMovies, FOLDER_NAME) else null
+        if (fallbackDir != null && fallbackDir.exists() && fallbackDir.absolutePath != publicDirPath) {
             collectValidVideosFromDir(fallbackDir, result)
         }
 
         // 3. Direktori Internal Files
         val internalDir = File(context.filesDir, FOLDER_NAME)
-        if (internalDir.exists() && internalDir.absolutePath != publicDir.absolutePath && internalDir.absolutePath != fallbackDir.absolutePath) {
+        if (internalDir.exists() &&
+            internalDir.absolutePath != publicDirPath &&
+            internalDir.absolutePath != fallbackDir?.absolutePath
+        ) {
             collectValidVideosFromDir(internalDir, result)
         }
 

@@ -40,6 +40,30 @@ class TrimActivity : AppCompatActivity() {
 
     companion object {
         private const val REQUEST_CODE_PICK_VIDEO = 3001
+        private const val MIN_CLIP_DURATION_MS = 1000
+
+        /**
+         * Menjaga posisi slider awal & akhir tetap valid dengan jarak minimal [minClipMs]
+         * (atau seluruh durasi video jika video < minClipMs).
+         */
+        fun clampTrimProgress(
+            progress: Int,
+            otherBoundMs: Int,
+            durationMs: Int,
+            isStartThumb: Boolean,
+            minClipMs: Int = MIN_CLIP_DURATION_MS
+        ): Int {
+            val safeDuration = durationMs.coerceAtLeast(0)
+            val clampedProgress = progress.coerceIn(0, safeDuration)
+            val effectiveGap = minClipMs.coerceAtMost(safeDuration)
+            return if (isStartThumb) {
+                val maxAllowed = (otherBoundMs.coerceIn(0, safeDuration) - effectiveGap).coerceAtLeast(0)
+                clampedProgress.coerceAtMost(maxAllowed)
+            } else {
+                val minAllowed = (otherBoundMs.coerceIn(0, safeDuration) + effectiveGap).coerceAtMost(safeDuration)
+                clampedProgress.coerceAtLeast(minAllowed)
+            }
+        }
     }
 
     private val pickVideoLauncher = registerForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
@@ -167,13 +191,13 @@ class TrimActivity : AppCompatActivity() {
         seekStartTime?.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
                 if (fromUser) {
-                    val maxAllowed = ((seekEndTime?.progress ?: videoDurationMs) - 1000).coerceAtLeast(0)
-                    if (progress > maxAllowed) {
-                        seekStartTime?.progress = maxAllowed
-                        return
+                    val endBound = seekEndTime?.progress ?: endTrimMs.toInt()
+                    val clamped = clampTrimProgress(progress, endBound, videoDurationMs, isStartThumb = true)
+                    if (clamped != progress) {
+                        seekBar?.progress = clamped
                     }
-                    startTrimMs = progress.toLong().coerceIn(0L, videoDurationMs.toLong())
-                    textStartTimeVal?.text = formatTime(startTrimMs.toInt())
+                    startTrimMs = clamped.toLong()
+                    textStartTimeVal?.text = formatTime(clamped)
                     updateSummary()
                 }
             }
@@ -187,13 +211,13 @@ class TrimActivity : AppCompatActivity() {
         seekEndTime?.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
                 if (fromUser) {
-                    val minAllowed = ((seekStartTime?.progress ?: 0) + 1000).coerceAtMost(videoDurationMs)
-                    if (progress < minAllowed) {
-                        seekEndTime?.progress = minAllowed
-                        return
+                    val startBound = seekStartTime?.progress ?: startTrimMs.toInt()
+                    val clamped = clampTrimProgress(progress, startBound, videoDurationMs, isStartThumb = false)
+                    if (clamped != progress) {
+                        seekBar?.progress = clamped
                     }
-                    endTrimMs = progress.toLong().coerceIn(0L, videoDurationMs.toLong())
-                    textEndTimeVal?.text = formatTime(endTrimMs.toInt())
+                    endTrimMs = clamped.toLong()
+                    textEndTimeVal?.text = formatTime(clamped)
                     updateSummary()
                 }
             }
@@ -205,14 +229,15 @@ class TrimActivity : AppCompatActivity() {
         })
 
         btnApplyTrim?.setOnClickListener {
+            if (isTrimming) return@setOnClickListener
             val file = currentVideoFile
             if (file == null || !file.exists()) {
                 Toast.makeText(this, "Pilih video terlebih dahulu", Toast.LENGTH_SHORT).show()
                 return@setOnClickListener
             }
 
-            val durationCut = (endTrimMs - startTrimMs) / 1000
-            if (durationCut < 1) {
+            val clipDurationMs = endTrimMs - startTrimMs
+            if (clipDurationMs < MIN_CLIP_DURATION_MS) {
                 Toast.makeText(this, "Rentang durasi minimal 1 detik", Toast.LENGTH_SHORT).show()
                 return@setOnClickListener
             }
@@ -330,13 +355,7 @@ class TrimActivity : AppCompatActivity() {
     private fun executeTrim(inputFile: File) {
         val outputDir = StorageHelper.getRecordingDirectory(this)
         val timeStamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
-        val baseName = "Trim_${inputFile.nameWithoutExtension}_$timeStamp"
-        var outputFile = File(outputDir, "$baseName.mp4")
-        var counter = 1
-        while (outputFile.exists()) {
-            outputFile = File(outputDir, "${baseName}_$counter.mp4")
-            counter++
-        }
+        val outputFile = TrimHelper.createTrimOutputFile(outputDir, inputFile.nameWithoutExtension, timeStamp)
 
         progressBar?.visibility = View.VISIBLE
         progressBar?.progress = 0

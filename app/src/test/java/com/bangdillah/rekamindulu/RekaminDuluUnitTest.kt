@@ -703,4 +703,112 @@ class RekaminDuluUnitTest {
         assertEquals(180f, com.bangdillah.rekamindulu.floating.FloatingOverlayService.computeFacecamRotationDegrees(android.view.Surface.ROTATION_180))
         assertEquals(90f, com.bangdillah.rekamindulu.floating.FloatingOverlayService.computeFacecamRotationDegrees(android.view.Surface.ROTATION_270))
     }
+
+    @Test
+    fun testOverlayAudioStatusAndSummaryReflectsLiveMicMute() {
+        assertEquals(
+            "🎙️ Mic + 🔊 Game",
+            com.bangdillah.rekamindulu.floating.FloatingOverlayService.resolveAudioStatusLabel("BOTH", isRecording = true, isMicMuted = false)
+        )
+        assertEquals(
+            "🔊 Audio Game (Mic Mute)",
+            com.bangdillah.rekamindulu.floating.FloatingOverlayService.resolveAudioStatusLabel("BOTH", isRecording = true, isMicMuted = true)
+        )
+        assertEquals(
+            "🔇 Mic Dibisukan",
+            com.bangdillah.rekamindulu.floating.FloatingOverlayService.resolveAudioStatusLabel("MIC", isRecording = true, isMicMuted = true)
+        )
+        assertEquals(
+            "🔊 Audio Game",
+            com.bangdillah.rekamindulu.floating.FloatingOverlayService.resolveAudioStatusLabel("INTERNAL", isRecording = true, isMicMuted = true)
+        )
+        assertEquals(
+            " • Audio: Game (Mic Mute)",
+            com.bangdillah.rekamindulu.floating.FloatingOverlayService.resolveAudioSummarySuffix("BOTH", isRecording = true, isMicMuted = true)
+        )
+        assertEquals(
+            " • Audio: Mic Mute",
+            com.bangdillah.rekamindulu.floating.FloatingOverlayService.resolveAudioSummarySuffix("MIC", isRecording = true, isMicMuted = true)
+        )
+        assertEquals(
+            " • Audio: Mic+Game",
+            com.bangdillah.rekamindulu.floating.FloatingOverlayService.resolveAudioSummarySuffix("BOTH", isRecording = false, isMicMuted = true)
+        )
+    }
+
+    @Test
+    fun testTrimActivityClampTrimProgress() {
+        // Start thumb dragged past end thumb (8000ms) -> clamped to 7000ms
+        assertEquals(
+            7000,
+            com.bangdillah.rekamindulu.trim.TrimActivity.clampTrimProgress(
+                progress = 8500,
+                otherBoundMs = 8000,
+                durationMs = 15000,
+                isStartThumb = true
+            )
+        )
+        // End thumb dragged below start thumb + 1000ms -> clamped to 5000ms
+        assertEquals(
+            5000,
+            com.bangdillah.rekamindulu.trim.TrimActivity.clampTrimProgress(
+                progress = 3500,
+                otherBoundMs = 4000,
+                durationMs = 15000,
+                isStartThumb = false
+            )
+        )
+        // Short video (< 1000ms, e.g. 600ms) keeps bounds valid without negative clamping
+        assertEquals(
+            0,
+            com.bangdillah.rekamindulu.trim.TrimActivity.clampTrimProgress(
+                progress = 500,
+                otherBoundMs = 600,
+                durationMs = 600,
+                isStartThumb = true
+            )
+        )
+        assertEquals(
+            600,
+            com.bangdillah.rekamindulu.trim.TrimActivity.clampTrimProgress(
+                progress = 100,
+                otherBoundMs = 0,
+                durationMs = 600,
+                isStartThumb = false
+            )
+        )
+    }
+
+    @Test
+    fun testCreateTrimOutputFileDeduplicatesPrefixAndCollisions() {
+        val tempDir = java.nio.file.Files.createTempDirectory("rekamin_trim_test").toFile()
+        try {
+            val fixedStamp = "20260401_120000"
+            val first = com.bangdillah.rekamindulu.trim.TrimHelper.createTrimOutputFile(
+                outputDir = tempDir,
+                rawSourceName = "Trim_Trim_Game_MLBB",
+                timeStamp = fixedStamp
+            )
+            assertEquals("Trim_Game_MLBB_20260401_120000.mp4", first.name)
+            assertTrue(first.createNewFile())
+
+            val second = com.bangdillah.rekamindulu.trim.TrimHelper.createTrimOutputFile(
+                outputDir = tempDir,
+                rawSourceName = "Trim_Game_MLBB",
+                timeStamp = fixedStamp
+            )
+            assertEquals("Trim_Game_MLBB_20260401_120000_1.mp4", second.name)
+            assertTrue(second.createNewFile())
+
+            val sanitized = com.bangdillah.rekamindulu.trim.TrimHelper.createTrimOutputFile(
+                outputDir = tempDir,
+                rawSourceName = "Trim_",
+                timeStamp = fixedStamp
+            )
+            assertEquals("Trim_Video_20260401_120000.mp4", sanitized.name)
+        } finally {
+            tempDir.deleteRecursively()
+        }
+    }
 }
+
