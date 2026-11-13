@@ -48,6 +48,20 @@ object AudioExtractorHelper {
         }
     }
 
+    fun createAudioOutputFile(
+        outputDir: File,
+        baseName: String,
+        timeStamp: String = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
+    ): File {
+        var candidate = File(outputDir, "Audio_${baseName}_$timeStamp.m4a")
+        var counter = 1
+        while (candidate.exists()) {
+            candidate = File(outputDir, "Audio_${baseName}_${timeStamp}_$counter.m4a")
+            counter++
+        }
+        return candidate
+    }
+
     fun extractAudio(
         context: Context,
         inputFile: File,
@@ -58,9 +72,7 @@ object AudioExtractorHelper {
         }
 
         val outputDir = StorageHelper.getRecordingDirectory(context)
-        val timeStamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
-        val outputName = "Audio_${inputFile.nameWithoutExtension}_$timeStamp.m4a"
-        val outputFile = File(outputDir, outputName)
+        val outputFile = createAudioOutputFile(outputDir, inputFile.nameWithoutExtension)
 
         var extractor: MediaExtractor? = null
         var muxer: MediaMuxer? = null

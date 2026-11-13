@@ -181,32 +181,40 @@ object DeviceAnalyzer {
 
         val readinessScore = score.coerceIn(10, 100)
 
+        val minDim = minOf(screenWidth, screenHeight)
         val (readinessStatus, recRes, recFps, recBitrate, recText) = when {
             readinessScore >= 85 -> {
+                val res = if (minDim >= 1080 && (maxRes.contains("1080") || maxRes.contains("4K") || maxRes.contains("2K"))) "1080p" else "720p"
+                val fps = if (maxFps >= 60) 60 else 30
+                val bitrate = com.bangdillah.rekamindulu.service.RecordingEngineOptimizer.getOptimalBitrateMbps(res, fps)
                 Quint(
                     "S+ Esports Ready (Maksimal)",
-                    if (screenWidth >= 1080 && maxRes.contains("1080")) "1080p" else "720p",
-                    if (refreshRateHz >= 90) 60 else 60,
-                    12,
-                    "Hardware sangat mumpuni. Rekomendasi: 1080p Full HD @ 60 FPS dengan audio internal game tanpa lag."
+                    res,
+                    fps,
+                    bitrate,
+                    "Hardware sangat mumpuni. Rekomendasi: $res @ $fps FPS ($bitrate Mbps) dengan audio internal game tanpa lag."
                 )
             }
             readinessScore >= 70 -> {
+                val res = if (minDim >= 1080 && (maxRes.contains("1080") || maxRes.contains("4K") || maxRes.contains("2K"))) "1080p" else "720p"
+                val fps = if (refreshRateHz >= 60 && maxFps >= 60) 60 else 30
+                val bitrate = com.bangdillah.rekamindulu.service.RecordingEngineOptimizer.getOptimalBitrateMbps(res, fps)
                 Quint(
                     "A+ Gaming Ready (Optimal)",
-                    "1080p",
-                    if (refreshRateHz >= 60) 60 else 30,
-                    10,
-                    "Hardware siap merekam game & aplikasi secara mulus. Rekomendasi: 1080p @ 60 FPS."
+                    res,
+                    fps,
+                    bitrate,
+                    "Hardware siap merekam game & aplikasi secara mulus. Rekomendasi: $res @ $fps FPS ($bitrate Mbps)."
                 )
             }
             readinessScore >= 50 -> {
+                val bitrate = com.bangdillah.rekamindulu.service.RecordingEngineOptimizer.getOptimalBitrateMbps("720p", 30)
                 Quint(
                     "B Stabil (Disarankan 720p)",
                     "720p",
                     30,
-                    8,
-                    "Disarankan resolusi 720p HD @ 30 FPS untuk menjaga suhu stabil dan memori hemat."
+                    bitrate,
+                    "Disarankan resolusi 720p HD @ 30 FPS ($bitrate Mbps) untuk menjaga suhu stabil dan memori hemat."
                 )
             }
             else -> {
@@ -215,7 +223,7 @@ object DeviceAnalyzer {
                     "720p",
                     30,
                     6,
-                    "Sisa ruang atau RAM terbatas. Gunakan 720p @ 30 FPS dan bersihkan memori penyimpanan."
+                    "Sisa ruang atau RAM terbatas. Gunakan 720p @ 30 FPS (6 Mbps) dan bersihkan memori penyimpanan."
                 )
             }
         }
@@ -334,18 +342,19 @@ object DeviceAnalyzer {
                     message = "Lolos: Encoder HW responsif (${fpsMeasured} FPS • Latensi ${String.format(Locale.US, "%.1f", avgLatencyMs)}ms • 0% Frame Drop)"
                 )
 
-                (context as? Activity)?.runOnUiThread { onResult(result) } ?: onResult(result)
+                android.os.Handler(android.os.Looper.getMainLooper()).post { onResult(result) }
             } catch (e: Exception) {
-                Log.w(TAG, "Benchmark fallback notice: ${e.message}")
+                Log.w(TAG, "Benchmark notice: ${e.message}")
+                val hwBest = HardwareEncoderHelper.findBestHardwareEncoder(MediaFormat.MIMETYPE_VIDEO_AVC)
                 val fallbackResult = BenchmarkResult(
-                    isSuccess = true,
-                    encoderName = "Hardware AVC Encoder",
-                    fpsScore = 60,
-                    latencyMs = 12.0,
-                    isHardware = true,
-                    message = "Lolos: Encoder kompatibel untuk rekaman game 60 FPS (Latensi normal)"
+                    isSuccess = false,
+                    encoderName = hwBest?.codecName ?: "AVC Encoder",
+                    fpsScore = if (hwBest?.isHardware == true) 60 else 30,
+                    latencyMs = 16.6,
+                    isHardware = hwBest?.isHardware ?: false,
+                    message = "Benchmark langsung tidak tersedia pada Surface ini, namun ${hwBest?.vendorDescription ?: "encoder AVC"} siap digunakan."
                 )
-                (context as? Activity)?.runOnUiThread { onResult(fallbackResult) } ?: onResult(fallbackResult)
+                android.os.Handler(android.os.Looper.getMainLooper()).post { onResult(fallbackResult) }
             }
         }.start()
     }
@@ -359,60 +368,27 @@ object DeviceAnalyzer {
     )
 
     private fun inspectVideoCodecs(): CodecInspection {
-        var h264Name = "Hardware AVC Encoder"
-        var isHardware = true
-        var isHevc = false
-        var maxRes = "1080p Full HD"
-        var maxFps = 60
+        val avcBest = HardwareEncoderHelper.findBestHardwareEncoder(MediaFormat.MIMETYPE_VIDEO_AVC)
+        val hevcBest = HardwareEncoderHelper.findBestHardwareEncoder(MediaFormat.MIMETYPE_VIDEO_HEVC)
 
-        try {
-            val codecList = MediaCodecList(MediaCodecList.REGULAR_CODECS)
-            val codecInfos = codecList.codecInfos
+        val h264Name = avcBest?.codecName ?: "AVC Encoder"
+        val isHardware = avcBest?.isHardware ?: false
+        val isHevc = hevcBest != null
 
-            for (info in codecInfos) {
-                if (!info.isEncoder) continue
-                val types = info.supportedTypes
+        val maxWidth = avcBest?.maxSupportedWidth ?: 1920
+        val maxHeight = avcBest?.maxSupportedHeight ?: 1080
+        val maxRes = when {
+            maxWidth >= 3840 || maxHeight >= 3840 -> "4K Ultra HD (2160p)"
+            maxWidth >= 2560 || maxHeight >= 2560 -> "2K Quad HD (1440p)"
+            maxWidth >= 1920 || maxHeight >= 1920 -> "1080p Full HD"
+            else -> "720p HD"
+        }
 
-                for (type in types) {
-                    if (type.equals("video/hevc", ignoreCase = true)) {
-                        isHevc = true
-                    }
-                    if (type.equals("video/avc", ignoreCase = true)) {
-                        h264Name = info.name
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                            isHardware = info.isHardwareAccelerated
-                        } else {
-                            val lower = info.name.lowercase(Locale.getDefault())
-                            isHardware = !lower.contains("google") && !lower.contains("sw")
-                        }
-                        try {
-                            val capabilities = info.getCapabilitiesForType(type)
-                            val videoCaps = capabilities.videoCapabilities
-                            val supportedWidths = videoCaps.supportedWidths
-                            val supportedHeights = videoCaps.supportedHeights
-                            if (supportedWidths.upper >= 3840 || supportedHeights.upper >= 3840) {
-                                maxRes = "4K Ultra HD (2160p)"
-                            } else if (supportedWidths.upper >= 1920 || supportedHeights.upper >= 1920) {
-                                maxRes = "1080p Full HD"
-                            } else {
-                                maxRes = "720p HD"
-                            }
-                            val fpsRange = videoCaps.supportedFrameRates
-                            if (fpsRange.upper >= 120) {
-                                maxFps = 120
-                            } else if (fpsRange.upper >= 60) {
-                                maxFps = 60
-                            } else {
-                                maxFps = 30
-                            }
-                        } catch (e: Exception) {
-                            // Fallback to default
-                        }
-                    }
-                }
-            }
-        } catch (e: Exception) {
-            // Keep safe defaults
+        val rawFps = avcBest?.maxSupportedFps ?: 60
+        val maxFps = when {
+            rawFps >= 120 -> 120
+            rawFps >= 60 -> 60
+            else -> 30
         }
 
         return CodecInspection(h264Name, isHardware, isHevc, maxRes, maxFps)

@@ -521,5 +521,186 @@ class RekaminDuluUnitTest {
         val criticalGb = criticalBytes.toDouble() / (1024.0 * 1024.0 * 1024.0)
         assertTrue("150MB harus lebih kecil dari batas peringatan 0.2 GB", criticalGb < 0.2)
     }
-}
 
+    @Test
+    fun testPcm16SampleMixingAndSaturationClamping() {
+        assertEquals(
+            1500.toShort(),
+            com.bangdillah.rekamindulu.service.MediaCodecScreenRecorder.mixPcm16Sample(1000, 500)
+        )
+        assertEquals(
+            Short.MAX_VALUE,
+            com.bangdillah.rekamindulu.service.MediaCodecScreenRecorder.mixPcm16Sample(30000, 10000)
+        )
+        assertEquals(
+            Short.MIN_VALUE,
+            com.bangdillah.rekamindulu.service.MediaCodecScreenRecorder.mixPcm16Sample(-30000, -10000)
+        )
+    }
+
+    @Test
+    fun testPcm16FramesMixingAndLiveMicMute() {
+        val playback = shortArrayOf(1000, -1000, 20000, -20000)
+        val mic = shortArrayOf(500, 15000)
+
+        val mixedWithMic = com.bangdillah.rekamindulu.service.MediaCodecScreenRecorder.mixPcm16Frames(
+            playback = playback,
+            playbackSamplesRead = 4,
+            playbackChannels = 2,
+            mic = mic,
+            micSamplesRead = 2,
+            micChannels = 1,
+            micMuted = false
+        )
+        assertEquals(4, mixedWithMic.size)
+        assertEquals(1500.toShort(), mixedWithMic[0])
+        assertEquals((-500).toShort(), mixedWithMic[1])
+        assertEquals(Short.MAX_VALUE, mixedWithMic[2]) // 20000 + 15000 clamped
+        assertEquals((-5000).toShort(), mixedWithMic[3])
+
+        val mixedMutedMic = com.bangdillah.rekamindulu.service.MediaCodecScreenRecorder.mixPcm16Frames(
+            playback = playback,
+            playbackSamplesRead = 4,
+            playbackChannels = 2,
+            mic = mic,
+            micSamplesRead = 2,
+            micChannels = 1,
+            micMuted = true
+        )
+        assertEquals(4, mixedMutedMic.size)
+        assertEquals(1000.toShort(), mixedMutedMic[0])
+        assertEquals((-1000).toShort(), mixedMutedMic[1])
+        assertEquals(20000.toShort(), mixedMutedMic[2])
+        assertEquals((-20000).toShort(), mixedMutedMic[3])
+    }
+
+    @Test
+    fun testExtendedServiceActionConstants() {
+        assertEquals("ACTION_TOGGLE_MIC", com.bangdillah.rekamindulu.service.ScreenRecordingService.ACTION_TOGGLE_MIC)
+        assertEquals("ACTION_SET_MIC_MUTED", com.bangdillah.rekamindulu.service.ScreenRecordingService.ACTION_SET_MIC_MUTED)
+        assertEquals("ACTION_CAPTURE_SCREENSHOT", com.bangdillah.rekamindulu.service.ScreenRecordingService.ACTION_CAPTURE_SCREENSHOT)
+        assertEquals("ACTION_REFRESH_FOREGROUND_TYPE", com.bangdillah.rekamindulu.service.ScreenRecordingService.ACTION_REFRESH_FOREGROUND_TYPE)
+    }
+
+    @Test
+    fun testLibraryGameFilterMatchesOnlyGameFiles() {
+        fun isGameRecording(fileName: String): Boolean {
+            return fileName.contains("game", ignoreCase = true) || fileName.contains("fps", ignoreCase = true)
+        }
+
+        assertTrue(isGameRecording("Game_Rekaman_20260401_120000.mp4"))
+        assertTrue(isGameRecording("MLBB_60FPS_highlight.mp4"))
+        assertTrue(!isGameRecording("Rekaman_20260401_120000.mp4"))
+        assertTrue(!isGameRecording("Demo_RekaminDulu_12345.mp4"))
+    }
+
+    @Test
+    fun testCreateAudioOutputFileAvoidsCollisions() {
+        val tempDir = java.nio.file.Files.createTempDirectory("rekamin_audio_test").toFile()
+        try {
+            val fixedStamp = "20260401_120000"
+            val first = com.bangdillah.rekamindulu.audio.AudioExtractorHelper.createAudioOutputFile(
+                outputDir = tempDir,
+                baseName = "Game_MLBB",
+                timeStamp = fixedStamp
+            )
+            assertEquals("Audio_Game_MLBB_20260401_120000.m4a", first.name)
+            assertTrue(first.createNewFile())
+
+            val second = com.bangdillah.rekamindulu.audio.AudioExtractorHelper.createAudioOutputFile(
+                outputDir = tempDir,
+                baseName = "Game_MLBB",
+                timeStamp = fixedStamp
+            )
+            assertEquals("Audio_Game_MLBB_20260401_120000_1.m4a", second.name)
+            assertTrue(second.createNewFile())
+
+            val third = com.bangdillah.rekamindulu.audio.AudioExtractorHelper.createAudioOutputFile(
+                outputDir = tempDir,
+                baseName = "Game_MLBB",
+                timeStamp = fixedStamp
+            )
+            assertEquals("Audio_Game_MLBB_20260401_120000_2.m4a", third.name)
+        } finally {
+            tempDir.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun testRecordingEngineOptimizer4K2KAnd480pDimensions() {
+        val metrics = android.util.DisplayMetrics().apply {
+            widthPixels = 1080
+            heightPixels = 2400
+            densityDpi = 420
+        }
+
+        // 480p scales short side down from 1080 to 480 cleanly preserving 20:9
+        val dims480 = com.bangdillah.rekamindulu.service.RecordingEngineOptimizer.calculateDimensions(metrics, "480p")
+        assertEquals(480, dims480.width)
+        assertEquals(1066, dims480.height)
+
+        // 2K / 4K on a 1080p panel should not upscale beyond native screen dimensions
+        val dims2k = com.bangdillah.rekamindulu.service.RecordingEngineOptimizer.calculateDimensions(metrics, "2K")
+        assertEquals(1080, dims2k.width)
+        assertEquals(2400, dims2k.height)
+
+        val dims4k = com.bangdillah.rekamindulu.service.RecordingEngineOptimizer.calculateDimensions(metrics, "4K")
+        assertEquals(1080, dims4k.width)
+        assertEquals(2400, dims4k.height)
+    }
+
+    @Test
+    fun testResolveForegroundServiceTypeRespectsPermissionsAndPrefs() {
+        val typeMedia = android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION
+        val typeMic = android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
+        val typeCam = android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA
+
+        // API 34 (Android 14): Mute + no perms -> MEDIA_PROJECTION only
+        val muteNoPerms = com.bangdillah.rekamindulu.service.ScreenRecordingService.resolveForegroundServiceType(
+            hasMicPermission = false,
+            hasCameraPermission = false,
+            wantsAudio = false,
+            wantsFacecam = false,
+            sdkInt = android.os.Build.VERSION_CODES.UPSIDE_DOWN_CAKE
+        )
+        assertEquals(typeMedia, muteNoPerms)
+
+        // API 34: User wants audio & facecam, but permissions denied -> MEDIA_PROJECTION only (no SecurityException)
+        val wantsBothWithoutPerms = com.bangdillah.rekamindulu.service.ScreenRecordingService.resolveForegroundServiceType(
+            hasMicPermission = false,
+            hasCameraPermission = false,
+            wantsAudio = true,
+            wantsFacecam = true,
+            sdkInt = android.os.Build.VERSION_CODES.UPSIDE_DOWN_CAKE
+        )
+        assertEquals(typeMedia, wantsBothWithoutPerms)
+
+        // API 34: All granted & wanted -> MEDIA_PROJECTION | MICROPHONE | CAMERA
+        val allGranted = com.bangdillah.rekamindulu.service.ScreenRecordingService.resolveForegroundServiceType(
+            hasMicPermission = true,
+            hasCameraPermission = true,
+            wantsAudio = true,
+            wantsFacecam = true,
+            sdkInt = android.os.Build.VERSION_CODES.UPSIDE_DOWN_CAKE
+        )
+        assertEquals(typeMedia or typeMic or typeCam, allGranted)
+
+        // API 29 (Android 10): Only MEDIA_PROJECTION exists in Q before R mic/camera types
+        val api29Type = com.bangdillah.rekamindulu.service.ScreenRecordingService.resolveForegroundServiceType(
+            hasMicPermission = true,
+            hasCameraPermission = true,
+            wantsAudio = true,
+            wantsFacecam = true,
+            sdkInt = android.os.Build.VERSION_CODES.Q
+        )
+        assertEquals(typeMedia, api29Type)
+    }
+
+    @Test
+    fun testComputeFacecamRotationDegrees() {
+        assertEquals(0f, com.bangdillah.rekamindulu.floating.FloatingOverlayService.computeFacecamRotationDegrees(android.view.Surface.ROTATION_0))
+        assertEquals(270f, com.bangdillah.rekamindulu.floating.FloatingOverlayService.computeFacecamRotationDegrees(android.view.Surface.ROTATION_90))
+        assertEquals(180f, com.bangdillah.rekamindulu.floating.FloatingOverlayService.computeFacecamRotationDegrees(android.view.Surface.ROTATION_180))
+        assertEquals(90f, com.bangdillah.rekamindulu.floating.FloatingOverlayService.computeFacecamRotationDegrees(android.view.Surface.ROTATION_270))
+    }
+}

@@ -27,7 +27,8 @@
                 android:background="?attr/selectableItemBackgroundBorderless"
                 android:contentDescription="Kembali"
                 android:padding="12dp"
-                android:src="@drawable/ic_close" />
+                android:src="@drawable/ic_close"
+                app:tint="@color/textTitle" />
 
             <TextView
                 android:layout_width="wrap_content"
@@ -162,7 +163,7 @@
             android:layout_width="match_parent"
             android:layout_height="52dp"
             android:layout_marginTop="20dp"
-            android:text="📤 BAGIKAN APLIKASI (SHARE APK)"
+            android:text="📤 BAGIKAN APLIKASI KE TEMAN"
             android:textColor="@color/colorOnPrimary"
             android:textStyle="bold"
             app:backgroundTint="@color/colorPrimary"

@@ -36,10 +36,10 @@ import com.bangdillah.rekamindulu.utils.StorageHelper
 import com.google.android.material.bottomnavigation.BottomNavigationView
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import androidx.lifecycle.lifecycleScope
-import com.bangdillah.rekamindulu.backend.FirebaseAuthManager
-import com.bangdillah.rekamindulu.backend.FirebaseVideoRepository
 import com.bangdillah.rekamindulu.floating.FloatingOverlayService
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.File
 import java.util.Locale
 
@@ -48,8 +48,6 @@ class LibraryActivity : AppCompatActivity() {
     private lateinit var adapter: LibraryAdapter
     private val allVideoFiles = mutableListOf<File>()
     private val displayedVideoFiles = mutableListOf<File>()
-    private var authManager: FirebaseAuthManager? = null
-    private var videoRepository: FirebaseVideoRepository? = null
 
     private var currentSortOrder = 0 // 0: Terbaru, 1: Terlama, 2: Nama A-Z, 3: Nama Z-A, 4: Terbesar, 5: Terkecil
     private var currentFilterMode = 0 // 0: Semua, 1: Game, 2: Hari Ini, 3: > 1 Menit
@@ -74,15 +72,6 @@ class LibraryActivity : AppCompatActivity() {
                         ?: ScreenRecordingService.lastRecordedFilePath
                     updateRecordingIndicator()
                     loadVideoFiles()
-                    val currentUser = authManager?.currentUser
-                    if (currentUser != null && !path.isNullOrEmpty()) {
-                        val file = File(path)
-                        if (file.exists() && file.length() > 10240) {
-                            lifecycleScope.launch {
-                                videoRepository?.syncSingleFile(this@LibraryActivity, currentUser.uid, file)
-                            }
-                        }
-                    }
                     if (!path.isNullOrEmpty()) {
                         SaveTransitionDialog.show(this@LibraryActivity, path) {
                             loadVideoFiles()
@@ -101,9 +90,6 @@ class LibraryActivity : AppCompatActivity() {
         com.bangdillah.rekamindulu.utils.AppPreferences(this).applyTheme()
         setContentView(R.layout.library_screen)
         supportActionBar?.hide()
-
-        authManager = FirebaseAuthManager.getInstance(this)
-        videoRepository = FirebaseVideoRepository(this)
 
         val recyclerView = findViewById<RecyclerView>(R.id.library_recycler_view)
         recyclerView?.layoutManager = LinearLayoutManager(this)
@@ -201,13 +187,21 @@ class LibraryActivity : AppCompatActivity() {
         }
 
         findViewById<Button>(R.id.btn_library_stop_rec)?.setOnClickListener {
+            if (!ScreenRecordingService.isRecording && !ScreenRecordingService.isPaused) {
+                updateRecordingIndicator()
+                return@setOnClickListener
+            }
             val stopIntent = Intent(this, ScreenRecordingService::class.java).apply {
                 action = ScreenRecordingService.ACTION_STOP
             }
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                startForegroundService(stopIntent)
-            } else {
+            try {
                 startService(stopIntent)
+            } catch (e: IllegalStateException) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    try {
+                        startForegroundService(stopIntent)
+                    } catch (ignored: Exception) {}
+                }
             }
             Toast.makeText(this, "Menghentikan rekaman...", Toast.LENGTH_SHORT).show()
         }
@@ -384,7 +378,7 @@ class LibraryActivity : AppCompatActivity() {
             if (!matchesQuery) continue
 
             val matchesFilter = when (currentFilterMode) {
-                1 -> file.name.contains("game", ignoreCase = true) || file.name.contains("rekam", ignoreCase = true)
+                1 -> file.name.contains("game", ignoreCase = true) || file.name.contains("fps", ignoreCase = true)
                 2 -> (now - file.lastModified()) <= oneDayMs
                 3 -> file.length() >= (5 * 1024 * 1024)
                 else -> true
@@ -411,6 +405,17 @@ class LibraryActivity : AppCompatActivity() {
                 textEmptySubtitle?.text = "Tidak ada rekaman video dengan nama \"$trimmed\". Silakan periksa kembali ejaan pencarian Anda."
                 btnEmptyStart?.visibility = View.GONE
                 btnEmptyDemo?.visibility = View.GONE
+            } else if (allVideoFiles.isNotEmpty() && currentFilterMode != 0) {
+                val filterName = when (currentFilterMode) {
+                    1 -> "Rekaman Game"
+                    2 -> "Hari Ini"
+                    3 -> "Ukuran Besar (>5MB)"
+                    else -> "Filter Aktif"
+                }
+                textEmptyTitle?.text = "Belum Ada Video di Kategori \"$filterName\""
+                textEmptySubtitle?.text = "Coba pilih tab filter \"Semua\" untuk melihat ${allVideoFiles.size} video rekaman yang sudah tersimpan."
+                btnEmptyStart?.visibility = View.GONE
+                btnEmptyDemo?.visibility = View.GONE
             } else {
                 textEmptyTitle?.text = "Belum Ada Hasil Rekaman"
                 textEmptySubtitle?.text = "Mulai rekam layar gameplay atau aplikasi Anda sekarang! Hasil video MP4 berkualitas tinggi akan otomatis tersimpan di sini."
@@ -431,13 +436,11 @@ class LibraryActivity : AppCompatActivity() {
         val totalCount = allVideoFiles.size
         val totalBytes = allVideoFiles.sumOf { it.length() }
         val totalMb = totalBytes / (1024.0 * 1024.0)
-        val isCloudActive = authManager?.isUserSignedIn == true
-        val cloudStatus = if (isCloudActive) " • ☁️ Cloud Aktif" else ""
 
         textSummary?.text = if (totalCount == 0) {
-            "Belum ada rekaman tersimpan$cloudStatus"
+            "Belum ada rekaman tersimpan"
         } else {
-            String.format(Locale.getDefault(), "%d Video Tersimpan • %.1f MB Digunakan%s", totalCount, totalMb, cloudStatus)
+            String.format(Locale.getDefault(), "%d Video Tersimpan • %.1f MB Digunakan", totalCount, totalMb)
         }
     }
 
@@ -469,15 +472,20 @@ class LibraryActivity : AppCompatActivity() {
     }
 
     private fun loadVideoFiles() {
-        allVideoFiles.clear()
-        val files = StorageHelper.getAllVideoFiles(this)
-        if (files.isNotEmpty()) {
-            allVideoFiles.addAll(files)
-            applySorting()
-        }
+        lifecycleScope.launch(Dispatchers.IO) {
+            val files = StorageHelper.getAllVideoFiles(this@LibraryActivity)
+            withContext(Dispatchers.Main) {
+                if (isFinishing || isDestroyed) return@withContext
+                allVideoFiles.clear()
+                if (files.isNotEmpty()) {
+                    allVideoFiles.addAll(files)
+                    applySorting()
+                }
 
-        val currentQuery = findViewById<EditText>(R.id.et_search_library)?.text?.toString() ?: ""
-        filterVideos(currentQuery)
+                val currentQuery = findViewById<EditText>(R.id.et_search_library)?.text?.toString() ?: ""
+                filterVideos(currentQuery)
+            }
+        }
     }
 
     private fun showRenameDialog(file: File) {
@@ -489,6 +497,8 @@ class LibraryActivity : AppCompatActivity() {
             hint = "Masukkan nama baru rekaman"
             maxLines = 1
             isSingleLine = true
+            setTextColor(ContextCompat.getColor(this@LibraryActivity, R.color.textTitle))
+            setHintTextColor(ContextCompat.getColor(this@LibraryActivity, R.color.textCaption))
         }
 
         MaterialAlertDialogBuilder(this)
@@ -521,14 +531,7 @@ class LibraryActivity : AppCompatActivity() {
 
                 val success = file.renameTo(targetFile)
                 if (success) {
-                    val oldDocId = file.nameWithoutExtension.replace("[^a-zA-Z0-9_-]".toRegex(), "_")
-                    val currentUser = authManager?.currentUser
-                    if (currentUser != null) {
-                        lifecycleScope.launch {
-                            videoRepository?.deleteRecording(currentUser.uid, oldDocId)
-                            videoRepository?.syncSingleFile(this@LibraryActivity, currentUser.uid, targetFile)
-                        }
-                    }
+                    LibraryAdapter.invalidateCache(file.absolutePath)
                     StorageHelper.scanRenamedFile(this, file, targetFile)
                     Toast.makeText(this, "Nama rekaman berhasil diubah", Toast.LENGTH_SHORT).show()
                     loadVideoFiles()
@@ -547,17 +550,14 @@ class LibraryActivity : AppCompatActivity() {
             .setIcon(R.drawable.ic_delete)
             .setPositiveButton("Hapus") { _, _ ->
                 if (file.exists()) {
-                    val docId = file.nameWithoutExtension.replace("[^a-zA-Z0-9_-]".toRegex(), "_")
-                    val currentUser = authManager?.currentUser
-                    if (currentUser != null) {
-                        lifecycleScope.launch {
-                            videoRepository?.deleteRecording(currentUser.uid, docId)
-                        }
-                    }
                     LibraryAdapter.invalidateCache(file.absolutePath)
+                    val deleted = file.delete()
                     StorageHelper.scanDeletedFile(this, file)
-                    file.delete()
-                    Toast.makeText(this, "Rekaman video berhasil dihapus", Toast.LENGTH_SHORT).show()
+                    if (deleted) {
+                        Toast.makeText(this, "Rekaman video berhasil dihapus", Toast.LENGTH_SHORT).show()
+                    } else {
+                        Toast.makeText(this, "Gagal menghapus file rekaman", Toast.LENGTH_SHORT).show()
+                    }
                     loadVideoFiles()
                 }
             }
@@ -566,24 +566,38 @@ class LibraryActivity : AppCompatActivity() {
     }
 
     private fun handleExtractAudio(file: File) {
-        if (!AudioExtractorHelper.hasAudioTrack(file)) {
-            Toast.makeText(this, "⚠️ Video ini tidak memiliki rekaman suara (direkam dalam mode Mute/tanpa suara).", Toast.LENGTH_LONG).show()
-            return
-        }
-
         if (isFinishing || isDestroyed) return
         val progressDialog = MaterialAlertDialogBuilder(this)
             .setTitle("Mengekstrak Audio 🎵")
-            .setMessage("Sedang memisahkan trek audio dari rekaman video ${file.name}...")
+            .setMessage("Memeriksa trek audio dari ${file.name}...")
             .setCancelable(false)
             .create()
         try {
             progressDialog.show()
-        } catch (e: Exception) {
-            // Ignore window token errors if activity is transitioning
-        }
+        } catch (ignored: Exception) {}
 
         Thread {
+            val hasAudio = AudioExtractorHelper.hasAudioTrack(file)
+            if (!hasAudio) {
+                runOnUiThread {
+                    try { progressDialog.dismiss() } catch (ignored: Exception) {}
+                    if (!isFinishing && !isDestroyed) {
+                        Toast.makeText(
+                            this,
+                            "⚠️ Video ini tidak memiliki rekaman suara (direkam dalam mode Mute/tanpa suara).",
+                            Toast.LENGTH_LONG
+                        ).show()
+                    }
+                }
+                return@Thread
+            }
+
+            runOnUiThread {
+                if (!isFinishing && !isDestroyed) {
+                    progressDialog.setMessage("Sedang memisahkan trek audio dari rekaman video ${file.name}...")
+                }
+            }
+
             val (success, audioFile) = AudioExtractorHelper.extractAudio(this, file)
             runOnUiThread {
                 if (!isFinishing && !isDestroyed) {

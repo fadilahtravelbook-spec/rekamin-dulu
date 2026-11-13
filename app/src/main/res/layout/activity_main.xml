@@ -198,7 +198,7 @@
                                     android:layout_width="22dp"
                                     android:layout_height="22dp"
                                     android:layout_gravity="center"
-                                    android:contentDescription="Akun Cloud"
+                                    android:contentDescription="Penyimpanan Lokal"
                                     android:src="@drawable/ic_storage"
                                     app:tint="@color/colorPrimary" />
                             </FrameLayout>
@@ -213,7 +213,7 @@
                                     android:id="@+id/text_cloud_account_name"
                                     android:layout_width="wrap_content"
                                     android:layout_height="wrap_content"
-                                    android:text="Google Cloud Firestore"
+                                    android:text="Studio Penyimpanan Lokal"
                                     android:textColor="@color/textTitle"
                                     android:textSize="13sp"
                                     android:textStyle="bold" />
@@ -223,7 +223,7 @@
                                     android:layout_width="wrap_content"
                                     android:layout_height="wrap_content"
                                     android:layout_marginTop="2dp"
-                                    android:text="☁️ Database Terhubung &amp; Siap Sinkron"
+                                    android:text="📁 Video tersimpan aman di galeri perangkat"
                                     android:textColor="@color/colorSuccess"
                                     android:textSize="11sp" />
                             </LinearLayout>
@@ -238,7 +238,7 @@
                             android:layout_centerVertical="true"
                             android:minHeight="36dp"
                             android:paddingHorizontal="12dp"
-                            android:text="Login Google"
+                            android:text="Buka Galeri"
                             android:textColor="@color/colorPrimary"
                             android:textSize="11sp"
                             android:textStyle="bold"
@@ -247,7 +247,7 @@
                             app:strokeWidth="1dp" />
                     </RelativeLayout>
 
-                    <!-- Cloud Sync Action Row -->
+                    <!-- Local Storage Detail Action Row -->
                     <LinearLayout
                         android:id="@+id/layout_cloud_sync_row"
                         android:layout_width="match_parent"
@@ -264,7 +264,7 @@
                             android:layout_width="0dp"
                             android:layout_height="wrap_content"
                             android:layout_weight="1"
-                            android:text="Katalog video otomatis dicatat di backend cloud"
+                            android:text="Memeriksa kapasitas memori &amp; galeri video..."
                             android:textColor="@color/textSecondary"
                             android:textSize="11sp" />
 
@@ -276,7 +276,7 @@
                             android:layout_marginStart="8dp"
                             android:minHeight="30dp"
                             android:paddingHorizontal="10dp"
-                            android:text="🔄 Sinkron Cloud"
+                            android:text="Uji Kesiapan"
                             android:textSize="10sp"
                             android:textStyle="bold"
                             app:cornerRadius="10dp" />
@@ -1008,6 +1008,7 @@
 
             <!-- RESOLUTION & QUALITY SELECTOR BADGE -->
             <com.google.android.material.card.MaterialCardView
+                android:id="@+id/card_quality_selector"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginBottom="14dp"

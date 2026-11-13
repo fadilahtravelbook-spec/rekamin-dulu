@@ -60,6 +60,9 @@ class SettingsActivity : AppCompatActivity() {
     private var toggleStorageWarning: MaterialSwitch? = null
     private var toggleAppLock: MaterialSwitch? = null
 
+    private var isUpdatingUi = false
+    private var appLockDialog: AlertDialog? = null
+
     private val liveTimerHandler = Handler(Looper.getMainLooper())
     private val liveTimerRunnable = object : Runnable {
         override fun run() {
@@ -94,10 +97,10 @@ class SettingsActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        appPreferences = AppPreferences(this)
+        appPreferences.applyTheme()
         setContentView(R.layout.settings_screen)
         supportActionBar?.hide()
-
-        appPreferences = AppPreferences(this)
 
         checkAppLock()
         initViews()
@@ -112,27 +115,35 @@ class SettingsActivity : AppCompatActivity() {
                 hint = "Masukkan 4 angka PIN"
                 maxLines = 1
                 setPadding(48, 36, 48, 36)
+                setTextColor(ContextCompat.getColor(this@SettingsActivity, R.color.textTitle))
+                setHintTextColor(ContextCompat.getColor(this@SettingsActivity, R.color.textCaption))
             }
 
-            AlertDialog.Builder(this)
+            val dialog = MaterialAlertDialogBuilder(this)
                 .setTitle("🔒 Kunci Pengaturan")
                 .setMessage("Pengaturan dilindungi PIN. Masukkan PIN keamanan untuk mengakses:")
                 .setView(input)
                 .setCancelable(false)
-                .setPositiveButton("Buka Kunci") { dialog, _ ->
+                .setPositiveButton("Buka Kunci", null)
+                .setNegativeButton("Kembali") { _, _ ->
+                    finish()
+                }
+                .create()
+            appLockDialog = dialog
+
+            dialog.setOnShowListener {
+                dialog.getButton(AlertDialog.BUTTON_POSITIVE)?.setOnClickListener {
                     val entered = input.text.toString().trim()
                     if (entered == appPreferences.appLockPin) {
                         HomeActivity.isSessionUnlocked = true
                         dialog.dismiss()
                     } else {
-                        Toast.makeText(this, "PIN salah!", Toast.LENGTH_SHORT).show()
-                        finish()
+                        input.error = "PIN salah! Coba lagi."
+                        input.text?.clear()
                     }
                 }
-                .setNegativeButton("Kembali") { _, _ ->
-                    finish()
-                }
-                .show()
+            }
+            dialog.show()
         }
     }
 
@@ -193,44 +204,48 @@ class SettingsActivity : AppCompatActivity() {
     private fun setupListeners() {
         // Gaming mode toggle with automatic FPS & Bitrate sync + sub-feature coordination
         toggleGaming?.setOnCheckedChangeListener { _, isChecked ->
+            if (isUpdatingUi) return@setOnCheckedChangeListener
             appPreferences.isGamingMode = isChecked
             findViewById<View>(R.id.gaming_mode_tooltip)?.visibility =
                 if (isChecked) View.VISIBLE else View.GONE
 
             if (isChecked) {
-                // Boost parameters for gaming
-                appPreferences.fps = 60
-                appPreferences.bitrateMbps = 24
+                if (appPreferences.fps < 60) {
+                    appPreferences.fps = 60
+                }
+                if (appPreferences.bitrateMbps < 24) {
+                    appPreferences.bitrateMbps = 24
+                }
                 appPreferences.fpsStabilizerEnabled = true
                 appPreferences.gamingTurboBoost = true
                 appPreferences.hardwareAccelerationEnabled = true
-                toggleFpsStabilizer?.isChecked = true
-                toggleTurboBoost?.isChecked = true
-                toggleHardwareAcceleration?.isChecked = true
                 updateUIValues(skipGamingSwitch = true)
-                Toast.makeText(this, "⚡ Mode Gaming Pro Aktif: 60 FPS & 24 Mbps Super HD (Stabilisator + Turbo CPU + GPU HW)", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "⚡ Mode Gaming Pro Aktif: ${appPreferences.fps} FPS & ${appPreferences.bitrateMbps} Mbps (Stabilisator + Turbo CPU + GPU HW)", Toast.LENGTH_SHORT).show()
             } else {
-                appPreferences.fps = 60
-                appPreferences.bitrateMbps = 16
                 appPreferences.fpsStabilizerEnabled = false
+                appPreferences.gamingTurboBoost = false
+                if (appPreferences.fps > 60) {
+                    appPreferences.fps = 60
+                }
+                appPreferences.bitrateMbps = com.bangdillah.rekamindulu.service.RecordingEngineOptimizer.getOptimalBitrateMbps(
+                    appPreferences.resolution,
+                    appPreferences.fps
+                )
                 updateUIValues(skipGamingSwitch = true)
-                Toast.makeText(this, "Mode Standar: 60 FPS & 16 Mbps HD", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "Mode Standar: ${appPreferences.fps} FPS & ${appPreferences.bitrateMbps} Mbps", Toast.LENGTH_SHORT).show()
             }
-            com.bangdillah.rekamindulu.backend.FirebaseAuthManager.getInstance(this).updateUserPreferences(
-                fps = appPreferences.fps,
-                gamingMode = isChecked
-            )
         }
 
         // FPS Stabilizer toggle
         toggleFpsStabilizer?.setOnCheckedChangeListener { _, isChecked ->
+            if (isUpdatingUi) return@setOnCheckedChangeListener
             appPreferences.fpsStabilizerEnabled = isChecked
             if (isChecked && appPreferences.fps < 60) {
                 appPreferences.fps = 60
                 updateUIValues(skipGamingSwitch = true)
             }
             val msg = if (isChecked) {
-                "⚡ Stabilisator FPS Aktif: Frame rate terkunci stabil 60 FPS (Anti-Drop)"
+                "⚡ Stabilisator FPS Aktif: Frame rate terkunci stabil ${appPreferences.fps} FPS (Anti-Drop)"
             } else {
                 "Stabilisator FPS Dinonaktifkan"
             }
@@ -239,6 +254,7 @@ class SettingsActivity : AppCompatActivity() {
 
         // Game Turbo Booster toggle
         toggleTurboBoost?.setOnCheckedChangeListener { _, isChecked ->
+            if (isUpdatingUi) return@setOnCheckedChangeListener
             appPreferences.gamingTurboBoost = isChecked
             val msg = if (isChecked) {
                 "🚀 Game Turbo Aktif: Prioritas thread URGENT_DISPLAY & CPU Anti-Throttle"
@@ -250,9 +266,10 @@ class SettingsActivity : AppCompatActivity() {
 
         // Hardware GPU Acceleration toggle
         toggleHardwareAcceleration?.setOnCheckedChangeListener { _, isChecked ->
+            if (isUpdatingUi) return@setOnCheckedChangeListener
             appPreferences.hardwareAccelerationEnabled = isChecked
             val msg = if (isChecked) {
-                "⚡ Akselerasi Hardware GPU Aktif: AVCProfileHigh 4.2 via VPU Hardware (CPU Bebas Lag)"
+                "⚡ Akselerasi Hardware GPU Aktif: AVCProfileHigh via VPU Hardware (CPU Bebas Lag)"
             } else {
                 "Akselerasi Hardware Dinonaktifkan (Mode Baseline Kompatibel)"
             }
@@ -261,6 +278,7 @@ class SettingsActivity : AppCompatActivity() {
 
         // Stabilisator Audio Internal toggle
         toggleInternalAudioBoost?.setOnCheckedChangeListener { _, isChecked ->
+            if (isUpdatingUi) return@setOnCheckedChangeListener
             appPreferences.internalAudioStabilizer = isChecked
             val msg = if (isChecked) {
                 "🎧 Audio Internal Stabil: Jalur audio game diproteksi dari noise & bentrok"
@@ -272,6 +290,7 @@ class SettingsActivity : AppCompatActivity() {
 
         // Floating overlay toggle
         toggleFloating?.setOnCheckedChangeListener { _, isChecked ->
+            if (isUpdatingUi) return@setOnCheckedChangeListener
             appPreferences.showFloatingOverlay = isChecked
             if (isChecked && Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !android.provider.Settings.canDrawOverlays(this)) {
                 MaterialAlertDialogBuilder(this)
@@ -296,31 +315,41 @@ class SettingsActivity : AppCompatActivity() {
 
         // Vibrate toggle
         toggleVibrate?.setOnCheckedChangeListener { _, isChecked ->
+            if (isUpdatingUi) return@setOnCheckedChangeListener
             appPreferences.vibrateOnStart = isChecked
         }
 
         // Stop on screen off toggle
         toggleStopScreenOff?.setOnCheckedChangeListener { _, isChecked ->
+            if (isUpdatingUi) return@setOnCheckedChangeListener
             appPreferences.stopOnScreenOff = isChecked
         }
 
         // Show FPS counter toggle
         toggleShowFps?.setOnCheckedChangeListener { _, isChecked ->
+            if (isUpdatingUi) return@setOnCheckedChangeListener
             appPreferences.showFpsCounter = isChecked
         }
 
         // Low storage warning toggle
         toggleStorageWarning?.setOnCheckedChangeListener { _, isChecked ->
+            if (isUpdatingUi) return@setOnCheckedChangeListener
             appPreferences.storageWarningEnabled = isChecked
         }
 
         // App Lock toggle
         toggleAppLock?.setOnCheckedChangeListener { _, isChecked ->
+            if (isUpdatingUi) return@setOnCheckedChangeListener
             if (isChecked) {
                 if (appPreferences.appLockPin.isEmpty()) {
                     showSetPinDialog { success ->
                         if (!success) {
-                            toggleAppLock?.isChecked = false
+                            isUpdatingUi = true
+                            try {
+                                toggleAppLock?.isChecked = false
+                            } finally {
+                                isUpdatingUi = false
+                            }
                         }
                     }
                 } else {
@@ -392,13 +421,21 @@ class SettingsActivity : AppCompatActivity() {
 
         // Active Banner Stop Button
         findViewById<Button>(R.id.btn_settings_stop_rec)?.setOnClickListener {
+            if (!ScreenRecordingService.isRecording && !ScreenRecordingService.isPaused) {
+                updateRecordingIndicator()
+                return@setOnClickListener
+            }
             val stopIntent = Intent(this, ScreenRecordingService::class.java).apply {
                 action = ScreenRecordingService.ACTION_STOP
             }
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                startForegroundService(stopIntent)
-            } else {
+            try {
                 startService(stopIntent)
+            } catch (e: IllegalStateException) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    try {
+                        startForegroundService(stopIntent)
+                    } catch (ignored: Exception) {}
+                }
             }
             Toast.makeText(this, "Menghentikan rekaman...", Toast.LENGTH_SHORT).show()
         }
@@ -432,79 +469,84 @@ class SettingsActivity : AppCompatActivity() {
     }
 
     private fun updateUIValues(skipGamingSwitch: Boolean = false, skipAppLockSwitch: Boolean = false) {
-        textResolutionVal?.text = com.bangdillah.rekamindulu.service.RecordingEngineOptimizer.getResolutionLabel(appPreferences.resolution)
+        isUpdatingUi = true
+        try {
+            textResolutionVal?.text = com.bangdillah.rekamindulu.service.RecordingEngineOptimizer.getResolutionLabel(appPreferences.resolution)
 
-        textFpsVal?.text = "${appPreferences.fps} FPS"
-        textBitrateVal?.text = "${appPreferences.bitrateMbps} Mbps"
+            textFpsVal?.text = "${appPreferences.fps} FPS"
+            textBitrateVal?.text = "${appPreferences.bitrateMbps} Mbps"
 
-        textCodecVal?.text = if (appPreferences.videoEncoder == "H265") {
-            "H.265 (HEVC)"
-        } else {
-            "H.264 (AVC)"
+            textCodecVal?.text = if (appPreferences.videoEncoder == "H265") {
+                "H.265 (HEVC)"
+            } else {
+                "H.264 (AVC)"
+            }
+
+            textAudioVal?.text = when (appPreferences.audioSource) {
+                "BOTH" -> "Mic + Game"
+                "MIC" -> "Hanya Mic"
+                "INTERNAL" -> "Hanya Game"
+                else -> "Mute (Hening)"
+            }
+
+            textMicTypeVal?.text = when (appPreferences.micType) {
+                "camcorder" -> "Camcorder"
+                "voice_comm" -> "Headset Voice"
+                "unprocessed" -> "Suara Murni"
+                else -> "Default HP"
+            }
+
+            textCountdownVal?.text = if (appPreferences.countdownDuration == 0) {
+                "Langsung"
+            } else {
+                "${appPreferences.countdownDuration} Detik"
+            }
+
+            textThemeVal?.text = when (appPreferences.themeMode) {
+                "LIGHT" -> "Terang"
+                "DARK" -> "Gelap"
+                else -> "Ikuti Sistem"
+            }
+
+            val hasAppLock = appPreferences.isAppLockEnabled
+            if (!skipAppLockSwitch) {
+                toggleAppLock?.isChecked = hasAppLock
+            }
+            dividerPin?.visibility = if (hasAppLock) View.VISIBLE else View.GONE
+            rowSettingPin?.visibility = if (hasAppLock) View.VISIBLE else View.GONE
+            textPinVal?.text = if (appPreferences.appLockPin.isNotEmpty()) "••••" else "Belum Dibuat"
+
+            if (!skipGamingSwitch) {
+                toggleGaming?.isChecked = appPreferences.isGamingMode
+            }
+            findViewById<View>(R.id.gaming_mode_tooltip)?.visibility =
+                if (appPreferences.isGamingMode) View.VISIBLE else View.GONE
+
+            toggleFloating?.isChecked = appPreferences.showFloatingOverlay
+            toggleFpsStabilizer?.isChecked = appPreferences.fpsStabilizerEnabled
+            toggleTurboBoost?.isChecked = appPreferences.gamingTurboBoost
+            toggleHardwareAcceleration?.isChecked = appPreferences.hardwareAccelerationEnabled
+            toggleInternalAudioBoost?.isChecked = appPreferences.internalAudioStabilizer
+            toggleVibrate?.isChecked = appPreferences.vibrateOnStart
+            toggleStopScreenOff?.isChecked = appPreferences.stopOnScreenOff
+            toggleShowFps?.isChecked = appPreferences.showFpsCounter
+            toggleStorageWarning?.isChecked = appPreferences.storageWarningEnabled
+
+            // Disable modifications if active recording is underway
+            val isRecording = ScreenRecordingService.isRecording
+            toggleGaming?.isEnabled = !isRecording
+            toggleFpsStabilizer?.isEnabled = !isRecording
+            toggleTurboBoost?.isEnabled = !isRecording
+            toggleHardwareAcceleration?.isEnabled = !isRecording
+            toggleInternalAudioBoost?.isEnabled = !isRecording
+            toggleFloating?.isEnabled = !isRecording
+            toggleVibrate?.isEnabled = !isRecording
+            toggleStopScreenOff?.isEnabled = !isRecording
+            toggleShowFps?.isEnabled = !isRecording
+            toggleStorageWarning?.isEnabled = !isRecording
+        } finally {
+            isUpdatingUi = false
         }
-
-        textAudioVal?.text = when (appPreferences.audioSource) {
-            "BOTH" -> "Mic + Game"
-            "MIC" -> "Hanya Mic"
-            "INTERNAL" -> "Hanya Game"
-            else -> "Mute (Hening)"
-        }
-
-        textMicTypeVal?.text = when (appPreferences.micType) {
-            "camcorder" -> "Camcorder"
-            "voice_comm" -> "Headset Voice"
-            "unprocessed" -> "Suara Murni"
-            else -> "Default HP"
-        }
-
-        textCountdownVal?.text = if (appPreferences.countdownDuration == 0) {
-            "Langsung"
-        } else {
-            "${appPreferences.countdownDuration} Detik"
-        }
-
-        textThemeVal?.text = when (appPreferences.themeMode) {
-            "LIGHT" -> "Terang"
-            "DARK" -> "Gelap"
-            else -> "Ikuti Sistem"
-        }
-
-        val hasAppLock = appPreferences.isAppLockEnabled
-        if (!skipAppLockSwitch) {
-            toggleAppLock?.isChecked = hasAppLock
-        }
-        dividerPin?.visibility = if (hasAppLock) View.VISIBLE else View.GONE
-        rowSettingPin?.visibility = if (hasAppLock) View.VISIBLE else View.GONE
-        textPinVal?.text = if (appPreferences.appLockPin.isNotEmpty()) "••••" else "Belum Dibuat"
-
-        if (!skipGamingSwitch) {
-            toggleGaming?.isChecked = appPreferences.isGamingMode
-        }
-        findViewById<View>(R.id.gaming_mode_tooltip)?.visibility =
-            if (appPreferences.isGamingMode) View.VISIBLE else View.GONE
-
-        toggleFloating?.isChecked = appPreferences.showFloatingOverlay
-        toggleFpsStabilizer?.isChecked = appPreferences.fpsStabilizerEnabled
-        toggleTurboBoost?.isChecked = appPreferences.gamingTurboBoost
-        toggleHardwareAcceleration?.isChecked = appPreferences.hardwareAccelerationEnabled
-        toggleInternalAudioBoost?.isChecked = appPreferences.internalAudioStabilizer
-        toggleVibrate?.isChecked = appPreferences.vibrateOnStart
-        toggleStopScreenOff?.isChecked = appPreferences.stopOnScreenOff
-        toggleShowFps?.isChecked = appPreferences.showFpsCounter
-        toggleStorageWarning?.isChecked = appPreferences.storageWarningEnabled
-
-        // Disable modifications if active recording is underway
-        val isRecording = ScreenRecordingService.isRecording
-        toggleGaming?.isEnabled = !isRecording
-        toggleFpsStabilizer?.isEnabled = !isRecording
-        toggleTurboBoost?.isEnabled = !isRecording
-        toggleHardwareAcceleration?.isEnabled = !isRecording
-        toggleInternalAudioBoost?.isEnabled = !isRecording
-        toggleFloating?.isEnabled = !isRecording
-        toggleVibrate?.isEnabled = !isRecording
-        toggleStopScreenOff?.isEnabled = !isRecording
-        toggleShowFps?.isEnabled = !isRecording
-        toggleStorageWarning?.isEnabled = !isRecording
     }
 
     private fun showResolutionDialog() {
@@ -567,13 +609,14 @@ class SettingsActivity : AppCompatActivity() {
                     appPreferences.isGamingMode = true
                     appPreferences.fpsStabilizerEnabled = true
                 }
+                "480p" -> {
+                    appPreferences.bitrateMbps = 6
+                    appPreferences.fps = 30
+                    appPreferences.isGamingMode = false
+                    appPreferences.fpsStabilizerEnabled = false
+                }
             }
             updateUIValues()
-            com.bangdillah.rekamindulu.backend.FirebaseAuthManager.getInstance(this).updateUserPreferences(
-                resolution = selectedResolution,
-                fps = appPreferences.fps,
-                gamingMode = appPreferences.isGamingMode
-            )
             val resName = if (selectedResolution == "NATIVE") "Resolusi Layar Asli (100%)" else selectedResolution
             Toast.makeText(this, "Resolusi diubah ke $resName (FPS & Bitrate diselaraskan)", Toast.LENGTH_SHORT).show()
         }
@@ -625,10 +668,6 @@ class SettingsActivity : AppCompatActivity() {
                 appPreferences.fpsStabilizerEnabled = false
             }
             updateUIValues()
-            com.bangdillah.rekamindulu.backend.FirebaseAuthManager.getInstance(this).updateUserPreferences(
-                fps = selectedFps,
-                gamingMode = appPreferences.isGamingMode
-            )
             Toast.makeText(this, "Frame rate disetel ke $selectedFps FPS", Toast.LENGTH_SHORT).show()
         }
     }
@@ -760,7 +799,17 @@ class SettingsActivity : AppCompatActivity() {
         ) { selectedSource ->
             appPreferences.audioSource = selectedSource
             updateUIValues()
-            Toast.makeText(this, "Sumber audio disetel ke $selectedSource", Toast.LENGTH_SHORT).show()
+            if ((selectedSource == "INTERNAL" || selectedSource == "BOTH") &&
+                !com.bangdillah.rekamindulu.audio.AudioHelper.isAudioInternalSupported()
+            ) {
+                Toast.makeText(
+                    this,
+                    "Disetel ke $selectedSource (Audio internal butuh Android 10+; fallback ke Mikrofon)",
+                    Toast.LENGTH_LONG
+                ).show()
+            } else {
+                Toast.makeText(this, "Sumber audio disetel ke $selectedSource", Toast.LENGTH_SHORT).show()
+            }
         }
     }
 
@@ -967,5 +1016,12 @@ class SettingsActivity : AppCompatActivity() {
                 else -> false
             }
         }
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        liveTimerHandler.removeCallbacksAndMessages(null)
+        appLockDialog?.dismiss()
+        appLockDialog = null
     }
 }

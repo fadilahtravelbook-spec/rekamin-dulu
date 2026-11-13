@@ -117,29 +117,8 @@ object RecordingEngineOptimizer {
     ): ProfileSettings {
         val dimensions = calculateDimensions(metrics, prefs.resolution, prefs.orientation)
 
-        val targetFps = if (prefs.isGamingMode || prefs.fpsStabilizerEnabled) {
-            maxOf(prefs.fps, 60)
-        } else {
-            prefs.fps
-        }
-
-        val targetBitrateBps = when (prefs.resolution) {
-            "1080p" -> {
-                val mbps = maxOf(prefs.bitrateMbps, 24)
-                mbps * 1_000_000
-            }
-            "720p" -> {
-                val mbps = maxOf(prefs.bitrateMbps, 12)
-                mbps * 1_000_000
-            }
-            "NATIVE" -> {
-                val mbps = maxOf(prefs.bitrateMbps, 24)
-                mbps * 1_000_000
-            }
-            else -> {
-                (prefs.bitrateMbps * 1_000_000).coerceIn(1_000_000, 60_000_000)
-            }
-        }
+        val targetFps = prefs.fps.coerceIn(15, 120)
+        val targetBitrateBps = (prefs.bitrateMbps * 1_000_000).coerceIn(1_000_000, 60_000_000)
 
         return ProfileSettings(
             resolution = prefs.resolution,

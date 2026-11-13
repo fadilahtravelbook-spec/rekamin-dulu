@@ -9,6 +9,7 @@ import android.view.View
 import android.widget.Button
 import android.widget.ProgressBar
 import android.widget.TextView
+import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AppCompatActivity
 import com.bangdillah.rekamindulu.R
 import com.bangdillah.rekamindulu.service.ScreenRecordingService
@@ -81,21 +82,31 @@ class CountdownActivity : AppCompatActivity() {
                             putExtra("EXTRA_GAME_AUDIO_ENABLED", intent.getBooleanExtra("EXTRA_GAME_AUDIO_ENABLED", true))
                         }
                     }
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                        startForegroundService(serviceIntent)
-                    } else {
-                        startService(serviceIntent)
+                    try {
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                            startForegroundService(serviceIntent)
+                        } else {
+                            startService(serviceIntent)
+                        }
+                    } catch (e: Exception) {
+                        android.widget.Toast.makeText(
+                            this@CountdownActivity,
+                            "Gagal memulai layanan perekaman: ${e.localizedMessage ?: "izin sistem"}",
+                            android.widget.Toast.LENGTH_SHORT
+                        ).show()
                     }
                 }
                 finish()
             }
         }.start()
-    }
 
-    @Deprecated("Deprecated in Java")
-    override fun onBackPressed() {
-        countdownTimer?.cancel()
-        super.onBackPressed()
+        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                countdownTimer?.cancel()
+                isEnabled = false
+                onBackPressedDispatcher.onBackPressed()
+            }
+        })
     }
 
     override fun onDestroy() {

@@ -27,7 +27,8 @@
                 android:background="?attr/selectableItemBackgroundBorderless"
                 android:contentDescription="Kembali"
                 android:padding="12dp"
-                android:src="@drawable/ic_close" />
+                android:src="@drawable/ic_close"
+                app:tint="@color/textTitle" />
 
             <LinearLayout
                 android:layout_width="wrap_content"

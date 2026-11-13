@@ -8,11 +8,11 @@ import android.view.View
 import android.widget.Button
 import android.widget.TextView
 import android.widget.ViewFlipper
+import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import com.bangdillah.rekamindulu.HomeActivity
 import com.bangdillah.rekamindulu.R
-import com.bangdillah.rekamindulu.permission.PermissionDialogActivity
 import com.bangdillah.rekamindulu.utils.AppPreferences
 
 class OnboardingActivity : AppCompatActivity() {
@@ -56,6 +56,17 @@ class OnboardingActivity : AppCompatActivity() {
 
         setupSwipeGesture()
         updateSlideUI()
+
+        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                if (currentSlide > 0) {
+                    goToSlide(currentSlide - 1)
+                } else {
+                    isEnabled = false
+                    onBackPressedDispatcher.onBackPressed()
+                }
+            }
+        })
     }
 
     private fun setupSwipeGesture() {
@@ -111,9 +122,6 @@ class OnboardingActivity : AppCompatActivity() {
 
 
     private fun updateSlideUI() {
-        val colorActive = ContextCompat.getColor(this, R.color.colorPrimary)
-        val colorInactive = ContextCompat.getColor(this, R.color.colorCardBackground)
-
         val density = resources.displayMetrics.density
         val wideWidth = (24 * density).toInt()
         val dotWidth = (8 * density).toInt()
@@ -129,7 +137,7 @@ class OnboardingActivity : AppCompatActivity() {
                 d.backgroundTintList = ContextCompat.getColorStateList(this, R.color.colorPrimary)
             } else {
                 params.width = dotWidth
-                d.backgroundTintList = ContextCompat.getColorStateList(this, R.color.colorCardBackground)
+                d.backgroundTintList = ContextCompat.getColorStateList(this, R.color.colorBorder)
             }
             d.layoutParams = params
         }
@@ -143,15 +151,6 @@ class OnboardingActivity : AppCompatActivity() {
         }
     }
 
-    @Deprecated("Deprecated in Java")
-    override fun onBackPressed() {
-        if (currentSlide > 0) {
-            goToSlide(currentSlide - 1)
-        } else {
-            @Suppress("DEPRECATION")
-            super.onBackPressed()
-        }
-    }
 
     private fun finishOnboarding(requestPermissions: Boolean) {
         appPreferences.isOnboardingDone = true

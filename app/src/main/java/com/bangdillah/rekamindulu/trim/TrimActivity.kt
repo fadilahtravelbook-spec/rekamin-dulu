@@ -22,7 +22,9 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import com.bangdillah.rekamindulu.R
 import com.bangdillah.rekamindulu.library.LibraryActivity
 import com.bangdillah.rekamindulu.player.PlayerActivity
@@ -57,8 +59,14 @@ class TrimActivity : AppCompatActivity() {
     private var textTrimSummary: TextView? = null
     private var progressBar: ProgressBar? = null
     private var btnApplyTrim: Button? = null
+    private var layoutNoVideoPlaceholder: View? = null
 
     private var currentVideoFile: File? = null
+    private var tempPickedFile: File? = null
+    @Volatile
+    private var isTrimming = false
+    @Volatile
+    private var deleteTempAfterTrim = false
     private var videoDurationMs: Int = 0
     private var startTrimMs: Long = 0L
     private var endTrimMs: Long = 0L
@@ -97,7 +105,19 @@ class TrimActivity : AppCompatActivity() {
             val file = File(videoPath)
             if (file.exists()) {
                 loadVideoFile(file)
+            } else {
+                showEmptyVideoPlaceholder(true)
             }
+        } else {
+            showEmptyVideoPlaceholder(true)
+        }
+    }
+
+    private fun showEmptyVideoPlaceholder(show: Boolean) {
+        layoutNoVideoPlaceholder?.visibility = if (show) View.VISIBLE else View.GONE
+        btnPreviewPlay?.visibility = if (show) View.GONE else View.VISIBLE
+        if (show) {
+            btnApplyTrim?.isEnabled = false
         }
     }
 
@@ -113,6 +133,7 @@ class TrimActivity : AppCompatActivity() {
         textTrimSummary = findViewById(R.id.text_trim_summary)
         progressBar = findViewById(R.id.trim_progress_bar)
         btnApplyTrim = findViewById(R.id.btn_apply_trim)
+        layoutNoVideoPlaceholder = findViewById(R.id.layout_no_video_placeholder)
     }
 
     private fun setupListeners() {
@@ -218,46 +239,80 @@ class TrimActivity : AppCompatActivity() {
 
     private fun loadVideoFile(file: File) {
         currentVideoFile = file
+        showEmptyVideoPlaceholder(false)
         textSelectedFileName?.text = file.name
+        textVideoDurationInfo?.text = "Memuat informasi video..."
+        btnApplyTrim?.isEnabled = false
 
-        try {
-            val retriever = MediaMetadataRetriever()
-            retriever.setDataSource(file.absolutePath)
-            val durationStr = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)
-            val width = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH) ?: "1080"
-            val height = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT) ?: "1920"
-            retriever.release()
+        lifecycleScope.launch(Dispatchers.IO) {
+            var retriever: MediaMetadataRetriever? = null
+            var durationMs = 10000
+            var width = "1080"
+            var height = "1920"
+            var loadError = false
 
-            videoDurationMs = durationStr?.toIntOrNull() ?: 10000
-            if (videoDurationMs <= 0) videoDurationMs = 10000
+            try {
+                retriever = MediaMetadataRetriever()
+                retriever.setDataSource(file.absolutePath)
+                val durationStr = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)
+                width = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH) ?: "1080"
+                height = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT) ?: "1920"
+                durationMs = (durationStr?.toIntOrNull() ?: 10000).let { if (it <= 0) 10000 else it }
+            } catch (e: Exception) {
+                loadError = true
+            } finally {
+                try { retriever?.release() } catch (ignored: Exception) {}
+            }
 
-            textVideoDurationInfo?.text = String.format(
-                Locale.getDefault(),
-                "Total Durasi: %s • Resolusi %sx%s",
-                formatTime(videoDurationMs),
-                width,
-                height
-            )
+            withContext(Dispatchers.Main) {
+                if (isFinishing || isDestroyed) return@withContext
+                if (loadError) {
+                    btnApplyTrim?.isEnabled = false
+                    Toast.makeText(this@TrimActivity, "Gagal membaca detail video", Toast.LENGTH_SHORT).show()
+                    return@withContext
+                }
 
-            startTrimMs = 0L
-            endTrimMs = videoDurationMs.toLong()
+                videoDurationMs = durationMs
+                textVideoDurationInfo?.text = String.format(
+                    Locale.getDefault(),
+                    "Total Durasi: %s • Resolusi %sx%s",
+                    formatTime(videoDurationMs),
+                    width,
+                    height
+                )
 
-            seekStartTime?.max = videoDurationMs
-            seekStartTime?.progress = 0
+                startTrimMs = 0L
+                endTrimMs = videoDurationMs.toLong()
 
-            seekEndTime?.max = videoDurationMs
-            seekEndTime?.progress = videoDurationMs
+                seekStartTime?.max = videoDurationMs
+                seekStartTime?.progress = 0
 
-            textStartTimeVal?.text = "00:00"
-            textEndTimeVal?.text = formatTime(videoDurationMs)
+                seekEndTime?.max = videoDurationMs
+                seekEndTime?.progress = videoDurationMs
 
-            videoView?.setVideoPath(file.absolutePath)
-            videoView?.seekTo(100)
+                textStartTimeVal?.text = "00:00"
+                textEndTimeVal?.text = formatTime(videoDurationMs)
 
-            updateSummary()
+                videoView?.setOnPreparedListener { mp ->
+                    val actualDur = mp.duration
+                    if (actualDur > 0) {
+                        videoDurationMs = actualDur
+                        seekStartTime?.max = actualDur
+                        seekEndTime?.max = actualDur
+                        if (endTrimMs > actualDur || endTrimMs == durationMs.toLong()) {
+                            endTrimMs = actualDur.toLong()
+                            seekEndTime?.progress = actualDur
+                            textEndTimeVal?.text = formatTime(actualDur)
+                            updateSummary()
+                        }
+                    }
+                    videoView?.seekTo(100.coerceAtMost(videoDurationMs))
+                }
+                videoView?.setVideoPath(file.absolutePath)
+                btnApplyTrim?.isEnabled = true
 
-        } catch (e: Exception) {
-            Toast.makeText(this, "Gagal membaca detail video", Toast.LENGTH_SHORT).show()
+                updateSummary()
+            }
         }
     }
 
@@ -274,27 +329,46 @@ class TrimActivity : AppCompatActivity() {
 
     private fun executeTrim(inputFile: File) {
         val outputDir = StorageHelper.getRecordingDirectory(this)
-        val timeStamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
-        val outputName = "Trim_${inputFile.nameWithoutExtension}_$timeStamp.mp4"
-        val outputFile = File(outputDir, outputName)
+        val timeStamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
+        val baseName = "Trim_${inputFile.nameWithoutExtension}_$timeStamp"
+        var outputFile = File(outputDir, "$baseName.mp4")
+        var counter = 1
+        while (outputFile.exists()) {
+            outputFile = File(outputDir, "${baseName}_$counter.mp4")
+            counter++
+        }
 
         progressBar?.visibility = View.VISIBLE
         progressBar?.progress = 0
         btnApplyTrim?.isEnabled = false
         btnApplyTrim?.text = "Memproses Pemotongan Video..."
 
+        isTrimming = true
+        deleteTempAfterTrim = false
         Thread {
-            val (success, message) = TrimHelper.trimVideo(
-                inputFile = inputFile,
-                outputFile = outputFile,
-                startMs = startTrimMs,
-                endMs = endTrimMs,
-                progressCallback = { percent ->
-                    handler.post {
-                        progressBar?.progress = percent
+            var trimResult: Pair<Boolean, String> = Pair(false, "Gagal memotong video")
+            try {
+                trimResult = TrimHelper.trimVideo(
+                    inputFile = inputFile,
+                    outputFile = outputFile,
+                    startMs = startTrimMs,
+                    endMs = endTrimMs,
+                    progressCallback = { percent ->
+                        handler.post {
+                            progressBar?.progress = percent
+                        }
                     }
+                )
+            } finally {
+                isTrimming = false
+                if (deleteTempAfterTrim && inputFile.absolutePath == tempPickedFile?.absolutePath) {
+                    try {
+                        if (inputFile.exists()) inputFile.delete()
+                    } catch (_: Exception) {}
+                    tempPickedFile = null
                 }
-            )
+            }
+            val (success, message) = trimResult
 
             handler.post {
                 if (isFinishing || isDestroyed) return@post
@@ -305,16 +379,6 @@ class TrimActivity : AppCompatActivity() {
                 if (success) {
                     // Daftarkan ke MediaStore dan Galeri Ponsel
                     StorageHelper.scanVideoFile(this@TrimActivity, outputFile)
-
-                    // Sinkronisasi klip video hasil pemotongan ke katalog Cloud Firestore
-                    val authManager = com.bangdillah.rekamindulu.backend.FirebaseAuthManager.getInstance(this@TrimActivity)
-                    val currentUser = authManager.currentUser
-                    if (currentUser != null) {
-                        lifecycleScope.launch {
-                            val repo = com.bangdillah.rekamindulu.backend.FirebaseVideoRepository(this@TrimActivity)
-                            repo.syncSingleFile(this@TrimActivity, currentUser.uid, outputFile)
-                        }
-                    }
 
                     try {
                         MaterialAlertDialogBuilder(this@TrimActivity)
@@ -353,26 +417,52 @@ class TrimActivity : AppCompatActivity() {
     }
 
     private fun handlePickedUri(uri: Uri) {
-        try {
-            var fileName = "video_picked.mp4"
-            contentResolver.query(uri, null, null, null, null)?.use { cursor ->
-                val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
-                if (cursor.moveToFirst() && nameIndex >= 0) {
-                    fileName = cursor.getString(nameIndex)
+        progressBar?.visibility = View.VISIBLE
+        btnApplyTrim?.isEnabled = false
+        textSelectedFileName?.text = "Menyiapkan video..."
+
+        lifecycleScope.launch(Dispatchers.IO) {
+            try {
+                var rawName = "video_picked_${System.currentTimeMillis()}.mp4"
+                contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+                    val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                    if (cursor.moveToFirst() && nameIndex >= 0) {
+                        val candidate = cursor.getString(nameIndex)
+                        if (!candidate.isNullOrBlank()) {
+                            rawName = candidate
+                        }
+                    }
+                }
+
+                val safeName = File(rawName).name.replace("[^a-zA-Z0-9._-]".toRegex(), "_")
+                val tempFile = File(cacheDir, "trim_src_$safeName")
+                contentResolver.openInputStream(uri)?.use { input ->
+                    FileOutputStream(tempFile).use { output ->
+                        input.copyTo(output)
+                    }
+                } ?: throw IllegalStateException("Tidak dapat membuka file sumber")
+
+                withContext(Dispatchers.Main) {
+                    if (isFinishing || isDestroyed) {
+                        tempFile.delete()
+                        return@withContext
+                    }
+                    progressBar?.visibility = View.GONE
+                    if (tempPickedFile != null && tempPickedFile?.absolutePath != tempFile.absolutePath) {
+                        tempPickedFile?.delete()
+                    }
+                    tempPickedFile = tempFile
+                    loadVideoFile(tempFile)
+                }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    if (!isFinishing && !isDestroyed) {
+                        progressBar?.visibility = View.GONE
+                        btnApplyTrim?.isEnabled = currentVideoFile?.exists() == true
+                        Toast.makeText(this@TrimActivity, "Gagal memuat video yang dipilih", Toast.LENGTH_SHORT).show()
+                    }
                 }
             }
-
-            val tempFile = File(cacheDir, fileName)
-            contentResolver.openInputStream(uri)?.use { input ->
-                FileOutputStream(tempFile).use { output ->
-                    input.copyTo(output)
-                }
-            }
-
-            loadVideoFile(tempFile)
-
-        } catch (e: Exception) {
-            Toast.makeText(this, "Gagal memuat video yang dipilih", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -395,7 +485,17 @@ class TrimActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
-        handler.removeCallbacks(checkTrimPlaybackRunnable)
+        handler.removeCallbacksAndMessages(null)
         videoView?.stopPlayback()
+        if (isTrimming) {
+            deleteTempAfterTrim = true
+        } else {
+            tempPickedFile?.let { file ->
+                if (file.exists()) {
+                    file.delete()
+                }
+            }
+            tempPickedFile = null
+        }
     }
 }

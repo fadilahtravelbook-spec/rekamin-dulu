@@ -58,7 +58,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="2dp"
-                android:text="Tersimpan ke Galeri Ponsel › Movies › RekaminDulu"
+                android:text="Tersimpan aman di Galeri Rekamin Dulu"
                 android:textColor="@color/colorSuccess"
                 android:textSize="12sp"
                 android:textStyle="bold" />

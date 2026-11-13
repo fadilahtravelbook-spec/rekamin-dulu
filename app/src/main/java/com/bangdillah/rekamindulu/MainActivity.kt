@@ -28,15 +28,16 @@ import android.widget.ImageView
 import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
+import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import com.bangdillah.rekamindulu.about.AboutActivity
-import com.bangdillah.rekamindulu.countdown.CountdownActivity
 import com.bangdillah.rekamindulu.library.LibraryActivity
 import com.bangdillah.rekamindulu.permission.PermissionDialogActivity
+import com.bangdillah.rekamindulu.service.RecordingEngineOptimizer
 import com.bangdillah.rekamindulu.service.ScreenRecordingService
 import com.bangdillah.rekamindulu.settings.SettingsActivity
 import com.bangdillah.rekamindulu.trim.TrimActivity
@@ -56,11 +57,10 @@ import com.google.android.material.button.MaterialButton
 import com.google.android.material.card.MaterialCardView
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.snackbar.Snackbar
-import com.bangdillah.rekamindulu.backend.FirebaseAuthManager
-import com.bangdillah.rekamindulu.backend.FirebaseVideoRepository
-import com.bangdillah.rekamindulu.backend.AuthStatus
 import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.File
 import java.util.Locale
 
@@ -148,6 +148,37 @@ open class MainActivity : AppCompatActivity() {
         }
     }
 
+    // Dedicated launcher for audio toggle / quick chip permission requests (does NOT start screen capture)
+    private val micTogglePermissionLauncher: ActivityResultLauncher<String> = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) {
+            syncAudioPreferences()
+            updateAudioToggleViews()
+            showSnackbar("🎤 Izin audio mikrofon aktif")
+        } else {
+            isMicOn = false
+            isGameAudioOn = false
+            syncAudioPreferences()
+            updateAudioToggleViews()
+            showSnackbar("Izin audio ditolak — kanal suara disetel ke Mute")
+        }
+    }
+
+    // Dedicated launcher for facecam toggle camera permission (does NOT start screen capture)
+    private val facecamPermissionLauncher: ActivityResultLauncher<String> = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) {
+            showSnackbar("📷 Kamera wajah (${appPreferences.facecamMode}) siap digunakan")
+        } else {
+            facecamStateIndex = 0
+            appPreferences.facecamMode = "OFF"
+            updateAudioToggleViews()
+            showSnackbar("Izin kamera ditolak — Facecam dinonaktifkan")
+        }
+    }
+
     // Alias for audioPermissionLauncher for backward compatibility
     val audioPermissionLauncher: ActivityResultLauncher<Array<String>>
         get() = runtimePermissionLauncher
@@ -174,15 +205,6 @@ open class MainActivity : AppCompatActivity() {
                     updateRecordingBanner()
                     updateLibraryStats()
                     updateHomeRecordingsList()
-                    val currentUser = authManager?.currentUser
-                    if (currentUser != null && !path.isNullOrEmpty()) {
-                        val file = File(path)
-                        if (file.exists() && file.length() > 10240) {
-                            lifecycleScope.launch {
-                                videoRepository?.syncSingleFile(this@MainActivity, currentUser.uid, file)
-                            }
-                        }
-                    }
                     if (!path.isNullOrEmpty() && File(path).exists() && File(path).length() > 10240) {
                         showSaveSuccessToast(path)
                         SaveTransitionDialog.show(this@MainActivity, path) {
@@ -219,10 +241,9 @@ open class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_main)
-
         appPreferences = AppPreferences(this)
         appPreferences.applyTheme()
+        setContentView(R.layout.activity_main)
         supportActionBar?.hide()
 
         mediaProjectionManager = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
@@ -230,10 +251,23 @@ open class MainActivity : AppCompatActivity() {
         initAudioSettings()
         checkAppLock()
         setupHeaderActions()
-        setupCloudBackendCard()
+        setupLocalStorageStudioCard()
         setupDashboardCards()
         setupHomeRecordingsListView()
         setupBottomNavigation()
+
+        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                val hudLayout = findViewById<View>(R.id.layout_countdown_hud)
+                if (hudLayout != null && hudLayout.visibility == View.VISIBLE) {
+                    cancelCountdownHUD()
+                    showSnackbar("Perekaman dibatalkan")
+                } else {
+                    isEnabled = false
+                    onBackPressedDispatcher.onBackPressed()
+                }
+            }
+        })
 
         if (intent.getBooleanExtra("REQUEST_PERMISSIONS_ONBOARDING", false)) {
             intent.removeExtra("REQUEST_PERMISSIONS_ONBOARDING")
@@ -241,115 +275,25 @@ open class MainActivity : AppCompatActivity() {
         }
     }
 
-    private var authManager: FirebaseAuthManager? = null
-    private var videoRepository: FirebaseVideoRepository? = null
-
     /**
-     * Konfigurasi kartu integrasi Google Cloud Firestore & Akun Google Sign-In
+     * Konfigurasi kartu ringkasan Studio Penyimpanan Lokal & diagnostik perangkat
      */
-    private fun setupCloudBackendCard() {
-        val manager = FirebaseAuthManager.getInstance(this).also { authManager = it }
-        val repo = FirebaseVideoRepository(this).also { videoRepository = it }
+    private fun setupLocalStorageStudioCard() {
+        findViewById<ImageView>(R.id.img_cloud_user_avatar)?.setImageResource(R.drawable.ic_storage)
+        findViewById<TextView>(R.id.text_cloud_account_name)?.text = "Studio Penyimpanan Lokal"
+        findViewById<TextView>(R.id.text_cloud_account_subtitle)?.text = "📁 Tersimpan aman di galeri perangkat"
 
-        val textName = findViewById<TextView>(R.id.text_cloud_account_name)
-        val textSubtitle = findViewById<TextView>(R.id.text_cloud_account_subtitle)
-        val btnAuth = findViewById<MaterialButton>(R.id.btn_cloud_auth_action)
-        val btnSync = findViewById<MaterialButton>(R.id.btn_trigger_sync_cloud)
-        val textSyncDetail = findViewById<TextView>(R.id.text_cloud_sync_detail)
-
-        fun updateUi(status: AuthStatus) {
-            when (status) {
-                is AuthStatus.Authenticated -> {
-                    val user = status.user
-                    textName?.text = user.displayName ?: user.email ?: "Pengguna Google"
-                    textSubtitle?.text = "☁️ Terhubung: ${user.email ?: "Cloud Aktif"}"
-                    btnAuth?.isEnabled = true
-                    btnAuth?.text = "Keluar"
-                    val imgAvatar = findViewById<ImageView>(R.id.img_cloud_user_avatar)
-                    val avatarUrl = user.photoUrl?.toString()
-                    if (!avatarUrl.isNullOrBlank() && imgAvatar != null && !isFinishing && !isDestroyed) {
-                        try {
-                            com.bumptech.glide.Glide.with(this@MainActivity)
-                                .load(avatarUrl)
-                                .circleCrop()
-                                .placeholder(R.drawable.ic_storage)
-                                .into(imgAvatar)
-                        } catch (e: Exception) {
-                            imgAvatar.setImageResource(R.drawable.ic_storage)
-                        }
-                    } else {
-                        imgAvatar?.setImageResource(R.drawable.ic_storage)
-                    }
-
-                    btnAuth?.setOnClickListener {
-                        MaterialAlertDialogBuilder(this)
-                            .setTitle("Keluar Akun Google")
-                            .setMessage("Apakah Anda ingin keluar dari akun ${user.email}?")
-                            .setPositiveButton("Keluar") { _, _ ->
-                                manager.signOut {
-                                    Toast.makeText(this, "Berhasil keluar", Toast.LENGTH_SHORT).show()
-                                }
-                            }
-                            .setNegativeButton("Batal", null)
-                            .show()
-                    }
-
-                    lifecycleScope.launch {
-                        repo.observeRecordings(user.uid).collect { list ->
-                            textSyncDetail?.text = "☁️ ${list.size} rekaman tersimpan rapi di Cloud Firestore"
-                        }
-                    }
-
-                    btnSync?.setOnClickListener {
-                        btnSync.isEnabled = false
-                        btnSync.text = "⏳ Menyinkronkan..."
-                        lifecycleScope.launch {
-                            repo.syncAllLocalRecordings(this@MainActivity, user.uid) { synced, total ->
-                                textSyncDetail?.text = "Menyinkronkan $synced dari $total rekaman..."
-                            }
-                            btnSync.isEnabled = true
-                            btnSync.text = "🔄 Sinkron Cloud"
-                            Toast.makeText(this@MainActivity, "Katalog rekaman berhasil disinkronkan ke Cloud Firestore!", Toast.LENGTH_SHORT).show()
-                        }
-                    }
-                }
-                is AuthStatus.Loading -> {
-                    textSubtitle?.text = "Menghubungkan ke Google..."
-                    btnAuth?.isEnabled = false
-                }
-                is AuthStatus.Error -> {
-                    findViewById<ImageView>(R.id.img_cloud_user_avatar)?.setImageResource(R.drawable.ic_storage)
-                    textSubtitle?.text = "⚠️ ${status.message}"
-                    btnAuth?.isEnabled = true
-                    btnAuth?.text = "Login Google"
-                    btnAuth?.setOnClickListener {
-                        manager.signInWithGoogle(this)
-                    }
-                }
-                else -> {
-                    findViewById<ImageView>(R.id.img_cloud_user_avatar)?.setImageResource(R.drawable.ic_storage)
-                    textName?.text = "Google Cloud Firestore"
-                    textSubtitle?.text = "☁️ Masuk untuk backup & sinkronisasi katalog"
-                    btnAuth?.isEnabled = true
-                    btnAuth?.text = "Login Google"
-                    btnAuth?.setOnClickListener {
-                        manager.signInWithGoogle(this)
-                    }
-                    btnSync?.setOnClickListener {
-                        Toast.makeText(this, "Silakan login Google terlebih dahulu untuk sinkronisasi cloud", Toast.LENGTH_SHORT).show()
-                    }
-                }
-            }
+        val btnOpenGallery = findViewById<MaterialButton>(R.id.btn_cloud_auth_action)
+        btnOpenGallery?.text = "Buka Galeri"
+        btnOpenGallery?.setOnClickListener {
+            startActivity(Intent(this, LibraryActivity::class.java))
         }
 
-        lifecycleScope.launch {
-            manager.authStatus.collect { status ->
-                updateUi(status)
-            }
+        val btnDiagnostics = findViewById<MaterialButton>(R.id.btn_trigger_sync_cloud)
+        btnDiagnostics?.text = "Uji Kesiapan"
+        btnDiagnostics?.setOnClickListener {
+            openDiagnostics()
         }
-
-        // Coba silent login untuk akun yang sudah pernah login sebelumnya
-        manager.attemptSilentSignIn(this)
     }
 
     /**
@@ -535,6 +479,8 @@ open class MainActivity : AppCompatActivity() {
     }
 
 
+    private var appLockDialog: AlertDialog? = null
+
     private fun checkAppLock() {
         if (appPreferences.isAppLockEnabled && appPreferences.appLockPin.isNotEmpty() && !isSessionUnlocked) {
             val input = EditText(this).apply {
@@ -542,28 +488,37 @@ open class MainActivity : AppCompatActivity() {
                 hint = "Masukkan 4 angka PIN"
                 maxLines = 1
                 setPadding(48, 36, 48, 36)
+                setTextColor(ContextCompat.getColor(this@MainActivity, R.color.textTitle))
+                setHintTextColor(ContextCompat.getColor(this@MainActivity, R.color.textCaption))
             }
 
-            MaterialAlertDialogBuilder(this)
+            val dialog = MaterialAlertDialogBuilder(this)
                 .setTitle("🔒 Kunci Rekamin Dulu")
                 .setMessage("Aplikasi ini dilindungi PIN. Masukkan PIN keamanan untuk melanjutkan:")
                 .setView(input)
                 .setCancelable(false)
-                .setPositiveButton("Buka Kunci") { dialog, _ ->
+                .setPositiveButton("Buka Kunci", null)
+                .setNegativeButton("Keluar") { _, _ ->
+                    finishAffinity()
+                }
+                .create()
+
+            dialog.setOnShowListener {
+                dialog.getButton(AlertDialog.BUTTON_POSITIVE)?.setOnClickListener {
                     val entered = input.text.toString().trim()
                     if (entered == appPreferences.appLockPin) {
                         isSessionUnlocked = true
                         dialog.dismiss()
                         showSnackbar("Kunci aplikasi berhasil dibuka")
                     } else {
-                        Toast.makeText(this, "PIN salah! Coba lagi.", Toast.LENGTH_SHORT).show()
-                        checkAppLock()
+                        input.error = "PIN salah! Coba lagi."
+                        input.text?.clear()
                     }
                 }
-                .setNegativeButton("Keluar") { _, _ ->
-                    finishAffinity()
-                }
-                .show()
+            }
+            appLockDialog?.dismiss()
+            appLockDialog = dialog
+            dialog.show()
         }
     }
 
@@ -626,6 +581,10 @@ open class MainActivity : AppCompatActivity() {
 
         findViewById<View>(R.id.ic_settings)?.setOnClickListener {
             startActivity(Intent(this, SettingsActivity::class.java))
+        }
+
+        findViewById<View>(R.id.card_quality_selector)?.setOnClickListener {
+            showQualityPickerDialog()
         }
 
         findViewById<TextView>(R.id.text_resolution_badge)?.setOnClickListener {
@@ -703,7 +662,13 @@ open class MainActivity : AppCompatActivity() {
             isGameAudioOn = true
             syncAudioPreferences()
             updateAudioToggleViews()
-            showSnackbar("🎵 Audio Video/Game Online Aktif (Suara jernih tanpa noise mikrofon)")
+            if (!hasAudioRecordingPermission()) {
+                micTogglePermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+            } else if (!com.bangdillah.rekamindulu.audio.AudioHelper.isAudioInternalSupported()) {
+                showSnackbar("⚠️ Audio internal butuh Android 10+; fallback ke Mikrofon aktif")
+            } else {
+                showSnackbar("🎵 Audio Video/Game Online Aktif (Suara jernih tanpa noise mikrofon)")
+            }
         }
 
         findViewById<View>(R.id.chip_quick_audio_both)?.setOnClickListener { v ->
@@ -714,12 +679,15 @@ open class MainActivity : AppCompatActivity() {
             performHapticFeedback(v, 30)
             isMicOn = true
             isGameAudioOn = true
-            if (!hasAudioRecordingPermission()) {
-                runtimePermissionLauncher.launch(arrayOf(Manifest.permission.RECORD_AUDIO))
-            }
             syncAudioPreferences()
             updateAudioToggleViews()
-            showSnackbar("🎙️+🎵 Mikrofon & Audio Video/Game Keduanya Aktif")
+            if (!hasAudioRecordingPermission()) {
+                micTogglePermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+            } else if (!com.bangdillah.rekamindulu.audio.AudioHelper.isAudioInternalSupported()) {
+                showSnackbar("⚠️ Android < 10 hanya mendukung Mikrofon (audio internal dilewati)")
+            } else {
+                showSnackbar("🎙️+🎵 Mikrofon & Audio Video/Game Keduanya Aktif")
+            }
         }
 
         findViewById<View>(R.id.chip_quick_audio_mic)?.setOnClickListener { v ->
@@ -730,12 +698,13 @@ open class MainActivity : AppCompatActivity() {
             performHapticFeedback(v, 30)
             isMicOn = true
             isGameAudioOn = false
-            if (!hasAudioRecordingPermission()) {
-                runtimePermissionLauncher.launch(arrayOf(Manifest.permission.RECORD_AUDIO))
-            }
             syncAudioPreferences()
             updateAudioToggleViews()
-            showSnackbar("🎙️ Suara Mikrofon Saja Diaktifkan")
+            if (!hasAudioRecordingPermission()) {
+                micTogglePermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+            } else {
+                showSnackbar("🎙️ Suara Mikrofon Saja Diaktifkan")
+            }
         }
 
         findViewById<View>(R.id.chip_quick_audio_mute)?.setOnClickListener { v ->
@@ -757,12 +726,13 @@ open class MainActivity : AppCompatActivity() {
                 showSnackbar("⚠️ Pengaturan mikrofon terkunci saat perekaman sedang aktif")
             } else {
                 isMicOn = !isMicOn
-                if (isMicOn && !hasAudioRecordingPermission()) {
-                    runtimePermissionLauncher.launch(arrayOf(Manifest.permission.RECORD_AUDIO))
-                }
                 updateAudioToggleViews()
                 syncAudioPreferences()
-                showSnackbar(if (isMicOn) "🎤 Mikrofon diaktifkan" else "🔇 Mikrofon dinonaktifkan")
+                if (isMicOn && !hasAudioRecordingPermission()) {
+                    micTogglePermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                } else {
+                    showSnackbar(if (isMicOn) "🎤 Mikrofon diaktifkan" else "🔇 Mikrofon dinonaktifkan")
+                }
             }
         }
         findViewById<Button>(R.id.toggle_mic)?.setOnClickListener { toggleMicAction() }
@@ -776,7 +746,13 @@ open class MainActivity : AppCompatActivity() {
                 isGameAudioOn = !isGameAudioOn
                 updateAudioToggleViews()
                 syncAudioPreferences()
-                showSnackbar(if (isGameAudioOn) "🎮 Audio internal game diaktifkan" else "🔇 Audio game dinonaktifkan")
+                if (isGameAudioOn && !hasAudioRecordingPermission()) {
+                    micTogglePermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                } else if (isGameAudioOn && !com.bangdillah.rekamindulu.audio.AudioHelper.isAudioInternalSupported()) {
+                    showSnackbar("⚠️ Audio internal butuh Android 10+; fallback Mikrofon akan digunakan")
+                } else {
+                    showSnackbar(if (isGameAudioOn) "🎮 Audio internal game diaktifkan" else "🔇 Audio game dinonaktifkan")
+                }
             }
         }
         findViewById<Button>(R.id.toggle_game_audio)?.setOnClickListener { toggleGameAudioAction() }
@@ -792,9 +768,10 @@ open class MainActivity : AppCompatActivity() {
                 appPreferences.facecamMode = stateStr
                 updateAudioToggleViews()
                 if (stateStr != "OFF" && ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
-                    runtimePermissionLauncher.launch(arrayOf(Manifest.permission.CAMERA))
+                    facecamPermissionLauncher.launch(Manifest.permission.CAMERA)
+                } else {
+                    showSnackbar("Mode Kamera Wajah: $stateStr")
                 }
-                showSnackbar("Mode Kamera Wajah: $stateStr")
             }
         }
         findViewById<Button>(R.id.toggle_facecam)?.setOnClickListener { toggleFacecamAction() }
@@ -971,26 +948,6 @@ open class MainActivity : AppCompatActivity() {
                     updateFpsStabilizerView()
                     showSnackbar("Preset 1080p 60FPS 24Mbps diterapkan (Super Jernih & Terang)")
                 }
-                "2k_60" -> {
-                    appPreferences.resolution = "2K"
-                    appPreferences.fps = 60
-                    appPreferences.bitrateMbps = 28
-                    appPreferences.isGamingMode = true
-                    appPreferences.fpsStabilizerEnabled = true
-                    updateResolutionBadge()
-                    updateFpsStabilizerView()
-                    showSnackbar("Preset 2K Quad HD 60FPS 28Mbps diterapkan (Ultra Jernih)")
-                }
-                "4k_30" -> {
-                    appPreferences.resolution = "4K"
-                    appPreferences.fps = 30
-                    appPreferences.bitrateMbps = 30
-                    appPreferences.isGamingMode = false
-                    appPreferences.fpsStabilizerEnabled = false
-                    updateResolutionBadge()
-                    updateFpsStabilizerView()
-                    showSnackbar("Preset 4K Ultra HD diterapkan (30 Mbps)")
-                }
                 "720p_60" -> {
                     appPreferences.resolution = "720p"
                     appPreferences.fps = 60
@@ -999,17 +956,12 @@ open class MainActivity : AppCompatActivity() {
                     appPreferences.fpsStabilizerEnabled = true
                     updateResolutionBadge()
                     updateFpsStabilizerView()
-                    showSnackbar("Preset 720p 60FPS Esports diterapkan (Ringan, Adem & Mulus)")
+                    showSnackbar("Preset 720p 60FPS Optimal diterapkan (Ringan, Adem & Mulus)")
                 }
                 "custom" -> {
                     startActivity(Intent(this, SettingsActivity::class.java))
                 }
             }
-            authManager?.updateUserPreferences(
-                resolution = appPreferences.resolution,
-                fps = appPreferences.fps,
-                gamingMode = appPreferences.isGamingMode
-            )
         }
     }
 
@@ -1229,6 +1181,8 @@ open class MainActivity : AppCompatActivity() {
             hint = "Nama baru video"
             maxLines = 1
             isSingleLine = true
+            setTextColor(ContextCompat.getColor(this@MainActivity, R.color.textTitle))
+            setHintTextColor(ContextCompat.getColor(this@MainActivity, R.color.textCaption))
         }
 
         MaterialAlertDialogBuilder(this)
@@ -1254,14 +1208,7 @@ open class MainActivity : AppCompatActivity() {
                     return@setPositiveButton
                 }
                 if (file.renameTo(targetFile)) {
-                    val oldDocId = file.nameWithoutExtension.replace("[^a-zA-Z0-9_-]".toRegex(), "_")
-                    val currentUser = authManager?.currentUser
-                    if (currentUser != null) {
-                        lifecycleScope.launch {
-                            videoRepository?.deleteRecording(currentUser.uid, oldDocId)
-                            videoRepository?.syncSingleFile(this@MainActivity, currentUser.uid, targetFile)
-                        }
-                    }
+                    LibraryAdapter.invalidateCache(file.absolutePath)
                     StorageHelper.scanRenamedFile(this, file, targetFile)
                     Toast.makeText(this, "Nama berhasil diubah", Toast.LENGTH_SHORT).show()
                     updateHomeRecordingsList()
@@ -1272,19 +1219,38 @@ open class MainActivity : AppCompatActivity() {
     }
 
     private fun handleExtractAudioHome(file: File) {
-        if (!com.bangdillah.rekamindulu.audio.AudioExtractorHelper.hasAudioTrack(file)) {
-            Toast.makeText(this, "⚠️ Video ini tidak memiliki rekaman suara (direkam dalam mode Mute/tanpa suara).", Toast.LENGTH_LONG).show()
-            return
-        }
-
+        if (isFinishing || isDestroyed) return
         val progressDialog = MaterialAlertDialogBuilder(this)
             .setTitle("Mengekstrak Audio 🎵")
-            .setMessage("Sedang memisahkan audio dari ${file.name}...")
+            .setMessage("Memeriksa trek audio dari ${file.name}...")
             .setCancelable(false)
             .create()
-        progressDialog.show()
+        try {
+            progressDialog.show()
+        } catch (ignored: Exception) {}
 
         Thread {
+            val hasAudio = com.bangdillah.rekamindulu.audio.AudioExtractorHelper.hasAudioTrack(file)
+            if (!hasAudio) {
+                runOnUiThread {
+                    try { progressDialog.dismiss() } catch (ignored: Exception) {}
+                    if (!isFinishing && !isDestroyed) {
+                        Toast.makeText(
+                            this,
+                            "⚠️ Video ini tidak memiliki rekaman suara (direkam dalam mode Mute/tanpa suara).",
+                            Toast.LENGTH_LONG
+                        ).show()
+                    }
+                }
+                return@Thread
+            }
+
+            runOnUiThread {
+                if (!isFinishing && !isDestroyed) {
+                    progressDialog.setMessage("Sedang memisahkan audio dari ${file.name}...")
+                }
+            }
+
             val (success, audioFile) = com.bangdillah.rekamindulu.audio.AudioExtractorHelper.extractAudio(this, file)
             runOnUiThread {
                 if (!isFinishing && !isDestroyed) {
@@ -1293,12 +1259,24 @@ open class MainActivity : AppCompatActivity() {
                     } catch (ignored: Exception) {}
 
                     if (success && audioFile != null && audioFile.exists()) {
-                        MaterialAlertDialogBuilder(this)
-                            .setTitle("Ekstrak Audio Berhasil! 🎉")
-                            .setIcon(R.drawable.ic_check_circle)
-                            .setMessage("Tersimpan sebagai:\n${audioFile.name}")
-                            .setPositiveButton("Bagus", null)
-                            .show()
+                        try {
+                            MaterialAlertDialogBuilder(this)
+                                .setTitle("Ekstrak Audio Berhasil! 🎉")
+                                .setIcon(R.drawable.ic_check_circle)
+                                .setMessage(
+                                    "Audio disimpan sebagai:\n${audioFile.name}\nUkuran: ${
+                                        String.format(Locale.getDefault(), "%.1f MB", audioFile.length() / (1024.0 * 1024.0))
+                                    }"
+                                )
+                                .setPositiveButton("Putar Audio") { _, _ ->
+                                    playAudioFile(audioFile)
+                                }
+                                .setNeutralButton("Bagikan") { _, _ ->
+                                    shareAudioFile(audioFile)
+                                }
+                                .setNegativeButton("Tutup", null)
+                                .show()
+                        } catch (ignored: Exception) {}
                     } else {
                         Toast.makeText(this, "Tidak dapat mengekstrak audio dari video ini", Toast.LENGTH_SHORT).show()
                     }
@@ -1307,25 +1285,64 @@ open class MainActivity : AppCompatActivity() {
         }.start()
     }
 
-    private fun updateHomeRecordingsList() {
-
-        if (!::homeRecordingsAdapter.isInitialized) return
-        homeRecordingFiles.clear()
-        val allFiles = StorageHelper.getAllVideoFiles(this)
-        homeRecordingFiles.addAll(allFiles)
-
-        val emptyView = findViewById<View>(R.id.home_recordings_empty)
-        val recyclerView = findViewById<RecyclerView>(R.id.recycler_home_recordings)
-
-        if (homeRecordingFiles.isEmpty()) {
-            emptyView?.visibility = View.VISIBLE
-            recyclerView?.visibility = View.GONE
-        } else {
-            emptyView?.visibility = View.GONE
-            recyclerView?.visibility = View.VISIBLE
+    private fun playAudioFile(file: File) {
+        try {
+            val uri = androidx.core.content.FileProvider.getUriForFile(
+                this,
+                "$packageName.fileprovider",
+                file
+            )
+            val intent = Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(uri, "audio/*")
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            startActivity(Intent.createChooser(intent, "Putar Audio dengan"))
+        } catch (e: Exception) {
+            Toast.makeText(this, "Tidak ada aplikasi pemutar audio eksternal", Toast.LENGTH_SHORT).show()
         }
+    }
 
-        homeRecordingsAdapter.notifyDataSetChanged()
+    private fun shareAudioFile(file: File) {
+        try {
+            val uri = androidx.core.content.FileProvider.getUriForFile(
+                this,
+                "$packageName.fileprovider",
+                file
+            )
+            val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                type = "audio/*"
+                putExtra(Intent.EXTRA_STREAM, uri)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            startActivity(Intent.createChooser(shareIntent, "Bagikan Audio"))
+        } catch (e: Exception) {
+            Toast.makeText(this, "Gagal membagikan audio: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun updateHomeRecordingsList() {
+        if (!::homeRecordingsAdapter.isInitialized) return
+        lifecycleScope.launch(Dispatchers.IO) {
+            val allFiles = StorageHelper.getAllVideoFiles(this@MainActivity)
+            withContext(Dispatchers.Main) {
+                if (isFinishing || isDestroyed) return@withContext
+                homeRecordingFiles.clear()
+                homeRecordingFiles.addAll(allFiles)
+
+                val emptyView = findViewById<View>(R.id.home_recordings_empty)
+                val recyclerView = findViewById<RecyclerView>(R.id.recycler_home_recordings)
+
+                if (homeRecordingFiles.isEmpty()) {
+                    emptyView?.visibility = View.VISIBLE
+                    recyclerView?.visibility = View.GONE
+                } else {
+                    emptyView?.visibility = View.GONE
+                    recyclerView?.visibility = View.VISIBLE
+                }
+
+                homeRecordingsAdapter.notifyDataSetChanged()
+            }
+        }
     }
 
     private fun confirmDeleteHomeRecording(file: File) {
@@ -1335,17 +1352,14 @@ open class MainActivity : AppCompatActivity() {
             .setIcon(R.drawable.ic_delete)
             .setPositiveButton("Hapus") { _, _ ->
                 if (file.exists()) {
-                    val docId = file.nameWithoutExtension.replace("[^a-zA-Z0-9_-]".toRegex(), "_")
-                    val currentUser = authManager?.currentUser
-                    if (currentUser != null) {
-                        lifecycleScope.launch {
-                            videoRepository?.deleteRecording(currentUser.uid, docId)
-                        }
-                    }
                     LibraryAdapter.invalidateCache(file.absolutePath)
+                    val deleted = file.delete()
                     StorageHelper.scanDeletedFile(this, file)
-                    file.delete()
-                    Toast.makeText(this, "Rekaman video berhasil dihapus", Toast.LENGTH_SHORT).show()
+                    if (deleted) {
+                        Toast.makeText(this, "Rekaman video berhasil dihapus", Toast.LENGTH_SHORT).show()
+                    } else {
+                        Toast.makeText(this, "Gagal menghapus file rekaman", Toast.LENGTH_SHORT).show()
+                    }
                     updateHomeRecordingsList()
                     updateLibraryStats()
                 }
@@ -1373,56 +1387,88 @@ open class MainActivity : AppCompatActivity() {
     }
 
     private fun updateHardwareMetrics() {
-        try {
-            val report = DeviceAnalyzer.analyze(this)
+        lifecycleScope.launch(Dispatchers.IO) {
+            try {
+                val report = DeviceAnalyzer.analyze(this@MainActivity)
+                withContext(Dispatchers.Main) {
+                    if (isFinishing || isDestroyed) return@withContext
 
-            findViewById<TextView>(R.id.text_storage_val)?.text =
-                String.format(Locale.getDefault(), "%.1f GB", report.freeStorageGb)
+                    findViewById<TextView>(R.id.text_storage_val)?.text =
+                        String.format(Locale.getDefault(), "%.1f GB", report.freeStorageGb)
 
-            val battStatusText = if (report.isCharging) "Charging" else "Optimal"
-            findViewById<TextView>(R.id.text_battery_val)?.text =
-                String.format(Locale.getDefault(), "%d%% %s", report.batteryPct, battStatusText)
+                    val battStatusText = if (report.isCharging) "Charging" else "Optimal"
+                    findViewById<TextView>(R.id.text_battery_val)?.text =
+                        String.format(Locale.getDefault(), "%d%% %s", report.batteryPct, battStatusText)
 
-            findViewById<TextView>(R.id.text_ram_val)?.text =
-                String.format(Locale.getDefault(), "%.1f GB Free", report.freeRamGb)
+                    findViewById<TextView>(R.id.text_ram_val)?.text =
+                        String.format(Locale.getDefault(), "%.1f GB Free", report.freeRamGb)
 
-            findViewById<TextView>(R.id.text_device_model)?.text = report.deviceName
-            findViewById<TextView>(R.id.text_android_ver)?.text = "${report.androidVersion} (API ${report.apiLevel})"
-            findViewById<TextView>(R.id.text_cpu_info)?.text = "${report.socInfo} (${report.cpuCores} Cores)"
-            findViewById<TextView>(R.id.text_total_ram)?.text = String.format(
-                Locale.getDefault(),
-                "%.1f GB (%.1f GB Free)",
-                report.totalRamGb,
-                report.freeRamGb
-            )
-            findViewById<TextView>(R.id.text_screen_res_detail)?.text = String.format(
-                Locale.getDefault(),
-                "%d x %d (%d Hz)",
-                report.screenWidth,
-                report.screenHeight,
-                report.refreshRateHz
-            )
-        } catch (e: Exception) {
-            Log.e(TAG, "Error updating hardware metrics", e)
+                    findViewById<TextView>(R.id.text_device_model)?.text = report.deviceName
+                    findViewById<TextView>(R.id.text_android_ver)?.text = "${report.androidVersion} (API ${report.apiLevel})"
+                    findViewById<TextView>(R.id.text_cpu_info)?.text = "${report.socInfo} (${report.cpuCores} Cores)"
+                    findViewById<TextView>(R.id.text_total_ram)?.text = String.format(
+                        Locale.getDefault(),
+                        "%.1f GB (%.1f GB Free)",
+                        report.totalRamGb,
+                        report.freeRamGb
+                    )
+                    findViewById<TextView>(R.id.text_screen_res_detail)?.text = String.format(
+                        Locale.getDefault(),
+                        "%d x %d (%d Hz)",
+                        report.screenWidth,
+                        report.screenHeight,
+                        report.refreshRateHz
+                    )
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error updating hardware metrics", e)
+            }
         }
     }
 
     private fun updateLibraryStats() {
-        try {
-            val files = StorageHelper.getAllVideoFiles(this)
-            val count = files.size
-            var totalBytes = 0L
-            files.forEach { totalBytes += it.length() }
-            val totalMb = totalBytes / (1024.0 * 1024.0)
+        lifecycleScope.launch(Dispatchers.IO) {
+            try {
+                val files = StorageHelper.getAllVideoFiles(this@MainActivity)
+                val count = files.size
+                val totalBytes = files.sumOf { it.length() }
+                val totalMb = totalBytes / (1024.0 * 1024.0)
+                val freeBytes = RecordingEngineOptimizer.getAvailableStorageBytes(this@MainActivity)
+                val freeGb = freeBytes / (1024.0 * 1024.0 * 1024.0)
+                val estMins = RecordingEngineOptimizer.getEstimatedRemainingTimeMinutes(this@MainActivity, appPreferences.bitrateMbps)
 
-            val textStats = findViewById<TextView>(R.id.text_library_stats)
-            if (totalMb >= 1024.0) {
-                textStats?.text = String.format(Locale.getDefault(), "%d File • %.1f GB", count, totalMb / 1024.0)
-            } else {
-                textStats?.text = String.format(Locale.getDefault(), "%d File • %.0f MB", count, totalMb)
+                withContext(Dispatchers.Main) {
+                    if (isFinishing || isDestroyed) return@withContext
+                    val textStats = findViewById<TextView>(R.id.text_library_stats)
+                    val summary = if (totalMb >= 1024.0) {
+                        String.format(Locale.getDefault(), "%d File • %.1f GB", count, totalMb / 1024.0)
+                    } else {
+                        String.format(Locale.getDefault(), "%d File • %.0f MB", count, totalMb)
+                    }
+                    textStats?.text = summary
+
+                    val estHours = estMins / 60.0
+                    findViewById<TextView>(R.id.text_cloud_sync_detail)?.text = if (estHours >= 1.0) {
+                        String.format(
+                            Locale.getDefault(),
+                            "%s tersimpan • Sisa %.1f GB (~%.1f jam rekam)",
+                            summary,
+                            freeGb,
+                            estHours
+                        )
+                    } else {
+                        String.format(
+                            Locale.getDefault(),
+                            "%s tersimpan • Sisa %.1f GB (~%d mnt rekam)",
+                            summary,
+                            freeGb,
+                            estMins
+                        )
+                    }
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "Error loading library stats", e)
             }
-        } catch (e: Exception) {
-            Log.w(TAG, "Error loading library stats", e)
         }
     }
 
@@ -1546,6 +1592,16 @@ open class MainActivity : AppCompatActivity() {
     // =========================================================================
 
     private var inAppCountdownTimer: CountDownTimer? = null
+    private val countdownHandler = Handler(Looper.getMainLooper())
+    private var countdownFinishRunnable: Runnable? = null
+
+    private fun cancelCountdownHUD() {
+        inAppCountdownTimer?.cancel()
+        inAppCountdownTimer = null
+        countdownFinishRunnable?.let { countdownHandler.removeCallbacks(it) }
+        countdownFinishRunnable = null
+        findViewById<View>(R.id.layout_countdown_hud)?.visibility = View.GONE
+    }
 
     /**
      * Mendapatkan daftar izin runtime yang dibutuhkan untuk perekaman layar dan audio.
@@ -1638,7 +1694,7 @@ open class MainActivity : AppCompatActivity() {
             val freeBytes = com.bangdillah.rekamindulu.service.RecordingEngineOptimizer.getAvailableStorageBytes(this)
             val freeStorageGb = freeBytes.toDouble() / (1024.0 * 1024.0 * 1024.0)
             if (freeStorageGb < 0.2) {
-                AlertDialog.Builder(this)
+                MaterialAlertDialogBuilder(this)
                     .setTitle("⚠️ Peringatan Sisa Memori HP")
                     .setMessage(
                         String.format(
@@ -1690,17 +1746,19 @@ open class MainActivity : AppCompatActivity() {
         progressBar?.progress = 0
 
         inAppCountdownTimer?.cancel()
+        countdownFinishRunnable?.let { countdownHandler.removeCallbacks(it) }
+        countdownFinishRunnable = null
 
         btnCancel?.setOnClickListener {
-            inAppCountdownTimer?.cancel()
-            hudLayout.visibility = View.GONE
+            cancelCountdownHUD()
             showSnackbar("Perekaman dibatalkan")
         }
 
         btnSkip?.setOnClickListener {
-            inAppCountdownTimer?.cancel()
-            hudLayout.visibility = View.GONE
-            onFinish()
+            cancelCountdownHUD()
+            if (!isFinishing && !isDestroyed) {
+                onFinish()
+            }
         }
 
         inAppCountdownTimer = object : CountDownTimer((durationSeconds * 1000 + 350).toLong(), 1000) {
@@ -1716,10 +1774,15 @@ open class MainActivity : AppCompatActivity() {
             override fun onFinish() {
                 textNumber?.text = "GO!"
                 progressBar?.progress = durationSeconds
-                Handler(Looper.getMainLooper()).postDelayed({
+                val finishRunnable = Runnable {
+                    countdownFinishRunnable = null
                     hudLayout.visibility = View.GONE
-                    onFinish()
-                }, 300)
+                    if (!isFinishing && !isDestroyed) {
+                        onFinish()
+                    }
+                }
+                countdownFinishRunnable = finishRunnable
+                countdownHandler.postDelayed(finishRunnable, 300)
             }
         }.start()
     }
@@ -1788,11 +1851,26 @@ open class MainActivity : AppCompatActivity() {
     }
 
     fun sendServiceCommand(intent: Intent) {
+        val action = intent.action
+        if (action != ScreenRecordingService.ACTION_START &&
+            !ScreenRecordingService.isRecording &&
+            !ScreenRecordingService.isPaused
+        ) {
+            return
+        }
         try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            if (action == ScreenRecordingService.ACTION_START && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 startForegroundService(intent)
             } else {
                 startService(intent)
+            }
+        } catch (e: IllegalStateException) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                try {
+                    startForegroundService(intent)
+                } catch (inner: Exception) {
+                    Log.e(TAG, "sendServiceCommand fallback failed", inner)
+                }
             }
         } catch (e: Exception) {
             Log.e(TAG, "sendServiceCommand failed", e)
@@ -1803,6 +1881,10 @@ open class MainActivity : AppCompatActivity() {
      * Menghentikan perekaman layar aktif
      */
     fun stopScreenCapture() {
+        if (!ScreenRecordingService.isRecording && !ScreenRecordingService.isPaused) {
+            updateRecordingBanner()
+            return
+        }
         showSnackbar("Menyimpan rekaman video...")
         val stopIntent = Intent(this, ScreenRecordingService::class.java).apply {
             action = ScreenRecordingService.ACTION_STOP
@@ -1846,21 +1928,13 @@ open class MainActivity : AppCompatActivity() {
         showSnackbar("✓ Rekaman ${file.name} tersimpan ke Galeri", Snackbar.LENGTH_LONG)
     }
 
-    @Deprecated("Deprecated in Java")
-    override fun onBackPressed() {
-        val hudLayout = findViewById<View>(R.id.layout_countdown_hud)
-        if (hudLayout != null && hudLayout.visibility == View.VISIBLE) {
-            inAppCountdownTimer?.cancel()
-            hudLayout.visibility = View.GONE
-            showSnackbar("Perekaman dibatalkan")
-            return
-        }
-        super.onBackPressed()
-    }
-
     override fun onDestroy() {
         super.onDestroy()
-        inAppCountdownTimer?.cancel()
+        liveTimerHandler.removeCallbacksAndMessages(null)
+        cancelCountdownHUD()
+        appLockDialog?.dismiss()
+        appLockDialog = null
+        stopBreathingGlowAnimation()
     }
 
     fun showSnackbar(message: String, duration: Int = Snackbar.LENGTH_SHORT) {

@@ -13,6 +13,9 @@ import com.bangdillah.rekamindulu.utils.AppPreferences
  */
 class SplashActivity : AppCompatActivity() {
 
+    private val splashHandler = Handler(Looper.getMainLooper())
+    private var navigateRunnable: Runnable? = null
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val appPreferences = AppPreferences(this)
@@ -21,13 +24,21 @@ class SplashActivity : AppCompatActivity() {
         setContentView(R.layout.splash_screen)
         supportActionBar?.hide()
 
-        Handler(Looper.getMainLooper()).postDelayed({
+        val runnable = Runnable {
+            if (isFinishing || isDestroyed) return@Runnable
             if (!appPreferences.isOnboardingDone) {
                 startActivity(Intent(this, OnboardingActivity::class.java))
             } else {
                 startActivity(Intent(this, HomeActivity::class.java))
             }
             finish()
-        }, 1200)
+        }
+        navigateRunnable = runnable
+        splashHandler.postDelayed(runnable, 1200)
+    }
+
+    override fun onDestroy() {
+        navigateRunnable?.let { splashHandler.removeCallbacks(it) }
+        super.onDestroy()
     }
 }

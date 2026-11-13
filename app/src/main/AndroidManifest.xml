@@ -1,8 +1,6 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <!-- ========== PERMISSIONS ========== -->
-    <uses-permission android:name="android.permission.INTERNET" />
-    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
@@ -10,8 +8,8 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CAMERA" />
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="28" />
-    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
     <uses-permission android:name="android.permission.VIBRATE" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
 
@@ -51,13 +49,14 @@
         <!-- MAIN ACTIVITY -->
         <activity
             android:name=".MainActivity"
-            android:exported="true"
+            android:exported="false"
             android:theme="@style/Theme.RekaminDulu.NoActionBar" />
 
         <!-- HOME SCREEN ACTIVITY -->
         <activity
             android:name=".HomeActivity"
-            android:exported="true"
+            android:exported="false"
+            android:launchMode="singleTop"
             android:theme="@style/Theme.RekaminDulu.NoActionBar" />
 
         <!-- PERMISSION DIALOG ACTIVITY -->
@@ -88,6 +87,7 @@
         <activity
             android:name=".player.PlayerActivity"
             android:exported="false"
+            android:launchMode="singleTop"
             android:theme="@style/Theme.RekaminDulu.NoActionBar" />
 
         <!-- TRIM ACTIVITY -->
@@ -111,13 +111,13 @@
         <service
             android:name=".service.ScreenRecordingService"
             android:exported="false"
-            android:foregroundServiceType="mediaProjection|microphone" />
+            android:foregroundServiceType="mediaProjection|microphone|camera" />
 
         <!-- SCREEN RECORDER SERVICE -->
         <service
             android:name=".service.ScreenRecorderService"
             android:exported="false"
-            android:foregroundServiceType="mediaProjection|microphone" />
+            android:foregroundServiceType="mediaProjection|microphone|camera" />
 
         <!-- FILE PROVIDER UNTUK SHARE VIDEO -->
         <provider

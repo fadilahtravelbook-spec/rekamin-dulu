@@ -137,6 +137,25 @@ class PlayerActivity : AppCompatActivity() {
         loadAndPlayVideo(file)
     }
 
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        val newPath = intent.getStringExtra("VIDEO_PATH") ?: return
+        val newFile = File(newPath)
+        if (!newFile.exists()) {
+            Toast.makeText(this, "File video tidak ditemukan di penyimpanan", Toast.LENGTH_SHORT).show()
+            return
+        }
+        handler.removeCallbacks(updateSeekRunnable)
+        handler.removeCallbacks(hideControlsRunnable)
+        videoView?.stopPlayback()
+        restoredPosition = 0
+        restoredWasPlaying = true
+        currentFile = newFile
+        titleText?.text = newFile.nameWithoutExtension.replace("_", " ")
+        loadAndPlayVideo(newFile)
+    }
+
     private fun setupListeners() {
         findViewById<View>(R.id.btn_player_back)?.setOnClickListener {
             finish()
@@ -185,8 +204,9 @@ class PlayerActivity : AppCompatActivity() {
         }
 
         // Tap video to toggle controls visibility
-        videoView?.setOnTouchListener { _, event ->
+        videoView?.setOnTouchListener { v, event ->
             if (event.action == android.view.MotionEvent.ACTION_UP) {
+                v.performClick()
                 toggleControls()
             }
             true
@@ -439,24 +459,38 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     private fun extractAudioFromVideo(file: File) {
-        if (!AudioExtractorHelper.hasAudioTrack(file)) {
-            Toast.makeText(this, "⚠️ Video ini tidak memiliki rekaman suara (direkam dalam mode Mute/tanpa suara).", Toast.LENGTH_LONG).show()
-            return
-        }
-
         if (isFinishing || isDestroyed) return
         val progressDialog = MaterialAlertDialogBuilder(this)
             .setTitle("Mengekstrak Audio 🎵")
-            .setMessage("Sedang memisahkan trek audio dari rekaman video ${file.name}...")
+            .setMessage("Memeriksa trek audio dari ${file.name}...")
             .setCancelable(false)
             .create()
         try {
             progressDialog.show()
-        } catch (e: Exception) {
-            // Ignore window token errors if activity is transitioning
-        }
+        } catch (ignored: Exception) {}
 
         Thread {
+            val hasAudio = AudioExtractorHelper.hasAudioTrack(file)
+            if (!hasAudio) {
+                runOnUiThread {
+                    try { progressDialog.dismiss() } catch (ignored: Exception) {}
+                    if (!isFinishing && !isDestroyed) {
+                        Toast.makeText(
+                            this,
+                            "⚠️ Video ini tidak memiliki rekaman suara (direkam dalam mode Mute/tanpa suara).",
+                            Toast.LENGTH_LONG
+                        ).show()
+                    }
+                }
+                return@Thread
+            }
+
+            runOnUiThread {
+                if (!isFinishing && !isDestroyed) {
+                    progressDialog.setMessage("Sedang memisahkan trek audio dari rekaman video ${file.name}...")
+                }
+            }
+
             val (success, audioFile) = AudioExtractorHelper.extractAudio(this, file)
             runOnUiThread {
                 if (!isFinishing && !isDestroyed) {
@@ -470,7 +504,23 @@ class PlayerActivity : AppCompatActivity() {
                                 .setTitle("Ekstrak Audio Berhasil! 🎉")
                                 .setIcon(R.drawable.ic_check_circle)
                                 .setMessage("Audio disimpan sebagai:\n${audioFile.name}\nUkuran: ${String.format(Locale.getDefault(), "%.1f MB", audioFile.length() / (1024.0 * 1024.0))}")
-                                .setPositiveButton("Bagikan") { _, _ ->
+                                .setPositiveButton("Putar Audio") { _, _ ->
+                                    try {
+                                        val uri = FileProvider.getUriForFile(
+                                            this,
+                                            "$packageName.fileprovider",
+                                            audioFile
+                                        )
+                                        val playIntent = Intent(Intent.ACTION_VIEW).apply {
+                                            setDataAndType(uri, "audio/*")
+                                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                        }
+                                        startActivity(Intent.createChooser(playIntent, "Putar Audio dengan"))
+                                    } catch (e: Exception) {
+                                        Toast.makeText(this, "Tidak ada pemutar audio eksternal", Toast.LENGTH_SHORT).show()
+                                    }
+                                }
+                                .setNeutralButton("Bagikan") { _, _ ->
                                     try {
                                         val uri = FileProvider.getUriForFile(
                                             this,

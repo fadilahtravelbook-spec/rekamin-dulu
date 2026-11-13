@@ -12,11 +12,19 @@ class ScreenRecorderService : ScreenRecordingService() {
         const val ACTION_STOP = ScreenRecordingService.ACTION_STOP
         const val ACTION_PAUSE = ScreenRecordingService.ACTION_PAUSE
         const val ACTION_RESUME = ScreenRecordingService.ACTION_RESUME
+        const val ACTION_TOGGLE_MIC = ScreenRecordingService.ACTION_TOGGLE_MIC
+        const val ACTION_SET_MIC_MUTED = ScreenRecordingService.ACTION_SET_MIC_MUTED
+        const val ACTION_CAPTURE_SCREENSHOT = ScreenRecordingService.ACTION_CAPTURE_SCREENSHOT
+        const val ACTION_REFRESH_FOREGROUND_TYPE = ScreenRecordingService.ACTION_REFRESH_FOREGROUND_TYPE
         const val ACTION_RECORDING_STOPPED = ScreenRecordingService.ACTION_RECORDING_STOPPED
         const val ACTION_RECORDING_STATUS_CHANGED = ScreenRecordingService.ACTION_RECORDING_STATUS_CHANGED
         const val ACTION_RECORDING_ERROR = ScreenRecordingService.ACTION_RECORDING_ERROR
+        const val ACTION_SCREENSHOT_RESULT = ScreenRecordingService.ACTION_SCREENSHOT_RESULT
         const val EXTRA_FILE_PATH = ScreenRecordingService.EXTRA_FILE_PATH
         const val EXTRA_ERROR_MESSAGE = ScreenRecordingService.EXTRA_ERROR_MESSAGE
+        const val EXTRA_MIC_MUTED = ScreenRecordingService.EXTRA_MIC_MUTED
+        const val EXTRA_SCREENSHOT_SUCCESS = ScreenRecordingService.EXTRA_SCREENSHOT_SUCCESS
+        const val EXTRA_SCREENSHOT_URI = ScreenRecordingService.EXTRA_SCREENSHOT_URI
         const val EXTRA_RESULT_CODE = ScreenRecordingService.EXTRA_RESULT_CODE
         const val EXTRA_RESULT_DATA = ScreenRecordingService.EXTRA_RESULT_DATA
 
@@ -25,6 +33,9 @@ class ScreenRecorderService : ScreenRecordingService() {
 
         val isPaused: Boolean
             get() = ScreenRecordingService.isPaused
+
+        val isMicMuted: Boolean
+            get() = ScreenRecordingService.isMicMuted
 
         val startTimeMillis: Long
             get() = ScreenRecordingService.startTimeMillis

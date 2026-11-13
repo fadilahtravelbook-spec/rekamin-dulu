@@ -20,4 +20,5 @@
     
     <color name="colorPrimaryContainer">#2D245A</color>
     <color name="colorOnPrimaryContainer">#E0DBFE</color>
+    <color name="navInactive">#9EA3BA</color>
 </resources>

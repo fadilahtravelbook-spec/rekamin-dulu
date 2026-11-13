@@ -4,6 +4,7 @@ import android.app.Activity
 import android.content.ContentResolver
 import android.content.ContentValues
 import android.content.Context
+import android.graphics.Bitmap
 import android.media.MediaCodec
 import android.media.MediaCodecInfo
 import android.media.MediaFormat
@@ -12,9 +13,12 @@ import android.media.MediaScannerConnection
 import android.net.Uri
 import android.os.Build
 import android.os.Environment
+import android.os.Handler
+import android.os.Looper
 import android.provider.MediaStore
 import android.util.Log
 import java.io.File
+import java.io.FileOutputStream
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -22,15 +26,16 @@ import java.util.Locale
 
 /**
  * StorageHelper - Pengelola penyimpanan video publik, direktori rekaman,
- * MediaScannerConnection, dan sinkronisasi MediaStore galeri ponsel.
+ * tangkapan layar, MediaScannerConnection, dan sinkronisasi MediaStore galeri ponsel.
  */
 object StorageHelper {
 
     private const val TAG = "StorageHelper"
     private const val FOLDER_NAME = "RekaminDulu"
+    private val mainHandler = Handler(Looper.getMainLooper())
 
     /**
-     * Mendapatkan direktori penyimpanan publik untuk rekaman video.
+     * Mendapatkan direktori penyimpanan untuk rekaman video.
      * Mengutamakan direktori app-specific yang dijamin SELALU memiliki izin tulis
      * tanpa crash EACCES di Android 10, 11, 12, 13, 14+.
      */
@@ -50,11 +55,86 @@ object StorageHelper {
 
     /**
      * Membuat file output MP4 baru dengan timestamp unik di direktori yang aman.
+     * Menjamin tidak terjadi tabrakan nama jika dipanggil dua kali pada detik yang sama.
      */
     fun createOutputFile(context: Context, prefix: String = "Rekaman"): File {
         val dir = getRecordingDirectory(context)
-        val timeStamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
-        return File(dir, "${prefix}_$timeStamp.mp4")
+        val timeStamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
+        var candidate = File(dir, "${prefix}_$timeStamp.mp4")
+        var counter = 1
+        while (candidate.exists()) {
+            candidate = File(dir, "${prefix}_${timeStamp}_$counter.mp4")
+            counter++
+        }
+        return candidate
+    }
+
+    /**
+     * Menyimpan tangkapan layar PNG ke Galeri (Pictures/RekaminDulu) melalui MediaStore (API 29+)
+     * atau direktori eksternal pada API < 29 dengan pemindaian MediaScanner.
+     */
+    fun saveScreenshot(context: Context, bitmap: Bitmap): Uri? {
+        val timeStamp = SimpleDateFormat("yyyyMMdd_HHmmss_SSS", Locale.US).format(Date())
+        val fileName = "Screenshot_Rekamin_$timeStamp.png"
+
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            try {
+                val values = ContentValues().apply {
+                    put(MediaStore.Images.Media.DISPLAY_NAME, fileName)
+                    put(MediaStore.Images.Media.MIME_TYPE, "image/png")
+                    put(
+                        MediaStore.Images.Media.RELATIVE_PATH,
+                        "${Environment.DIRECTORY_PICTURES}/$FOLDER_NAME"
+                    )
+                    put(MediaStore.Images.Media.IS_PENDING, 1)
+                }
+                val resolver = context.contentResolver
+                val uri = resolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values)
+                    ?: return null
+                resolver.openOutputStream(uri)?.use { out ->
+                    if (!bitmap.compress(Bitmap.CompressFormat.PNG, 100, out)) {
+                        throw IllegalStateException("Bitmap compress PNG failed")
+                    }
+                } ?: throw IllegalStateException("Failed opening OutputStream for screenshot")
+                values.clear()
+                values.put(MediaStore.Images.Media.IS_PENDING, 0)
+                resolver.update(uri, values, null, null)
+                uri
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed saving screenshot via MediaStore", e)
+                saveScreenshotToFallbackDir(context, bitmap, fileName)
+            }
+        } else {
+            saveScreenshotToFallbackDir(context, bitmap, fileName)
+        }
+    }
+
+    private fun saveScreenshotToFallbackDir(context: Context, bitmap: Bitmap, fileName: String): Uri? {
+        return try {
+            @Suppress("DEPRECATION")
+            val publicPictures = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES)
+            val basePictures = if (publicPictures != null && (publicPictures.exists() || publicPictures.mkdirs())) {
+                publicPictures
+            } else {
+                context.getExternalFilesDir(Environment.DIRECTORY_PICTURES) ?: context.filesDir
+            }
+            val dir = File(basePictures, FOLDER_NAME)
+            if (!dir.exists()) dir.mkdirs()
+            val outFile = File(dir, fileName)
+            FileOutputStream(outFile).use { out ->
+                bitmap.compress(Bitmap.CompressFormat.PNG, 100, out)
+            }
+            MediaScannerConnection.scanFile(
+                context.applicationContext,
+                arrayOf(outFile.absolutePath),
+                arrayOf("image/png"),
+                null
+            )
+            Uri.fromFile(outFile)
+        } catch (e: Exception) {
+            Log.e(TAG, "Fallback screenshot save failed", e)
+            null
+        }
     }
 
     /**
@@ -155,7 +235,12 @@ object StorageHelper {
             @Suppress("DEPRECATION")
             val where = "${MediaStore.Video.Media.DATA} = ?"
             val args = arrayOf(file.absolutePath)
-            resolver.delete(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, where, args)
+            val deletedRows = resolver.delete(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, where, args)
+            if (deletedRows == 0 && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                val relWhere = "${MediaStore.Video.Media.DISPLAY_NAME} = ? AND ${MediaStore.Video.Media.RELATIVE_PATH} LIKE ?"
+                val relArgs = arrayOf(file.name, "%$FOLDER_NAME%")
+                resolver.delete(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, relWhere, relArgs)
+            }
         } catch (e: Exception) {
             Log.w(TAG, "MediaStore deletion failed for ${file.name}", e)
         }
@@ -186,8 +271,16 @@ object StorageHelper {
      */
     fun generateDemoVideo(context: Context, onComplete: ((File?) -> Unit)? = null) {
         Thread {
+            var outputFile: File? = null
+            var encoder: MediaCodec? = null
+            var audioEncoder: MediaCodec? = null
+            var inputSurface: android.view.Surface? = null
+            var muxer: MediaMuxer? = null
+            var muxerStarted = false
+            var succeeded = false
             try {
-                val outputFile = createOutputFile(context, "Demo_Rekamin")
+                val createdFile = createOutputFile(context, "Demo_Rekamin")
+                outputFile = createdFile
                 val width = 720
                 val height = 1280
                 val bitRate = 2_000_000
@@ -202,10 +295,12 @@ object StorageHelper {
                     setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 1)
                 }
 
-                val encoder = MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_VIDEO_AVC)
-                encoder.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
-                val inputSurface = encoder.createInputSurface()
-                encoder.start()
+                val videoEncoder = MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_VIDEO_AVC)
+                encoder = videoEncoder
+                videoEncoder.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
+                val surface = videoEncoder.createInputSurface()
+                inputSurface = surface
+                videoEncoder.start()
 
                 // Audio encoder setup (AAC 44.1kHz Mono)
                 val sampleRate = 44100
@@ -216,20 +311,20 @@ object StorageHelper {
                     setInteger(MediaFormat.KEY_MAX_INPUT_SIZE, 16384)
                 }
 
-                var audioEncoder: MediaCodec? = null
                 var audioTrackIndex = -1
                 try {
-                    audioEncoder = MediaCodec.createEncoderByType(audioMime)
-                    audioEncoder.configure(audioFormat, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
-                    audioEncoder.start()
+                    val aEnc = MediaCodec.createEncoderByType(audioMime)
+                    aEnc.configure(audioFormat, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
+                    aEnc.start()
+                    audioEncoder = aEnc
                 } catch (eAudio: Exception) {
                     Log.w(TAG, "Audio encoder not supported for demo: ${eAudio.message}")
                     audioEncoder = null
                 }
 
-                val muxer = MediaMuxer(outputFile.absolutePath, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
+                val mediaMuxer = MediaMuxer(createdFile.absolutePath, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
+                muxer = mediaMuxer
                 var videoTrackIndex = -1
-                var muxerStarted = false
                 val bufferInfo = MediaCodec.BufferInfo()
                 val audioBufferInfo = MediaCodec.BufferInfo()
 
@@ -257,13 +352,13 @@ object StorageHelper {
                 }
 
                 // Render first video frame to trigger output format
-                val canvas0 = inputSurface.lockHardwareCanvas()
+                val canvas0 = surface.lockHardwareCanvas()
                 canvas0.drawRect(0f, 0f, width.toFloat(), height.toFloat(), paintBg)
                 canvas0.drawRoundRect(40f, 120f, width - 40f, 300f, 24f, 24f, paintHeader)
                 canvas0.drawCircle(80f, 210f, 14f, paintDot)
                 canvas0.drawText("Rekamin Dulu • Demo HD", width / 2f + 16f, 195f, paintText)
                 canvas0.drawText("Rekam Layar & Audio Suara", width / 2f + 16f, 245f, paintSubtext)
-                inputSurface.unlockCanvasAndPost(canvas0)
+                surface.unlockCanvasAndPost(canvas0)
 
                 // Feed audio samples if audioEncoder is active
                 var totalAudioSamplesFed = 0
@@ -273,7 +368,9 @@ object StorageHelper {
                 fun feedAudioIfPossible() {
                     val aEnc = audioEncoder ?: return
                     if (audioEndOfStreamSent) return
-                    while (totalAudioSamplesFed < totalSamplesNeeded) {
+                    var feedIterations = 0
+                    while (totalAudioSamplesFed < totalSamplesNeeded && feedIterations < 64) {
+                        feedIterations++
                         val inIndex = aEnc.dequeueInputBuffer(0)
                         if (inIndex >= 0) {
                             val inBuf = aEnc.getInputBuffer(inIndex) ?: break
@@ -321,12 +418,12 @@ object StorageHelper {
                     feedAudioIfPossible()
 
                     if (!videoFormatFound) {
-                        val outIdx = encoder.dequeueOutputBuffer(bufferInfo, 10000)
+                        val outIdx = videoEncoder.dequeueOutputBuffer(bufferInfo, 10000)
                         if (outIdx == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) {
-                            videoTrackIndex = muxer.addTrack(encoder.outputFormat)
+                            videoTrackIndex = mediaMuxer.addTrack(videoEncoder.outputFormat)
                             videoFormatFound = true
                         } else if (outIdx >= 0) {
-                            val buf = encoder.getOutputBuffer(outIdx)
+                            val buf = videoEncoder.getOutputBuffer(outIdx)
                             if (buf != null && bufferInfo.size > 0) {
                                 val clone = java.nio.ByteBuffer.allocate(bufferInfo.size)
                                 clone.put(buf)
@@ -335,17 +432,18 @@ object StorageHelper {
                                 infoClone.set(0, bufferInfo.size, bufferInfo.presentationTimeUs, bufferInfo.flags)
                                 pendingVideoBuffers.add(Pair(clone, infoClone))
                             }
-                            encoder.releaseOutputBuffer(outIdx, false)
+                            videoEncoder.releaseOutputBuffer(outIdx, false)
                         }
                     }
 
-                    if (!audioFormatFound && audioEncoder != null) {
-                        val aOutIdx = audioEncoder.dequeueOutputBuffer(audioBufferInfo, 10000)
+                    val aEnc = audioEncoder
+                    if (!audioFormatFound && aEnc != null) {
+                        val aOutIdx = aEnc.dequeueOutputBuffer(audioBufferInfo, 10000)
                         if (aOutIdx == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) {
-                            audioTrackIndex = muxer.addTrack(audioEncoder.outputFormat)
+                            audioTrackIndex = mediaMuxer.addTrack(aEnc.outputFormat)
                             audioFormatFound = true
                         } else if (aOutIdx >= 0) {
-                            val buf = audioEncoder.getOutputBuffer(aOutIdx)
+                            val buf = aEnc.getOutputBuffer(aOutIdx)
                             if (buf != null && audioBufferInfo.size > 0) {
                                 val clone = java.nio.ByteBuffer.allocate(audioBufferInfo.size)
                                 clone.put(buf)
@@ -354,25 +452,23 @@ object StorageHelper {
                                 infoClone.set(0, audioBufferInfo.size, audioBufferInfo.presentationTimeUs, audioBufferInfo.flags)
                                 pendingAudioBuffers.add(Pair(clone, infoClone))
                             }
-                            audioEncoder.releaseOutputBuffer(aOutIdx, false)
+                            aEnc.releaseOutputBuffer(aOutIdx, false)
                         }
                     }
                 }
 
                 if (videoFormatFound) {
-                    muxer.start()
+                    mediaMuxer.start()
                     muxerStarted = true
 
-                    // Flush pending video
                     for ((buf, info) in pendingVideoBuffers) {
-                        muxer.writeSampleData(videoTrackIndex, buf, info)
+                        mediaMuxer.writeSampleData(videoTrackIndex, buf, info)
                     }
                     pendingVideoBuffers.clear()
 
-                    // Flush pending audio
                     if (audioTrackIndex >= 0) {
                         for ((buf, info) in pendingAudioBuffers) {
-                            muxer.writeSampleData(audioTrackIndex, buf, info)
+                            mediaMuxer.writeSampleData(audioTrackIndex, buf, info)
                         }
                         pendingAudioBuffers.clear()
                     }
@@ -382,16 +478,13 @@ object StorageHelper {
                 for (i in 1 until numFrames) {
                     feedAudioIfPossible()
 
-                    val canvas = inputSurface.lockHardwareCanvas()
+                    val canvas = surface.lockHardwareCanvas()
                     canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), paintBg)
-
-                    // Draw header banner
                     canvas.drawRoundRect(40f, 120f, width - 40f, 300f, 24f, 24f, paintHeader)
                     canvas.drawCircle(80f, 210f, 14f, paintDot)
                     canvas.drawText("Rekamin Dulu • Demo HD", width / 2f + 16f, 195f, paintText)
                     canvas.drawText("Rekam Layar & Audio Suara", width / 2f + 16f, 245f, paintSubtext)
 
-                    // Draw moving pulse circle
                     val animY = 440f + (i * 7f) % 450f
                     canvas.drawCircle(width / 2f, animY, 54f, paintCircle)
 
@@ -399,33 +492,37 @@ object StorageHelper {
                     canvas.drawText("Sample Rekaman Video 00:0$sec / 00:03", width / 2f, 1020f, paintText)
                     canvas.drawText("1080p 60FPS • Suara Jernih Aktif", width / 2f, 1070f, paintSubtext)
 
-                    inputSurface.unlockCanvasAndPost(canvas)
+                    surface.unlockCanvasAndPost(canvas)
 
-                    while (true) {
-                        val outputBufferId = encoder.dequeueOutputBuffer(bufferInfo, 5000)
+                    var vDrain = 0
+                    while (vDrain < 120) {
+                        vDrain++
+                        val outputBufferId = videoEncoder.dequeueOutputBuffer(bufferInfo, 5000)
                         if (outputBufferId >= 0) {
-                            val outputBuffer = encoder.getOutputBuffer(outputBufferId)
+                            val outputBuffer = videoEncoder.getOutputBuffer(outputBufferId)
                             if (outputBuffer != null && bufferInfo.size > 0 && muxerStarted) {
                                 bufferInfo.presentationTimeUs = (i * 1000000L / frameRate)
-                                muxer.writeSampleData(videoTrackIndex, outputBuffer, bufferInfo)
+                                mediaMuxer.writeSampleData(videoTrackIndex, outputBuffer, bufferInfo)
                             }
-                            encoder.releaseOutputBuffer(outputBufferId, false)
+                            videoEncoder.releaseOutputBuffer(outputBufferId, false)
                             break
                         } else {
                             break
                         }
                     }
 
-                    // Drain audio
-                    if (audioEncoder != null && muxerStarted && audioTrackIndex >= 0) {
-                        while (true) {
-                            val aOut = audioEncoder.dequeueOutputBuffer(audioBufferInfo, 5000)
+                    val aEnc = audioEncoder
+                    if (aEnc != null && muxerStarted && audioTrackIndex >= 0) {
+                        var aDrain = 0
+                        while (aDrain < 120) {
+                            aDrain++
+                            val aOut = aEnc.dequeueOutputBuffer(audioBufferInfo, 5000)
                             if (aOut >= 0) {
-                                val aBuf = audioEncoder.getOutputBuffer(aOut)
+                                val aBuf = aEnc.getOutputBuffer(aOut)
                                 if (aBuf != null && audioBufferInfo.size > 0) {
-                                    muxer.writeSampleData(audioTrackIndex, aBuf, audioBufferInfo)
+                                    mediaMuxer.writeSampleData(audioTrackIndex, aBuf, audioBufferInfo)
                                 }
-                                audioEncoder.releaseOutputBuffer(aOut, false)
+                                aEnc.releaseOutputBuffer(aOut, false)
                             } else {
                                 break
                             }
@@ -433,17 +530,19 @@ object StorageHelper {
                     }
                 }
 
-                encoder.signalEndOfInputStream()
+                videoEncoder.signalEndOfInputStream()
 
-                // Final video drain
-                while (true) {
-                    val outputBufferId = encoder.dequeueOutputBuffer(bufferInfo, 10000)
+                // Final bounded video drain
+                var finalVideoDrain = 0
+                while (finalVideoDrain < 120) {
+                    finalVideoDrain++
+                    val outputBufferId = videoEncoder.dequeueOutputBuffer(bufferInfo, 10000)
                     if (outputBufferId >= 0) {
-                        val outputBuffer = encoder.getOutputBuffer(outputBufferId)
+                        val outputBuffer = videoEncoder.getOutputBuffer(outputBufferId)
                         if (outputBuffer != null && bufferInfo.size > 0 && muxerStarted) {
-                            muxer.writeSampleData(videoTrackIndex, outputBuffer, bufferInfo)
+                            mediaMuxer.writeSampleData(videoTrackIndex, outputBuffer, bufferInfo)
                         }
-                        encoder.releaseOutputBuffer(outputBufferId, false)
+                        videoEncoder.releaseOutputBuffer(outputBufferId, false)
                         if ((bufferInfo.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM) != 0) {
                             break
                         }
@@ -452,44 +551,50 @@ object StorageHelper {
                     }
                 }
 
-                // Final audio drain
-                if (audioEncoder != null && muxerStarted && audioTrackIndex >= 0) {
-                    while (true) {
-                        val aOut = audioEncoder.dequeueOutputBuffer(audioBufferInfo, 10000)
+                // Final bounded audio drain
+                val aEnc = audioEncoder
+                if (aEnc != null && muxerStarted && audioTrackIndex >= 0) {
+                    var finalAudioDrain = 0
+                    while (finalAudioDrain < 120) {
+                        finalAudioDrain++
+                        val aOut = aEnc.dequeueOutputBuffer(audioBufferInfo, 10000)
                         if (aOut >= 0) {
-                            val aBuf = audioEncoder.getOutputBuffer(aOut)
+                            val aBuf = aEnc.getOutputBuffer(aOut)
                             if (aBuf != null && audioBufferInfo.size > 0) {
-                                muxer.writeSampleData(audioTrackIndex, aBuf, audioBufferInfo)
+                                mediaMuxer.writeSampleData(audioTrackIndex, aBuf, audioBufferInfo)
                             }
-                            audioEncoder.releaseOutputBuffer(aOut, false)
+                            aEnc.releaseOutputBuffer(aOut, false)
                             if ((audioBufferInfo.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM) != 0) {
                                 break
                             }
-                        } else {
+                        } else if (aOut == MediaCodec.INFO_TRY_AGAIN_LATER) {
                             break
                         }
                     }
                 }
 
-                try { encoder.stop(); encoder.release() } catch (ignored: Exception) {}
-                try { audioEncoder?.stop(); audioEncoder?.release() } catch (ignored: Exception) {}
-                try { inputSurface.release() } catch (ignored: Exception) {}
-                try {
-                    if (muxerStarted) muxer.stop()
-                    muxer.release()
-                } catch (ignored: Exception) {}
-
-                scanVideoFile(context, outputFile)
-
-                (context as? Activity)?.runOnUiThread {
-                    onComplete?.invoke(outputFile)
-                } ?: run {
-                    onComplete?.invoke(outputFile)
-                }
+                succeeded = muxerStarted && createdFile.exists() && createdFile.length() > 1024L
             } catch (e: Exception) {
                 Log.e(TAG, "generateDemoVideo failed", e)
-                (context as? Activity)?.runOnUiThread {
-                    onComplete?.invoke(null)
+                succeeded = false
+            } finally {
+                try { encoder?.stop() } catch (_: Exception) {}
+                try { encoder?.release() } catch (_: Exception) {}
+                try { audioEncoder?.stop() } catch (_: Exception) {}
+                try { audioEncoder?.release() } catch (_: Exception) {}
+                try { inputSurface?.release() } catch (_: Exception) {}
+                try { if (muxerStarted) muxer?.stop() } catch (_: Exception) {}
+                try { muxer?.release() } catch (_: Exception) {}
+
+                val resultFile = outputFile
+                if (succeeded && resultFile != null) {
+                    scanVideoFile(context, resultFile)
+                    mainHandler.post { onComplete?.invoke(resultFile) }
+                } else {
+                    if (resultFile != null && resultFile.exists()) {
+                        try { resultFile.delete() } catch (_: Exception) {}
+                    }
+                    mainHandler.post { onComplete?.invoke(null) }
                 }
             }
         }.start()

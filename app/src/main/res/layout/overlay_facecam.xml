@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="utf-8"?>
+<com.google.android.material.card.MaterialCardView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/facecam_card_container"
+    android:layout_width="108dp"
+    android:layout_height="144dp"
+    app:cardBackgroundColor="#FF0D0E1A"
+    app:cardCornerRadius="18dp"
+    app:cardElevation="14dp"
+    app:strokeColor="#AA6C5CE7"
+    app:strokeWidth="1.8dp">
+
+    <FrameLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent">
+
+        <TextureView
+            android:id="@+id/facecam_texture_view"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent" />
+
+        <!-- Subtle top badge -->
+        <TextView
+            android:id="@+id/facecam_lens_badge"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="top|start"
+            android:layout_margin="6dp"
+            android:background="@drawable/bg_chip_pill"
+            android:backgroundTint="#990D0E1A"
+            android:paddingHorizontal="6dp"
+            android:paddingVertical="2dp"
+            android:text="CAM"
+            android:textColor="#FFFFFF"
+            android:textSize="8sp"
+            android:textStyle="bold" />
+
+        <!-- Close button -->
+        <ImageView
+            android:id="@+id/btn_facecam_close"
+            android:layout_width="24dp"
+            android:layout_height="24dp"
+            android:layout_gravity="top|end"
+            android:layout_margin="5dp"
+            android:background="@drawable/bg_chip_pill"
+            android:backgroundTint="#990D0E1A"
+            android:contentDescription="Tutup Kamera Facecam"
+            android:padding="5dp"
+            android:src="@drawable/ic_close"
+            app:tint="#FFFFFF" />
+
+        <!-- Flip camera button -->
+        <ImageView
+            android:id="@+id/btn_facecam_flip"
+            android:layout_width="26dp"
+            android:layout_height="26dp"
+            android:layout_gravity="bottom|end"
+            android:layout_margin="6dp"
+            android:background="@drawable/bg_chip_pill"
+            android:backgroundTint="#AA6C5CE7"
+            android:contentDescription="Ganti Kamera Depan atau Belakang"
+            android:padding="5dp"
+            android:src="@drawable/ic_restore"
+            app:tint="#FFFFFF" />
+
+    </FrameLayout>
+
+</com.google.android.material.card.MaterialCardView>
