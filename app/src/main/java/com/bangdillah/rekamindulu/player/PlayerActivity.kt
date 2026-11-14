@@ -19,9 +19,13 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.FileProvider
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
+import com.bangdillah.rekamindulu.MainActivity
 import com.bangdillah.rekamindulu.R
 import com.bangdillah.rekamindulu.audio.AudioExtractorHelper
+import com.bangdillah.rekamindulu.service.ScreenRecordingService
 import com.bangdillah.rekamindulu.trim.TrimActivity
+import com.bangdillah.rekamindulu.utils.AppLockHelper
+import com.bangdillah.rekamindulu.utils.AppPreferences
 import com.bangdillah.rekamindulu.utils.SelectionBottomSheetDialog
 import com.bangdillah.rekamindulu.utils.SelectionOption
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
@@ -51,6 +55,9 @@ class PlayerActivity : AppCompatActivity() {
 
     private var areControlsVisible = true
     private var extractProgressDialog: AlertDialog? = null
+    private lateinit var appPreferences: AppPreferences
+    private var appLockDialog: AlertDialog? = null
+    private var isVideoLoaded = false
 
     private val handler = Handler(Looper.getMainLooper())
     private val updateSeekRunnable = object : Runnable {
@@ -74,7 +81,8 @@ class PlayerActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        com.bangdillah.rekamindulu.utils.AppPreferences(this).applyTheme()
+        appPreferences = AppPreferences(this)
+        appPreferences.applyTheme()
         setContentView(R.layout.player_screen)
         supportActionBar?.hide()
 
@@ -132,10 +140,15 @@ class PlayerActivity : AppCompatActivity() {
             return
         }
         currentFile = file
+        MainActivity.consumePendingSaveIfHandled(
+            openedFilePath = file.absolutePath,
+            lastRecordedPath = ScreenRecordingService.lastRecordedFilePath,
+            forceClear = intent.getBooleanExtra(MainActivity.EXTRA_CLEAR_PENDING_SAVE, false)
+        )
         titleText?.text = file.nameWithoutExtension.replace("_", " ")
 
         setupListeners()
-        loadAndPlayVideo(file)
+        checkAppLock()
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -147,14 +160,55 @@ class PlayerActivity : AppCompatActivity() {
             Toast.makeText(this, "File video tidak ditemukan di penyimpanan", Toast.LENGTH_SHORT).show()
             return
         }
+        MainActivity.consumePendingSaveIfHandled(
+            openedFilePath = newFile.absolutePath,
+            lastRecordedPath = ScreenRecordingService.lastRecordedFilePath,
+            forceClear = intent.getBooleanExtra(MainActivity.EXTRA_CLEAR_PENDING_SAVE, false)
+        )
         handler.removeCallbacks(updateSeekRunnable)
         handler.removeCallbacks(hideControlsRunnable)
         videoView?.stopPlayback()
+        isVideoLoaded = false
         restoredPosition = 0
         restoredWasPlaying = true
         currentFile = newFile
         titleText?.text = newFile.nameWithoutExtension.replace("_", " ")
-        loadAndPlayVideo(newFile)
+        checkAppLock()
+    }
+
+    private fun checkAppLock() {
+        appLockDialog = AppLockHelper.showPinGateIfNeeded(
+            activity = this,
+            appPreferences = appPreferences,
+            currentDialog = appLockDialog,
+            title = "🔒 Kunci Pemutar Video",
+            message = "Pemutar video dilindungi PIN. Masukkan PIN keamanan untuk memutar video:",
+            negativeButtonLabel = "Kembali",
+            onCancel = { finish() },
+            onUnlocked = {
+                val targetFile = currentFile
+                if (targetFile != null && !isVideoLoaded) {
+                    isVideoLoaded = true
+                    loadAndPlayVideo(targetFile)
+                }
+            }
+        )
+    }
+
+    override fun onResume() {
+        super.onResume()
+        if (AppLockHelper.shouldRequirePin(
+                appPreferences.isAppLockEnabled,
+                appPreferences.appLockPin,
+                com.bangdillah.rekamindulu.HomeActivity.isSessionUnlocked
+            ) && videoView?.isPlaying == true
+        ) {
+            videoView?.pause()
+            playPauseBtn?.setImageResource(R.drawable.ic_play_arrow)
+            handler.removeCallbacks(updateSeekRunnable)
+            handler.removeCallbacks(hideControlsRunnable)
+        }
+        checkAppLock()
     }
 
     private fun setupListeners() {
@@ -585,6 +639,8 @@ class PlayerActivity : AppCompatActivity() {
         handler.removeCallbacks(hideControlsRunnable)
         try { extractProgressDialog?.dismiss() } catch (ignored: Exception) {}
         extractProgressDialog = null
+        try { appLockDialog?.dismiss() } catch (ignored: Exception) {}
+        appLockDialog = null
         videoView?.stopPlayback()
     }
 

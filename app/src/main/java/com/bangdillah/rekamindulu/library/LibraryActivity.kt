@@ -30,6 +30,8 @@ import com.bangdillah.rekamindulu.service.ScreenRecordingService
 import com.bangdillah.rekamindulu.settings.SettingsActivity
 import com.bangdillah.rekamindulu.trim.TrimActivity
 import com.bangdillah.rekamindulu.audio.AudioExtractorHelper
+import com.bangdillah.rekamindulu.utils.AppLockHelper
+import com.bangdillah.rekamindulu.utils.AppPreferences
 import com.bangdillah.rekamindulu.utils.SaveTransitionDialog
 import com.bangdillah.rekamindulu.utils.SelectionBottomSheetDialog
 import com.bangdillah.rekamindulu.utils.SelectionOption
@@ -43,12 +45,23 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.util.Locale
+import java.util.concurrent.ConcurrentHashMap
 
 class LibraryActivity : AppCompatActivity() {
 
+    companion object {
+        const val ONE_MINUTE_MS = 60_000L
+
+        fun isDurationOverOneMinute(durationMs: Long): Boolean {
+            return durationMs > ONE_MINUTE_MS
+        }
+    }
+
+    private lateinit var appPreferences: AppPreferences
     private lateinit var adapter: LibraryAdapter
     private val allVideoFiles = mutableListOf<File>()
     private val displayedVideoFiles = mutableListOf<File>()
+    private val videoDurationsMs = ConcurrentHashMap<String, Long>()
 
     private var currentSortOrder = 0 // 0: Terbaru, 1: Terlama, 2: Nama A-Z, 3: Nama Z-A, 4: Terbesar, 5: Terkecil
     private var currentFilterMode = 0 // 0: Semua, 1: Game, 2: Hari Ini, 3: > 1 Menit
@@ -66,6 +79,7 @@ class LibraryActivity : AppCompatActivity() {
     }
 
     private var extractProgressDialog: AlertDialog? = null
+    private var appLockDialog: AlertDialog? = null
 
     private val recordingReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -91,9 +105,11 @@ class LibraryActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        com.bangdillah.rekamindulu.utils.AppPreferences(this).applyTheme()
+        appPreferences = AppPreferences(this)
+        appPreferences.applyTheme()
         setContentView(R.layout.library_screen)
         supportActionBar?.hide()
+        checkAppLock()
 
         val recyclerView = findViewById<RecyclerView>(R.id.library_recycler_view)
         recyclerView?.layoutManager = LinearLayoutManager(this)
@@ -134,10 +150,28 @@ class LibraryActivity : AppCompatActivity() {
         setupBottomNavigation()
     }
 
+    private fun checkAppLock() {
+        appLockDialog = AppLockHelper.showPinGateIfNeeded(
+            activity = this,
+            appPreferences = appPreferences,
+            currentDialog = appLockDialog,
+            title = "🔒 Kunci Galeri Rekaman",
+            message = "Galeri rekaman dilindungi PIN. Masukkan PIN keamanan untuk mengakses:",
+            negativeButtonLabel = "Kembali",
+            onCancel = { finish() },
+            onUnlocked = { loadVideoFiles() }
+        )
+    }
+
     override fun onResume() {
         super.onResume()
+        MainActivity.consumePendingSaveIfHandled(
+            openedFilePath = null,
+            lastRecordedPath = ScreenRecordingService.lastRecordedFilePath,
+            forceClear = true
+        )
         findViewById<BottomNavigationView>(R.id.bottom_navigation_library)?.selectedItemId = R.id.nav_library
-        loadVideoFiles()
+        checkAppLock()
         updateRecordingIndicator()
 
         val filter = IntentFilter().apply {
@@ -168,6 +202,8 @@ class LibraryActivity : AppCompatActivity() {
         liveTimerHandler.removeCallbacksAndMessages(null)
         try { extractProgressDialog?.dismiss() } catch (ignored: Exception) {}
         extractProgressDialog = null
+        try { appLockDialog?.dismiss() } catch (ignored: Exception) {}
+        appLockDialog = null
     }
 
     private fun setupHeaderButtons() {
@@ -301,6 +337,22 @@ class LibraryActivity : AppCompatActivity() {
             currentFilterMode = 3
             updateChipsUI()
             val query = findViewById<EditText>(R.id.et_search_library)?.text?.toString() ?: ""
+            val missingDurations = allVideoFiles.filter {
+                !videoDurationsMs.containsKey(it.absolutePath) && LibraryAdapter.getCachedDurationMs(it) == null
+            }
+            if (missingDurations.isNotEmpty()) {
+                lifecycleScope.launch(Dispatchers.IO) {
+                    for (file in missingDurations) {
+                        videoDurationsMs[file.absolutePath] = LibraryAdapter.getOrExtractDurationMs(file)
+                    }
+                    withContext(Dispatchers.Main) {
+                        if (!isFinishing && !isDestroyed && currentFilterMode == 3) {
+                            val latestQuery = findViewById<EditText>(R.id.et_search_library)?.text?.toString() ?: ""
+                            filterVideos(latestQuery)
+                        }
+                    }
+                }
+            }
             filterVideos(query)
         }
     }
@@ -392,7 +444,10 @@ class LibraryActivity : AppCompatActivity() {
             val matchesFilter = when (currentFilterMode) {
                 1 -> file.name.contains("game", ignoreCase = true) || file.name.contains("fps", ignoreCase = true)
                 2 -> (now - file.lastModified()) <= oneDayMs
-                3 -> file.length() >= (5 * 1024 * 1024)
+                3 -> {
+                    val durMs = videoDurationsMs[file.absolutePath] ?: LibraryAdapter.getCachedDurationMs(file) ?: 0L
+                    isDurationOverOneMinute(durMs)
+                }
                 else -> true
             }
 
@@ -421,7 +476,7 @@ class LibraryActivity : AppCompatActivity() {
                 val filterName = when (currentFilterMode) {
                     1 -> "Rekaman Game"
                     2 -> "Hari Ini"
-                    3 -> "Ukuran Besar (>5MB)"
+                    3 -> "> 1 Menit"
                     else -> "Filter Aktif"
                 }
                 textEmptyTitle?.text = "Belum Ada Video di Kategori \"$filterName\""
@@ -484,10 +539,24 @@ class LibraryActivity : AppCompatActivity() {
     }
 
     private fun loadVideoFiles() {
+        if (AppLockHelper.shouldRequirePin(
+                appPreferences.isAppLockEnabled,
+                appPreferences.appLockPin,
+                HomeActivity.isSessionUnlocked
+            )
+        ) {
+            return
+        }
         lifecycleScope.launch(Dispatchers.IO) {
             val files = StorageHelper.getAllVideoFiles(this@LibraryActivity)
+            val resolvedDurations = HashMap<String, Long>(files.size)
+            for (file in files) {
+                resolvedDurations[file.absolutePath] = LibraryAdapter.getOrExtractDurationMs(file)
+            }
             withContext(Dispatchers.Main) {
                 if (isFinishing || isDestroyed) return@withContext
+                videoDurationsMs.clear()
+                videoDurationsMs.putAll(resolvedDurations)
                 allVideoFiles.clear()
                 if (files.isNotEmpty()) {
                     allVideoFiles.addAll(files)
@@ -558,7 +627,7 @@ class LibraryActivity : AppCompatActivity() {
     private fun confirmDelete(file: File) {
         MaterialAlertDialogBuilder(this)
             .setTitle("Hapus Rekaman Video?")
-            .setMessage("File \"${file.name}\" akan dihapus secara permanen dari galeri.")
+            .setMessage("File \"${file.name}\" akan dihapus secara permanen dari Galeri Rekamin Dulu.")
             .setIcon(R.drawable.ic_delete)
             .setPositiveButton("Hapus") { _, _ ->
                 if (file.exists()) {

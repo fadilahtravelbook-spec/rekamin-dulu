@@ -48,6 +48,46 @@ class LibraryAdapter(
             metadataCache.remove(filePath)
         }
 
+        fun getCachedDurationMs(file: File): Long? {
+            if (!file.exists()) return null
+            val cached = metadataCache[file.absolutePath] ?: return null
+            return if (cached.fileSize == file.length() && cached.lastModified == file.lastModified()) {
+                cached.durMs
+            } else {
+                null
+            }
+        }
+
+        fun getOrExtractDurationMs(file: File): Long {
+            getCachedDurationMs(file)?.let { return it }
+            if (!file.exists()) return 0L
+            val fileSize = file.length()
+            val lastModified = file.lastModified()
+            var retriever: MediaMetadataRetriever? = null
+            val itemMeta = try {
+                retriever = MediaMetadataRetriever()
+                retriever.setDataSource(file.absolutePath)
+                val durMs = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: 0L
+                val width = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)
+                val height = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)
+                val hasVideo = "yes".equals(
+                    retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_HAS_VIDEO),
+                    ignoreCase = true
+                )
+                val sec = (durMs / 1000).toInt()
+                val min = sec / 60
+                val durationText = String.format(Locale.getDefault(), "%02d:%02d", min, sec % 60)
+                val resolutionText = if (width != null && height != null) "${width}x${height}" else "1080p"
+                MetaItem(durationText, resolutionText, hasVideo && width != null, durMs, fileSize, lastModified)
+            } catch (e: Exception) {
+                MetaItem("00:00", "1080p", false, 0L, fileSize, lastModified)
+            } finally {
+                try { retriever?.release() } catch (ignored: Exception) {}
+            }
+            metadataCache[file.absolutePath] = itemMeta
+            return itemMeta.durMs
+        }
+
         private fun isContextValidForGlide(context: Context): Boolean {
             var current: Context? = context
             while (current is ContextWrapper) {

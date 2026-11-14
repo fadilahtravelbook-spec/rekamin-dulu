@@ -1,23 +1,39 @@
 package com.bangdillah.rekamindulu.about
 
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.widget.Button
+import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import com.bangdillah.rekamindulu.R
+import com.bangdillah.rekamindulu.utils.AppPreferences
 import com.bangdillah.rekamindulu.utils.SpecAnalysisDialog
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 
 class AboutActivity : AppCompatActivity() {
 
+    companion object {
+        fun formatVersionBadge(versionName: String?): String {
+            val clean = versionName?.trim()?.takeIf { it.isNotEmpty() } ?: "1.0"
+            return "Versi $clean (Pro Release)"
+        }
+    }
+
+    private var activeDialog: AlertDialog? = null
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        com.bangdillah.rekamindulu.utils.AppPreferences(this).applyTheme()
+        AppPreferences(this).applyTheme()
         setContentView(R.layout.about_screen)
         supportActionBar?.hide()
+
+        val appVersion = resolveAppVersionName()
+        findViewById<TextView>(R.id.text_about_version)?.text = formatVersionBadge(appVersion)
 
         findViewById<android.view.View>(R.id.btn_about_back)?.setOnClickListener {
             finish()
@@ -46,7 +62,7 @@ class AboutActivity : AppCompatActivity() {
 
         // 3. Check Update Button
         findViewById<Button>(R.id.btn_check_update)?.setOnClickListener {
-            showUpdateDialog()
+            showUpdateDialog(appVersion)
         }
 
         // 4. Coffee Support Button
@@ -55,13 +71,28 @@ class AboutActivity : AppCompatActivity() {
         }
     }
 
-    private fun showUpdateDialog() {
-        MaterialAlertDialogBuilder(this)
+    private fun resolveAppVersionName(): String {
+        return try {
+            val info = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                packageManager.getPackageInfo(packageName, PackageManager.PackageInfoFlags.of(0))
+            } else {
+                @Suppress("DEPRECATION")
+                packageManager.getPackageInfo(packageName, 0)
+            }
+            info.versionName?.takeIf { it.isNotBlank() } ?: "1.0"
+        } catch (_: Exception) {
+            "1.0"
+        }
+    }
+
+    private fun showUpdateDialog(appVersion: String) {
+        activeDialog?.dismiss()
+        activeDialog = MaterialAlertDialogBuilder(this)
             .setTitle("Versi Terbaru Terpasang ✅")
             .setIcon(R.drawable.ic_check_circle)
             .setMessage(
-                "Rekamin Dulu v1.0.0 (Pro Release) adalah versi paling mutakhir!\n\n" +
-                "Changelog v1.0.0:\n" +
+                "Rekamin Dulu v$appVersion (Pro Release) adalah versi paling mutakhir!\n\n" +
+                "Changelog v$appVersion:\n" +
                 "• Perekaman layar 1080p / 4K hingga 60-120 FPS\n" +
                 "• Dual Audio (Mikrofon & Audio Internal Game)\n" +
                 "• Pemotong Video Cepat (Quick Trim)\n" +
@@ -78,7 +109,8 @@ class AboutActivity : AppCompatActivity() {
     }
 
     private fun showSupportDialog() {
-        MaterialAlertDialogBuilder(this)
+        activeDialog?.dismiss()
+        activeDialog = MaterialAlertDialogBuilder(this)
             .setTitle("☕ Traktir Kopi Bangdillah210")
             .setMessage(
                 "Dukungan Anda sangat berarti untuk membantu pengembangan fitur-fitur baru di Rekamin Dulu!\n\n" +
@@ -103,5 +135,11 @@ class AboutActivity : AppCompatActivity() {
             }
             .setNegativeButton("Tutup", null)
             .show()
+    }
+
+    override fun onDestroy() {
+        try { activeDialog?.dismiss() } catch (_: Exception) {}
+        activeDialog = null
+        super.onDestroy()
     }
 }

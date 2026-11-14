@@ -223,7 +223,7 @@
                                     android:layout_width="wrap_content"
                                     android:layout_height="wrap_content"
                                     android:layout_marginTop="2dp"
-                                    android:text="📁 Video tersimpan aman di galeri perangkat"
+                                    android:text="📁 Disimpan di Movies/RekaminDulu • Ekspor sebelum hapus aplikasi"
                                     android:textColor="@color/colorSuccess"
                                     android:textSize="11sp" />
                             </LinearLayout>
@@ -720,7 +720,7 @@
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:layout_marginTop="12dp"
-                            android:text="Video otomatis disimpan ke Galeri saat dihentikan"
+                            android:text="Video disimpan ke Galeri Rekamin Dulu (Movies/RekaminDulu)"
                             android:textColor="@color/textCaption"
                             android:textSize="11sp" />
                     </LinearLayout>

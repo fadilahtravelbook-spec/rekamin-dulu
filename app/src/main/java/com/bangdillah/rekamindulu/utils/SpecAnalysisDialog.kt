@@ -20,6 +20,7 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.core.content.ContextCompat
 import com.bangdillah.rekamindulu.R
+import com.bangdillah.rekamindulu.service.ScreenRecordingService
 import java.util.Locale
 
 /**
@@ -27,6 +28,8 @@ import java.util.Locale
  * dengan tampilan modern, rincian teknis mendalam, dan tombol 1-klik terapkan preset performa.
  */
 object SpecAnalysisDialog {
+
+    fun canModifyPresetsOrBenchmark(isRecording: Boolean): Boolean = !isRecording
 
     fun show(context: Context, onApplied: (() -> Unit)? = null) {
         if (context is Activity && (context.isFinishing || context.isDestroyed)) {
@@ -62,6 +65,14 @@ object SpecAnalysisDialog {
         val textBenchmarkResult = view.findViewById<TextView>(R.id.text_benchmark_result)
 
         btnRunBenchmark?.setOnClickListener {
+            if (!canModifyPresetsOrBenchmark(ScreenRecordingService.isRecording)) {
+                Toast.makeText(
+                    context,
+                    "Hentikan rekaman terlebih dahulu sebelum menjalankan benchmark encoder",
+                    Toast.LENGTH_SHORT
+                ).show()
+                return@setOnClickListener
+            }
             btnRunBenchmark.isEnabled = false
             btnRunBenchmark.text = "⚡ Menguji Encoder Hardware MediaCodec..."
             progressBenchmark?.visibility = View.VISIBLE
@@ -199,6 +210,14 @@ object SpecAnalysisDialog {
         onApplied: (() -> Unit)?,
         dialog: Dialog
     ) {
+        if (!canModifyPresetsOrBenchmark(ScreenRecordingService.isRecording)) {
+            Toast.makeText(
+                context,
+                "Preset kualitas tidak dapat diubah saat perekaman sedang berlangsung",
+                Toast.LENGTH_SHORT
+            ).show()
+            return
+        }
         val prefs = AppPreferences(context)
         prefs.resolution = resolution
         prefs.fps = fps

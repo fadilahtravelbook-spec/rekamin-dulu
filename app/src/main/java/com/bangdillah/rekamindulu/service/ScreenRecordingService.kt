@@ -100,6 +100,10 @@ open class ScreenRecordingService : Service() {
             internal set
 
         @Volatile
+        var effectiveAudioMode: String? = null
+            internal set
+
+        @Volatile
         private var pausedAtMillis: Long = 0L
 
         @Volatile
@@ -273,6 +277,7 @@ open class ScreenRecordingService : Service() {
             isRecording = true
             isPaused = false
             isMicMuted = false
+            effectiveAudioMode = recorder.effectiveAudioMode
             pausedAtMillis = 0L
             accumulatedPausedMillis = 0L
             startTimeMillis = System.currentTimeMillis()
@@ -327,7 +332,7 @@ open class ScreenRecordingService : Service() {
 
     private fun handleSetMicMuted(muted: Boolean) {
         if (!isRecording) return
-        val effectiveMode = codecRecorder?.effectiveAudioMode ?: AppPreferences(this).audioSource
+        val effectiveMode = effectiveAudioMode ?: codecRecorder?.effectiveAudioMode ?: AppPreferences(this).audioSource
         if (effectiveMode != "MIC" && effectiveMode != "BOTH") {
             mainHandler.post {
                 val msg = if (effectiveMode == "INTERNAL") {
@@ -360,6 +365,9 @@ open class ScreenRecordingService : Service() {
         val height = metrics.heightPixels.coerceAtLeast(480)
         val densityDpi = metrics.densityDpi.coerceAtLeast(160)
 
+        val workerThread = android.os.HandlerThread("RekaminScreenshotWorker").apply { start() }
+        val workerHandler = Handler(workerThread.looper)
+
         try {
             val imageReader = ImageReader.newInstance(width, height, PixelFormat.RGBA_8888, 2)
             val shotVirtualDisplay = projection.createVirtualDisplay(
@@ -370,12 +378,24 @@ open class ScreenRecordingService : Service() {
                 DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
                 imageReader.surface,
                 null,
-                mainHandler
+                workerHandler
             )
 
             val captured = AtomicBoolean(false)
+            lateinit var timeoutRunnable: Runnable
+            timeoutRunnable = Runnable {
+                if (!captured.getAndSet(true)) {
+                    try { shotVirtualDisplay?.release() } catch (_: Exception) {}
+                    try { imageReader.close() } catch (_: Exception) {}
+                    workerThread.quitSafely()
+                    Toast.makeText(this, "Waktu tangkap layar habis, coba lagi", Toast.LENGTH_SHORT).show()
+                    broadcastScreenshotResult(success = false, uriString = null)
+                }
+            }
+
             imageReader.setOnImageAvailableListener({ reader ->
                 if (captured.getAndSet(true)) return@setOnImageAvailableListener
+                mainHandler.removeCallbacks(timeoutRunnable)
                 var image: android.media.Image? = null
                 try {
                     image = reader.acquireLatestImage()
@@ -413,31 +433,26 @@ open class ScreenRecordingService : Service() {
                     } else {
                         mainHandler.post {
                             Toast.makeText(this, "Gagal mengambil frame tangkapan layar", Toast.LENGTH_SHORT).show()
+                            broadcastScreenshotResult(success = false, uriString = null)
                         }
-                        broadcastScreenshotResult(success = false, uriString = null)
                     }
                 } catch (e: Exception) {
                     Log.e(TAG, "Screenshot capture error", e)
                     mainHandler.post {
                         Toast.makeText(this, "Gagal mengambil tangkapan layar", Toast.LENGTH_SHORT).show()
+                        broadcastScreenshotResult(success = false, uriString = null)
                     }
-                    broadcastScreenshotResult(success = false, uriString = null)
                 } finally {
                     try { image?.close() } catch (_: Exception) {}
                     try { shotVirtualDisplay?.release() } catch (_: Exception) {}
                     try { reader.close() } catch (_: Exception) {}
+                    workerThread.quitSafely()
                 }
-            }, mainHandler)
+            }, workerHandler)
 
-            mainHandler.postDelayed({
-                if (!captured.getAndSet(true)) {
-                    try { shotVirtualDisplay?.release() } catch (_: Exception) {}
-                    try { imageReader.close() } catch (_: Exception) {}
-                    Toast.makeText(this, "Waktu tangkap layar habis, coba lagi", Toast.LENGTH_SHORT).show()
-                    broadcastScreenshotResult(success = false, uriString = null)
-                }
-            }, 2500L)
+            mainHandler.postDelayed(timeoutRunnable, 2500L)
         } catch (e: Exception) {
+            workerThread.quitSafely()
             Log.e(TAG, "Failed creating screenshot VirtualDisplay", e)
             mainHandler.post {
                 Toast.makeText(this, "Perangkat membatasi tangkap layar sekunder saat merekam", Toast.LENGTH_SHORT).show()
@@ -491,6 +506,7 @@ open class ScreenRecordingService : Service() {
                 }
                 unregisterScreenOffReceiver()
                 currentActiveFilePath = null
+                effectiveAudioMode = null
                 isRecording = false
                 isPaused = false
                 isMicMuted = false
@@ -587,7 +603,7 @@ open class ScreenRecordingService : Service() {
         } else {
             "Merekam Layar • $durationStr"
         }
-        val activeAudioMode = codecRecorder?.effectiveAudioMode ?: AppPreferences(this).audioSource
+        val activeAudioMode = effectiveAudioMode ?: codecRecorder?.effectiveAudioMode ?: AppPreferences(this).audioSource
         val subtitle = when {
             isMicMuted -> "Mikrofon dibisukan • Ketuk untuk membuka aplikasi"
             activeAudioMode == "INTERNAL" -> "Audio Internal Game aktif • Ketuk untuk kontrol"
@@ -693,6 +709,7 @@ open class ScreenRecordingService : Service() {
         } catch (_: Exception) {}
         mediaProjection = null
         currentActiveFilePath = null
+        effectiveAudioMode = null
         isRecording = false
         isPaused = false
         isMicMuted = false

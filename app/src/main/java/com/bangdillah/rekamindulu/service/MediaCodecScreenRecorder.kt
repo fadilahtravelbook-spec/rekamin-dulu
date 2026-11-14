@@ -256,6 +256,7 @@ class MediaCodecScreenRecorder(
                 setInteger(MediaFormat.KEY_BIT_RATE, bitrateBps.coerceIn(1_000_000, 60_000_000))
                 setInteger(MediaFormat.KEY_FRAME_RATE, fps.coerceIn(15, 120))
                 setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 1)
+                setLong(MediaFormat.KEY_REPEAT_PREVIOUS_FRAME_AFTER, 100_000L)
                 if (prefs.fpsStabilizerEnabled && (hwCap == null || hwCap.isCbrSupported)) {
                     setInteger(
                         MediaFormat.KEY_BITRATE_MODE,
@@ -519,6 +520,11 @@ class MediaCodecScreenRecorder(
         stopRequested.set(true)
         isRunning.set(false)
 
+        // Hentikan AudioRecord lebih dulu agar read() yang sedang blocking segera terbuka (unblock)
+        // dan thread capture bisa segera keluar serta mengirim EOS ke audio encoder.
+        try { playbackAudioRecord?.stop() } catch (ignored: Exception) {}
+        try { micAudioRecord?.stop() } catch (ignored: Exception) {}
+
         try {
             videoEncoder?.signalEndOfInputStream()
         } catch (e: Exception) {
@@ -696,6 +702,7 @@ class MediaCodecScreenRecorder(
                 val drainedMic = if (mic != null && mic.recordingState == AudioRecord.RECORDSTATE_RECORDING) {
                     try { mic.read(micShortBuf, 0, micShortBuf.size) } catch (_: Exception) { 0 }
                 } else 0
+                if (stopRequested.get()) break
                 if (drainedPb <= 0 && drainedMic <= 0) {
                     try { Thread.sleep(15) } catch (_: InterruptedException) {}
                 }
@@ -705,6 +712,7 @@ class MediaCodecScreenRecorder(
             val pbRead = if (pb != null && pb.recordingState == AudioRecord.RECORDSTATE_RECORDING) {
                 pb.read(pbShortBuf, 0, pbShortBuf.size)
             } else 0
+            if (stopRequested.get()) break
 
             val micRead = if (mic != null && mic.recordingState == AudioRecord.RECORDSTATE_RECORDING) {
                 val targetSamples = if (pbRead > 0 && pbChannels > 0) {
@@ -714,6 +722,7 @@ class MediaCodecScreenRecorder(
                 }
                 mic.read(micShortBuf, 0, targetSamples.coerceIn(1, micShortBuf.size))
             } else 0
+            if (stopRequested.get()) break
 
             val mixedShorts: ShortArray = when (effectiveAudioMode) {
                 "BOTH" -> mixPcm16Frames(

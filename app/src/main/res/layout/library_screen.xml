@@ -376,7 +376,7 @@
                         android:layout_height="wrap_content"
                         android:layout_marginTop="4dp"
                         android:lineSpacingExtra="2dp"
-                        android:text="• Putar rekaman dengan pemutar video bawaan\n• Potong durasi (trim) bagian awal &amp; akhir video\n• Ekstrak audio rekaman menjadi format suara terpisah\n• Bagikan langsung ke WhatsApp, YouTube, atau sosmed"
+                        android:text="• Putar rekaman dengan pemutar video bawaan\n• Potong durasi (trim) bagian awal &amp; akhir video\n• Ekstrak audio rekaman menjadi format suara terpisah\n• Bagikan atau ekspor klip penting sebelum menghapus aplikasi"
                         android:textColor="@color/textCaption"
                         android:textSize="11sp" />
                 </LinearLayout>

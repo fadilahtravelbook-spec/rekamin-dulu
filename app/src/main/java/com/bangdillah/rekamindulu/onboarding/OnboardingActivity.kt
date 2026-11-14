@@ -43,14 +43,14 @@ class OnboardingActivity : AppCompatActivity() {
         dot3 = findViewById(R.id.dot_3)
 
         btnSkip.setOnClickListener {
-            finishOnboarding(requestPermissions = false)
+            finishOnboarding()
         }
 
         btnAction.setOnClickListener {
             if (currentSlide < 2) {
                 goToSlide(currentSlide + 1)
             } else {
-                finishOnboarding(requestPermissions = true)
+                finishOnboarding()
             }
         }
 
@@ -152,13 +152,10 @@ class OnboardingActivity : AppCompatActivity() {
     }
 
 
-    private fun finishOnboarding(requestPermissions: Boolean) {
+    private fun finishOnboarding() {
         appPreferences.isOnboardingDone = true
         val homeIntent = Intent(this, HomeActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
-            if (requestPermissions) {
-                putExtra("REQUEST_PERMISSIONS_ONBOARDING", true)
-            }
         }
         startActivity(homeIntent)
         finish()

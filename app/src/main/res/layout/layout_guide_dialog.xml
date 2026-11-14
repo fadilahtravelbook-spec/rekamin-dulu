@@ -177,7 +177,7 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="Tekan Tombol 'Start Recording'"
+                    android:text="Tekan Tombol 'Mulai Merekam Layar'"
                     android:textColor="@color/textTitle"
                     android:textSize="13sp"
                     android:textStyle="bold" />
@@ -227,7 +227,7 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="Tarik panel notifikasi atas kapan saja untuk Jeda atau Hentikan &amp; Simpan. Video otomatis tersimpan di Galeri!"
+                    android:text="Tarik panel notifikasi atas kapan saja untuk Jeda atau Berhenti. Video otomatis tersimpan di Galeri!"
                     android:textColor="@color/textBody"
                     android:textSize="12sp" />
             </LinearLayout>
@@ -266,7 +266,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:lineSpacingExtra="3dp"
-                    android:text="Skenario: Anda ingin merekam gameplay Mobile Legends / Free Fire atau membuat video tutorial aplikasi untuk YouTube / TikTok.\n\n1. Buka Rekamin Dulu, pastikan Mikrofon: ON &amp; Audio Game: ON.\n2. Tekan 'Start Recording', lalu setujui tangkap layar.\n3. Langsung buka game Anda dan mainkan seperti biasa.\n4. Saat match selesai, geser bilah notifikasi ke bawah dan ketuk tombol 'Hentikan &amp; Simpan'.\n5. Klip video tersimpan di Galeri dan siap dipotong (Trim) atau dibagikan!"
+                    android:text="Skenario: Anda ingin merekam gameplay Mobile Legends / Free Fire atau membuat video tutorial aplikasi untuk YouTube / TikTok.\n\n1. Buka Rekamin Dulu, pastikan Mikrofon: ON &amp; Audio Game: ON.\n2. Tekan 'Mulai Merekam Layar', lalu setujui tangkap layar.\n3. Langsung buka game Anda dan mainkan seperti biasa.\n4. Saat match selesai, geser bilah notifikasi ke bawah dan ketuk 'Berhenti' (atau tekan 'Selesai' di bola melayang).\n5. Klip video tersimpan di Galeri dan siap dipotong (Trim) atau dibagikan!"
                     android:textColor="@color/textBody"
                     android:textSize="12sp" />
             </LinearLayout>

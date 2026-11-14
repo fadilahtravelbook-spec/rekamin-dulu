@@ -37,11 +37,11 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import com.bangdillah.rekamindulu.about.AboutActivity
 import com.bangdillah.rekamindulu.library.LibraryActivity
-import com.bangdillah.rekamindulu.permission.PermissionDialogActivity
 import com.bangdillah.rekamindulu.service.RecordingEngineOptimizer
 import com.bangdillah.rekamindulu.service.ScreenRecordingService
 import com.bangdillah.rekamindulu.settings.SettingsActivity
 import com.bangdillah.rekamindulu.trim.TrimActivity
+import com.bangdillah.rekamindulu.utils.AppLockHelper
 import com.bangdillah.rekamindulu.utils.AppPreferences
 import com.bangdillah.rekamindulu.utils.DeviceAnalyzer
 import com.bangdillah.rekamindulu.utils.SaveTransitionDialog
@@ -76,8 +76,42 @@ open class MainActivity : AppCompatActivity() {
         const val TAG = "MainActivity"
         const val REQUEST_CODE_PERMISSIONS = 2001
         const val REQUEST_CODE_SCREEN_CAPTURE = 2002
+        const val EXTRA_CLEAR_PENDING_SAVE = "com.bangdillah.rekamindulu.EXTRA_CLEAR_PENDING_SAVE"
         var isSessionUnlocked = false
         var hasPendingSaveDialog = false
+
+        fun consumePendingSaveIfHandled(
+            openedFilePath: String?,
+            lastRecordedPath: String?,
+            forceClear: Boolean = false
+        ): Boolean {
+            if (forceClear || (!openedFilePath.isNullOrEmpty() && openedFilePath == lastRecordedPath)) {
+                hasPendingSaveDialog = false
+                return true
+            }
+            return false
+        }
+
+        /**
+         * Menentukan daftar izin runtime sesuai opsi rekaman yang dipilih pengguna.
+         */
+        fun computeRequiredRuntimePermissions(
+            audioSource: String,
+            facecamMode: String,
+            sdkInt: Int = Build.VERSION.SDK_INT
+        ): Array<String> {
+            val permissions = mutableListOf<String>()
+            if (!audioSource.equals("MUTE", ignoreCase = true)) {
+                permissions.add(Manifest.permission.RECORD_AUDIO)
+            }
+            if (!facecamMode.equals("OFF", ignoreCase = true)) {
+                permissions.add(Manifest.permission.CAMERA)
+            }
+            if (sdkInt >= Build.VERSION_CODES.TIRAMISU) {
+                permissions.add(Manifest.permission.POST_NOTIFICATIONS)
+            }
+            return permissions.toTypedArray()
+        }
     }
 
     protected lateinit var appPreferences: AppPreferences
@@ -281,11 +315,6 @@ open class MainActivity : AppCompatActivity() {
                 }
             }
         })
-
-        if (intent.getBooleanExtra("REQUEST_PERMISSIONS_ONBOARDING", false)) {
-            intent.removeExtra("REQUEST_PERMISSIONS_ONBOARDING")
-            startActivity(Intent(this, PermissionDialogActivity::class.java))
-        }
     }
 
     /**
@@ -294,7 +323,8 @@ open class MainActivity : AppCompatActivity() {
     private fun setupLocalStorageStudioCard() {
         findViewById<ImageView>(R.id.img_cloud_user_avatar)?.setImageResource(R.drawable.ic_storage)
         findViewById<TextView>(R.id.text_cloud_account_name)?.text = "Studio Penyimpanan Lokal"
-        findViewById<TextView>(R.id.text_cloud_account_subtitle)?.text = "📁 Tersimpan aman di galeri perangkat"
+        findViewById<TextView>(R.id.text_cloud_account_subtitle)?.text =
+            "📁 Disimpan di Movies/RekaminDulu • Ekspor sebelum hapus aplikasi"
 
         val btnOpenGallery = findViewById<MaterialButton>(R.id.btn_cloud_auth_action)
         btnOpenGallery?.text = "Buka Galeri"
@@ -495,46 +525,16 @@ open class MainActivity : AppCompatActivity() {
     private var appLockDialog: AlertDialog? = null
 
     private fun checkAppLock() {
-        if (appPreferences.isAppLockEnabled && appPreferences.appLockPin.isNotEmpty() && !isSessionUnlocked) {
-            if (appLockDialog?.isShowing == true) return
-            val input = EditText(this).apply {
-                inputType = InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_VARIATION_PASSWORD
-                hint = "Masukkan PIN (4-6 angka)"
-                maxLines = 1
-                filters = arrayOf(InputFilter.LengthFilter(6))
-                setPadding(48, 36, 48, 36)
-                setTextColor(ContextCompat.getColor(this@MainActivity, R.color.textTitle))
-                setHintTextColor(ContextCompat.getColor(this@MainActivity, R.color.textCaption))
-            }
-
-            val dialog = MaterialAlertDialogBuilder(this)
-                .setTitle("🔒 Kunci Rekamin Dulu")
-                .setMessage("Aplikasi ini dilindungi PIN. Masukkan PIN keamanan untuk melanjutkan:")
-                .setView(input)
-                .setCancelable(false)
-                .setPositiveButton("Buka Kunci", null)
-                .setNegativeButton("Keluar") { _, _ ->
-                    finishAffinity()
-                }
-                .create()
-
-            dialog.setOnShowListener {
-                dialog.getButton(AlertDialog.BUTTON_POSITIVE)?.setOnClickListener {
-                    val entered = input.text.toString().trim()
-                    if (entered == appPreferences.appLockPin) {
-                        isSessionUnlocked = true
-                        dialog.dismiss()
-                        showSnackbar("Kunci aplikasi berhasil dibuka")
-                    } else {
-                        input.error = "PIN salah! Coba lagi."
-                        input.text?.clear()
-                    }
-                }
-            }
-            appLockDialog?.dismiss()
-            appLockDialog = dialog
-            dialog.show()
-        }
+        appLockDialog = AppLockHelper.showPinGateIfNeeded(
+            activity = this,
+            appPreferences = appPreferences,
+            currentDialog = appLockDialog,
+            title = "🔒 Kunci Rekamin Dulu",
+            message = "Aplikasi ini dilindungi PIN. Masukkan PIN keamanan untuk melanjutkan:",
+            negativeButtonLabel = "Keluar",
+            onCancel = { finishAffinity() },
+            onPinVerified = { showSnackbar("Kunci aplikasi berhasil dibuka") }
+        )
     }
 
     override fun onResume() {
@@ -1573,12 +1573,15 @@ open class MainActivity : AppCompatActivity() {
                 textHeroBadge?.text = "🔴 SEDANG MEREKAM AKTIF"
                 textHeroBadge?.setTextColor(ContextCompat.getColor(this, R.color.colorError))
                 btnHeroPause?.text = "⏸️ Jeda"
+                val activeAudioMode = ScreenRecordingService.effectiveAudioMode ?: appPreferences.audioSource
+                val activeMicOn = activeAudioMode == "MIC" || activeAudioMode == "BOTH"
+                val activeGameAudioOn = activeAudioMode == "INTERNAL" || activeAudioMode == "BOTH"
                 val audioDesc = when {
-                    isMicOn && isGameAudioOn && ScreenRecordingService.isMicMuted -> "Audio Game Aktif (Mic Dibisukan)"
-                    isMicOn && isGameAudioOn -> "Mikrofon & Audio Video/Game Aktif"
-                    isMicOn && ScreenRecordingService.isMicMuted -> "Mikrofon Dibisukan"
-                    isMicOn -> "Mikrofon Aktif"
-                    isGameAudioOn -> "Audio Jernih Video/Game Online"
+                    activeMicOn && activeGameAudioOn && ScreenRecordingService.isMicMuted -> "Audio Game Aktif (Mic Dibisukan)"
+                    activeMicOn && activeGameAudioOn -> "Mikrofon & Audio Video/Game Aktif"
+                    activeMicOn && ScreenRecordingService.isMicMuted -> "Mikrofon Dibisukan"
+                    activeMicOn -> "Mikrofon Aktif"
+                    activeGameAudioOn -> "Audio Jernih Video/Game Online"
                     else -> "Mute (Tanpa Suara)"
                 }
                 textHeroInfo?.text = "$resDisplay • ${appPreferences.fps} FPS • ${appPreferences.bitrateMbps} Mbps • $audioDesc"
@@ -1628,17 +1631,11 @@ open class MainActivity : AppCompatActivity() {
      */
     fun getRequiredRuntimePermissions(): Array<String> {
         syncAudioPreferences()
-        val permissions = mutableListOf<String>()
-        if (isMicOn || isGameAudioOn) {
-            permissions.add(Manifest.permission.RECORD_AUDIO)
-        }
-        if (appPreferences.facecamMode != "OFF") {
-            permissions.add(Manifest.permission.CAMERA)
-        }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            permissions.add(Manifest.permission.POST_NOTIFICATIONS)
-        }
-        return permissions.toTypedArray()
+        return computeRequiredRuntimePermissions(
+            audioSource = appPreferences.audioSource,
+            facecamMode = appPreferences.facecamMode,
+            sdkInt = Build.VERSION.SDK_INT
+        )
     }
 
     /**
@@ -1944,7 +1941,7 @@ open class MainActivity : AppCompatActivity() {
 
     private fun showSaveSuccessToast(path: String) {
         val file = File(path)
-        showSnackbar("✓ Rekaman ${file.name} tersimpan ke Galeri", Snackbar.LENGTH_LONG)
+        showSnackbar("✓ Rekaman ${file.name} tersimpan ke Galeri Rekamin Dulu", Snackbar.LENGTH_LONG)
     }
 
     override fun onDestroy() {

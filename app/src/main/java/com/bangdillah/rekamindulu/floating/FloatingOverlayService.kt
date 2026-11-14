@@ -558,8 +558,10 @@ class FloatingOverlayService : Service() {
 
         val gpuLabel = if (prefs.hardwareAccelerationEnabled) " • GPU HW" else ""
         val turboLabel = if (prefs.gamingTurboBoost) " • Turbo CPU" else ""
+        val activeAudioSource = (if (ScreenRecordingService.isRecording) ScreenRecordingService.effectiveAudioMode else null)
+            ?: prefs.audioSource
         val audioModeLabel = resolveAudioSummarySuffix(
-            audioSource = prefs.audioSource,
+            audioSource = activeAudioSource,
             isRecording = ScreenRecordingService.isRecording,
             isMicMuted = ScreenRecordingService.isMicMuted
         )
@@ -638,17 +640,19 @@ class FloatingOverlayService : Service() {
 
     private fun syncMicButtonUi() {
         val prefs = appPreferences ?: AppPreferences(this)
+        val activeAudioSource = (if (ScreenRecordingService.isRecording) ScreenRecordingService.effectiveAudioMode else null)
+            ?: prefs.audioSource
         val isMicActive = if (ScreenRecordingService.isRecording) {
-            !ScreenRecordingService.isMicMuted && (prefs.audioSource == "MIC" || prefs.audioSource == "BOTH")
+            !ScreenRecordingService.isMicMuted && (activeAudioSource == "MIC" || activeAudioSource == "BOTH")
         } else {
-            prefs.audioSource == "MIC" || prefs.audioSource == "BOTH"
+            activeAudioSource == "MIC" || activeAudioSource == "BOTH"
         }
         val btnMic = overlayView?.findViewById<ImageView>(R.id.btn_overlay_mic)
         val labelMic = overlayView?.findViewById<TextView>(R.id.label_overlay_mic)
         val audioStatusText = overlayView?.findViewById<TextView>(R.id.overlay_audio_status_text)
 
         audioStatusText?.text = resolveAudioStatusLabel(
-            audioSource = prefs.audioSource,
+            audioSource = activeAudioSource,
             isRecording = ScreenRecordingService.isRecording,
             isMicMuted = ScreenRecordingService.isMicMuted
         )
@@ -663,7 +667,7 @@ class FloatingOverlayService : Service() {
             btnMic?.setImageResource(R.drawable.ic_mic_off)
             btnMic?.imageTintList = ContextCompat.getColorStateList(this, R.color.colorError)
             btnMic?.backgroundTintList = ContextCompat.getColorStateList(this, R.color.colorErrorContainer)
-            labelMic?.text = if (prefs.audioSource == "INTERNAL" || prefs.audioSource == "MUTE") "No Mic" else "Mic Mute"
+            labelMic?.text = if (activeAudioSource == "INTERNAL" || activeAudioSource == "MUTE") "No Mic" else "Mic Mute"
             labelMic?.setTextColor(ContextCompat.getColor(this, R.color.colorError))
         }
     }
@@ -852,6 +856,9 @@ class FloatingOverlayService : Service() {
                 Toast.makeText(this, "📷 Facecam Kamera Depan Diaktifkan", Toast.LENGTH_SHORT).show()
             } else {
                 prefs.facecamMode = "OFF"
+                sendServiceCommand(Intent(this, ScreenRecordingService::class.java).apply {
+                    action = ScreenRecordingService.ACTION_REFRESH_FOREGROUND_TYPE
+                })
                 Toast.makeText(this, "📷 Facecam Dinonaktifkan", Toast.LENGTH_SHORT).show()
             }
             syncFacecamButtonUi()
@@ -1233,6 +1240,9 @@ class FloatingOverlayService : Service() {
         view.findViewById<ImageView>(R.id.btn_facecam_close)?.setOnClickListener {
             val prefs = appPreferences ?: AppPreferences(this)
             prefs.facecamMode = "OFF"
+            sendServiceCommand(Intent(this, ScreenRecordingService::class.java).apply {
+                action = ScreenRecordingService.ACTION_REFRESH_FOREGROUND_TYPE
+            })
             syncFacecamButtonUi()
             closeFacecamWindowAndCamera()
         }

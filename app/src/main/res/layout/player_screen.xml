@@ -33,12 +33,12 @@
         <!-- Back / Close Button with tactile pill -->
         <com.google.android.material.card.MaterialCardView
             android:id="@+id/card_player_back"
-            android:layout_width="40dp"
-            android:layout_height="40dp"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
             android:layout_alignParentStart="true"
             android:layout_centerVertical="true"
             app:cardBackgroundColor="#26FFFFFF"
-            app:cardCornerRadius="20dp"
+            app:cardCornerRadius="24dp"
             app:cardElevation="0dp"
             app:strokeColor="#33FFFFFF"
             app:strokeWidth="1dp">
@@ -51,7 +51,7 @@
                 android:clickable="true"
                 android:contentDescription="Tutup Pemutar"
                 android:focusable="true"
-                android:padding="10dp"
+                android:padding="13dp"
                 android:src="@drawable/ic_close"
                 app:tint="#FFFFFF" />
         </com.google.android.material.card.MaterialCardView>
@@ -104,26 +104,25 @@
                 android:id="@+id/btn_playback_speed"
                 style="@style/Widget.Material3.Button.TonalButton"
                 android:layout_width="wrap_content"
-                android:layout_height="34dp"
+                android:layout_height="wrap_content"
                 android:layout_marginEnd="8dp"
-                android:minHeight="34dp"
-                android:minWidth="0dp"
-                android:paddingHorizontal="10dp"
-                android:paddingVertical="0dp"
+                android:minHeight="48dp"
+                android:minWidth="48dp"
+                android:paddingHorizontal="12dp"
                 android:text="⚡ 1.0x"
                 android:textColor="#FFFFFF"
                 android:textSize="11.5sp"
                 android:textStyle="bold"
                 app:backgroundTint="#26FFFFFF"
-                app:cornerRadius="17dp"
+                app:cornerRadius="18dp"
                 app:strokeColor="#33FFFFFF"
                 app:strokeWidth="1dp" />
 
             <com.google.android.material.card.MaterialCardView
-                android:layout_width="40dp"
-                android:layout_height="40dp"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
                 app:cardBackgroundColor="#26FFFFFF"
-                app:cardCornerRadius="20dp"
+                app:cardCornerRadius="24dp"
                 app:cardElevation="0dp"
                 app:strokeColor="#33FFFFFF"
                 app:strokeWidth="1dp">
@@ -136,7 +135,7 @@
                     android:clickable="true"
                     android:contentDescription="Bagikan Video"
                     android:focusable="true"
-                    android:padding="10dp"
+                    android:padding="13dp"
                     android:src="@drawable/ic_share"
                     app:tint="#FFFFFF" />
             </com.google.android.material.card.MaterialCardView>
@@ -216,10 +215,10 @@
 
                 <!-- Rewind 10s -->
                 <com.google.android.material.card.MaterialCardView
-                    android:layout_width="44dp"
-                    android:layout_height="44dp"
+                    android:layout_width="48dp"
+                    android:layout_height="48dp"
                     app:cardBackgroundColor="#22FFFFFF"
-                    app:cardCornerRadius="22dp"
+                    app:cardCornerRadius="24dp"
                     app:cardElevation="0dp">
 
                     <ImageView
@@ -230,7 +229,7 @@
                         android:clickable="true"
                         android:contentDescription="Mundur 10 detik"
                         android:focusable="true"
-                        android:padding="11dp"
+                        android:padding="13dp"
                         android:src="@drawable/ic_previous"
                         app:tint="#FFFFFF" />
                 </com.google.android.material.card.MaterialCardView>
@@ -260,10 +259,10 @@
 
                 <!-- Forward 10s -->
                 <com.google.android.material.card.MaterialCardView
-                    android:layout_width="44dp"
-                    android:layout_height="44dp"
+                    android:layout_width="48dp"
+                    android:layout_height="48dp"
                     app:cardBackgroundColor="#22FFFFFF"
-                    app:cardCornerRadius="22dp"
+                    app:cardCornerRadius="24dp"
                     app:cardElevation="0dp">
 
                     <ImageView
@@ -274,7 +273,7 @@
                         android:clickable="true"
                         android:contentDescription="Maju 10 detik"
                         android:focusable="true"
-                        android:padding="11dp"
+                        android:padding="13dp"
                         android:src="@drawable/ic_next"
                         app:tint="#FFFFFF" />
                 </com.google.android.material.card.MaterialCardView>
@@ -299,12 +298,11 @@
                     android:id="@+id/btn_player_trim_shortcut"
                     style="@style/Widget.Material3.Button.TonalButton"
                     android:layout_width="0dp"
-                    android:layout_height="40dp"
+                    android:layout_height="wrap_content"
                     android:layout_marginEnd="4dp"
                     android:layout_weight="1"
-                    android:minHeight="40dp"
+                    android:minHeight="48dp"
                     android:paddingHorizontal="6dp"
-                    android:paddingVertical="0dp"
                     android:text="✂️ Potong"
                     android:textColor="#FFFFFF"
                     android:textSize="11.5sp"
@@ -319,12 +317,11 @@
                     android:id="@+id/btn_player_extract_audio"
                     style="@style/Widget.Material3.Button.TonalButton"
                     android:layout_width="0dp"
-                    android:layout_height="40dp"
+                    android:layout_height="wrap_content"
                     android:layout_marginHorizontal="4dp"
                     android:layout_weight="1.2"
-                    android:minHeight="40dp"
+                    android:minHeight="48dp"
                     android:paddingHorizontal="6dp"
-                    android:paddingVertical="0dp"
                     android:text="🎵 Ekstrak Audio"
                     android:textColor="@color/colorPrimaryLight"
                     android:textSize="11.5sp"
@@ -339,12 +336,11 @@
                     android:id="@+id/btn_player_open_external"
                     style="@style/Widget.Material3.Button.TonalButton"
                     android:layout_width="0dp"
-                    android:layout_height="40dp"
+                    android:layout_height="wrap_content"
                     android:layout_marginStart="4dp"
                     android:layout_weight="0.9"
-                    android:minHeight="40dp"
+                    android:minHeight="48dp"
                     android:paddingHorizontal="6dp"
-                    android:paddingVertical="0dp"
                     android:text="↗️ Buka"
                     android:textColor="#D0D0DC"
                     android:textSize="11.5sp"

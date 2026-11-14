@@ -810,5 +810,164 @@ class RekaminDuluUnitTest {
             tempDir.deleteRecursively()
         }
     }
+
+    @Test
+    fun testEffectiveAudioModeDefaultAndFallbackLabels() {
+        assertEquals(
+            null,
+            com.bangdillah.rekamindulu.service.ScreenRecordingService.effectiveAudioMode
+        )
+        // Simulate Android <10 fallback where INTERNAL requested degrades to MIC
+        assertEquals(
+            "🎙️ Mic Aktif",
+            com.bangdillah.rekamindulu.floating.FloatingOverlayService.resolveAudioStatusLabel(
+                audioSource = "MIC",
+                isRecording = true,
+                isMicMuted = false
+            )
+        )
+        // Simulate missing permission fallback to MUTE
+        assertEquals(
+            "🔇 Audio Mute",
+            com.bangdillah.rekamindulu.floating.FloatingOverlayService.resolveAudioStatusLabel(
+                audioSource = "MUTE",
+                isRecording = true,
+                isMicMuted = false
+            )
+        )
+    }
+
+    @Test
+    fun testLibraryDurationOverOneMinuteFilter() {
+        assertEquals(false, com.bangdillah.rekamindulu.library.LibraryActivity.isDurationOverOneMinute(0L))
+        assertEquals(false, com.bangdillah.rekamindulu.library.LibraryActivity.isDurationOverOneMinute(59_999L))
+        assertEquals(false, com.bangdillah.rekamindulu.library.LibraryActivity.isDurationOverOneMinute(60_000L))
+        assertEquals(true, com.bangdillah.rekamindulu.library.LibraryActivity.isDurationOverOneMinute(60_001L))
+        assertEquals(true, com.bangdillah.rekamindulu.library.LibraryActivity.isDurationOverOneMinute(125_000L))
+    }
+
+    @Test
+    fun testAppLockHelperPinGateAndVerification() {
+        assertEquals(
+            false,
+            com.bangdillah.rekamindulu.utils.AppLockHelper.shouldRequirePin(
+                isAppLockEnabled = false,
+                savedPin = "1234",
+                isSessionUnlocked = false
+            )
+        )
+        assertEquals(
+            false,
+            com.bangdillah.rekamindulu.utils.AppLockHelper.shouldRequirePin(
+                isAppLockEnabled = true,
+                savedPin = "",
+                isSessionUnlocked = false
+            )
+        )
+        assertEquals(
+            true,
+            com.bangdillah.rekamindulu.utils.AppLockHelper.shouldRequirePin(
+                isAppLockEnabled = true,
+                savedPin = "1234",
+                isSessionUnlocked = false
+            )
+        )
+        assertEquals(
+            false,
+            com.bangdillah.rekamindulu.utils.AppLockHelper.shouldRequirePin(
+                isAppLockEnabled = true,
+                savedPin = "1234",
+                isSessionUnlocked = true
+            )
+        )
+        assertEquals(true, com.bangdillah.rekamindulu.utils.AppLockHelper.verifyPin("1234", "1234"))
+        assertEquals(false, com.bangdillah.rekamindulu.utils.AppLockHelper.verifyPin("9999", "1234"))
+    }
+
+    @Test
+    fun testOptionScopedRuntimePermissions() {
+        // Mute + Facecam OFF on Android 12 (API 31): zero runtime permissions needed before MediaProjection
+        val mutePreTiramisu = MainActivity.computeRequiredRuntimePermissions(
+            audioSource = "MUTE",
+            facecamMode = "OFF",
+            sdkInt = android.os.Build.VERSION_CODES.S
+        ).toList()
+        assertEquals(emptyList<String>(), mutePreTiramisu)
+
+        // Mute + Facecam OFF on Android 13 (API 33): only POST_NOTIFICATIONS
+        val muteTiramisu = MainActivity.computeRequiredRuntimePermissions(
+            audioSource = "MUTE",
+            facecamMode = "OFF",
+            sdkInt = android.os.Build.VERSION_CODES.TIRAMISU
+        ).toList()
+        assertEquals(listOf(android.Manifest.permission.POST_NOTIFICATIONS), muteTiramisu)
+
+        // BOTH audio + FRONT facecam on Android 14 (API 34): RECORD_AUDIO, CAMERA, POST_NOTIFICATIONS
+        val fullOptions = MainActivity.computeRequiredRuntimePermissions(
+            audioSource = "BOTH",
+            facecamMode = "FRONT",
+            sdkInt = android.os.Build.VERSION_CODES.UPSIDE_DOWN_CAKE
+        ).toList()
+        assertEquals(
+            listOf(
+                android.Manifest.permission.RECORD_AUDIO,
+                android.Manifest.permission.CAMERA,
+                android.Manifest.permission.POST_NOTIFICATIONS
+            ),
+            fullOptions
+        )
+    }
+
+    @Test
+    fun testSpecAnalysisRecordingGuard() {
+        assertTrue(com.bangdillah.rekamindulu.utils.SpecAnalysisDialog.canModifyPresetsOrBenchmark(isRecording = false))
+        assertEquals(false, com.bangdillah.rekamindulu.utils.SpecAnalysisDialog.canModifyPresetsOrBenchmark(isRecording = true))
+    }
+
+    @Test
+    fun testConsumePendingSaveIfHandled() {
+        MainActivity.hasPendingSaveDialog = true
+        val ignoredOtherFile = MainActivity.consumePendingSaveIfHandled(
+            openedFilePath = "/storage/Movies/RekaminDulu/other.mp4",
+            lastRecordedPath = "/storage/Movies/RekaminDulu/latest.mp4",
+            forceClear = false
+        )
+        assertEquals(false, ignoredOtherFile)
+        assertTrue(MainActivity.hasPendingSaveDialog)
+
+        val clearedSameFile = MainActivity.consumePendingSaveIfHandled(
+            openedFilePath = "/storage/Movies/RekaminDulu/latest.mp4",
+            lastRecordedPath = "/storage/Movies/RekaminDulu/latest.mp4",
+            forceClear = false
+        )
+        assertTrue(clearedSameFile)
+        assertEquals(false, MainActivity.hasPendingSaveDialog)
+
+        MainActivity.hasPendingSaveDialog = true
+        val clearedForced = MainActivity.consumePendingSaveIfHandled(
+            openedFilePath = null,
+            lastRecordedPath = "/storage/Movies/RekaminDulu/latest.mp4",
+            forceClear = true
+        )
+        assertTrue(clearedForced)
+        assertEquals(false, MainActivity.hasPendingSaveDialog)
+    }
+
+    @Test
+    fun testAboutVersionFormatting() {
+        assertEquals(
+            "Versi 1.0 (Pro Release)",
+            com.bangdillah.rekamindulu.about.AboutActivity.formatVersionBadge("1.0")
+        )
+        assertEquals(
+            "Versi 2.4.1 (Pro Release)",
+            com.bangdillah.rekamindulu.about.AboutActivity.formatVersionBadge(" 2.4.1 ")
+        )
+        assertEquals(
+            "Versi 1.0 (Pro Release)",
+            com.bangdillah.rekamindulu.about.AboutActivity.formatVersionBadge("")
+        )
+    }
 }
+
 

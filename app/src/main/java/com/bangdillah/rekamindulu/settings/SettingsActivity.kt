@@ -24,6 +24,7 @@ import com.bangdillah.rekamindulu.R
 import com.bangdillah.rekamindulu.library.LibraryActivity
 import com.bangdillah.rekamindulu.service.RecordingEngineOptimizer
 import com.bangdillah.rekamindulu.service.ScreenRecordingService
+import com.bangdillah.rekamindulu.utils.AppLockHelper
 import com.bangdillah.rekamindulu.utils.AppPreferences
 import com.bangdillah.rekamindulu.utils.SaveTransitionDialog
 import com.bangdillah.rekamindulu.utils.SelectionBottomSheetDialog
@@ -114,47 +115,21 @@ class SettingsActivity : AppCompatActivity() {
     }
 
     private fun checkAppLock() {
-        if (appPreferences.isAppLockEnabled && appPreferences.appLockPin.isNotEmpty() && !HomeActivity.isSessionUnlocked) {
-            val input = EditText(this).apply {
-                inputType = InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_VARIATION_PASSWORD
-                hint = "Masukkan PIN (4-6 angka)"
-                filters = arrayOf(InputFilter.LengthFilter(6))
-                maxLines = 1
-                setPadding(48, 36, 48, 36)
-                setTextColor(ContextCompat.getColor(this@SettingsActivity, R.color.textTitle))
-                setHintTextColor(ContextCompat.getColor(this@SettingsActivity, R.color.textCaption))
-            }
-
-            val dialog = MaterialAlertDialogBuilder(this)
-                .setTitle("🔒 Kunci Pengaturan")
-                .setMessage("Pengaturan dilindungi PIN. Masukkan PIN keamanan untuk mengakses:")
-                .setView(input)
-                .setCancelable(false)
-                .setPositiveButton("Buka Kunci", null)
-                .setNegativeButton("Kembali") { _, _ ->
-                    finish()
-                }
-                .create()
-            appLockDialog = dialog
-
-            dialog.setOnShowListener {
-                dialog.getButton(AlertDialog.BUTTON_POSITIVE)?.setOnClickListener {
-                    val entered = input.text.toString().trim()
-                    if (entered == appPreferences.appLockPin) {
-                        HomeActivity.isSessionUnlocked = true
-                        dialog.dismiss()
-                    } else {
-                        input.error = "PIN salah! Coba lagi."
-                        input.text?.clear()
-                    }
-                }
-            }
-            dialog.show()
-        }
+        appLockDialog = AppLockHelper.showPinGateIfNeeded(
+            activity = this,
+            appPreferences = appPreferences,
+            currentDialog = appLockDialog,
+            title = "🔒 Kunci Pengaturan",
+            message = "Pengaturan dilindungi PIN. Masukkan PIN keamanan untuk mengakses:",
+            negativeButtonLabel = "Kembali",
+            onCancel = { finish() },
+            onUnlocked = { updateUIValues() }
+        )
     }
 
     override fun onResume() {
         super.onResume()
+        checkAppLock()
         updateUIValues()
         updateRecordingIndicator()
 
@@ -510,6 +485,7 @@ class SettingsActivity : AppCompatActivity() {
             textMicTypeVal?.text = when (appPreferences.micType) {
                 "camcorder" -> "Camcorder"
                 "voice_comm" -> "Headset Voice"
+                "voice_recognition" -> "Peredam Bising"
                 "unprocessed" -> "Suara Murni"
                 else -> "Default HP"
             }
@@ -892,6 +868,13 @@ class SettingsActivity : AppCompatActivity() {
                 title = "Kamera / Camcorder",
                 subtitle = "Audio Eksternal Jernih (Stereo/Wide)",
                 badgeLabel = "CAM",
+                isRecommended = false
+            ),
+            SelectionOption(
+                value = "voice_recognition",
+                title = "Peredam Bising (Voice Recognition)",
+                subtitle = "Menonjolkan Suara Vokal & Mengurangi Kebisingan Sekitar",
+                badgeLabel = "NR",
                 isRecommended = false
             ),
             SelectionOption(

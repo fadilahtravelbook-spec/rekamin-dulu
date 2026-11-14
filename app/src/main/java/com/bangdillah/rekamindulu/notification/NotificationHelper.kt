@@ -10,6 +10,7 @@ import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.content.FileProvider
 import com.bangdillah.rekamindulu.HomeActivity
+import com.bangdillah.rekamindulu.MainActivity
 import com.bangdillah.rekamindulu.R
 import com.bangdillah.rekamindulu.library.LibraryActivity
 import com.bangdillah.rekamindulu.player.PlayerActivity
@@ -87,6 +88,7 @@ class NotificationHelper(private val context: Context) {
         // 1. Klik konten -> Buka Player
         val playerIntent = Intent(context, PlayerActivity::class.java).apply {
             putExtra("VIDEO_PATH", file.absolutePath)
+            putExtra(MainActivity.EXTRA_CLEAR_PENDING_SAVE, true)
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
         }
         val pendingPlayer = PendingIntent.getActivity(
@@ -98,6 +100,7 @@ class NotificationHelper(private val context: Context) {
 
         // 2. Aksi Galeri
         val libraryIntent = Intent(context, LibraryActivity::class.java).apply {
+            putExtra(MainActivity.EXTRA_CLEAR_PENDING_SAVE, true)
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
         }
         val pendingLibrary = PendingIntent.getActivity(

@@ -25,9 +25,14 @@ import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import com.bangdillah.rekamindulu.HomeActivity
+import com.bangdillah.rekamindulu.MainActivity
 import com.bangdillah.rekamindulu.R
 import com.bangdillah.rekamindulu.library.LibraryActivity
 import com.bangdillah.rekamindulu.player.PlayerActivity
+import com.bangdillah.rekamindulu.service.ScreenRecordingService
+import com.bangdillah.rekamindulu.utils.AppLockHelper
+import com.bangdillah.rekamindulu.utils.AppPreferences
 import com.bangdillah.rekamindulu.utils.StorageHelper
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import java.io.File
@@ -85,6 +90,10 @@ class TrimActivity : AppCompatActivity() {
     private var btnApplyTrim: Button? = null
     private var layoutNoVideoPlaceholder: View? = null
 
+    private lateinit var appPreferences: AppPreferences
+    private var appLockDialog: AlertDialog? = null
+    private var pendingInitialVideoFile: File? = null
+
     private var currentVideoFile: File? = null
     private var tempPickedFile: File? = null
     @Volatile
@@ -116,7 +125,8 @@ class TrimActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        com.bangdillah.rekamindulu.utils.AppPreferences(this).applyTheme()
+        appPreferences = AppPreferences(this)
+        appPreferences.applyTheme()
         setContentView(R.layout.trim_screen)
 
         supportActionBar?.hide()
@@ -128,13 +138,53 @@ class TrimActivity : AppCompatActivity() {
         if (!videoPath.isNullOrEmpty()) {
             val file = File(videoPath)
             if (file.exists()) {
-                loadVideoFile(file)
+                MainActivity.consumePendingSaveIfHandled(
+                    openedFilePath = file.absolutePath,
+                    lastRecordedPath = ScreenRecordingService.lastRecordedFilePath
+                )
+                pendingInitialVideoFile = file
             } else {
                 showEmptyVideoPlaceholder(true)
             }
         } else {
             showEmptyVideoPlaceholder(true)
         }
+        checkAppLock()
+    }
+
+    private fun checkAppLock() {
+        appLockDialog = AppLockHelper.showPinGateIfNeeded(
+            activity = this,
+            appPreferences = appPreferences,
+            currentDialog = appLockDialog,
+            title = "🔒 Kunci Pemotong Video",
+            message = "Alat potong video dilindungi PIN. Masukkan PIN keamanan untuk melanjutkan:",
+            negativeButtonLabel = "Kembali",
+            onCancel = { finish() },
+            onUnlocked = {
+                val pending = pendingInitialVideoFile
+                if (pending != null) {
+                    pendingInitialVideoFile = null
+                    loadVideoFile(pending)
+                }
+            }
+        )
+    }
+
+    override fun onResume() {
+        super.onResume()
+        if (AppLockHelper.shouldRequirePin(
+                appPreferences.isAppLockEnabled,
+                appPreferences.appLockPin,
+                HomeActivity.isSessionUnlocked
+            ) && videoView?.isPlaying == true
+        ) {
+            videoView?.pause()
+            handler.removeCallbacks(checkTrimPlaybackRunnable)
+            btnPreviewPlay?.setImageResource(R.drawable.ic_play_arrow)
+            btnPreviewPlay?.visibility = View.VISIBLE
+        }
+        checkAppLock()
     }
 
     private fun showEmptyVideoPlaceholder(show: Boolean) {
@@ -403,7 +453,7 @@ class TrimActivity : AppCompatActivity() {
                         MaterialAlertDialogBuilder(this@TrimActivity)
                             .setIcon(R.drawable.ic_check_circle)
                             .setTitle("Pemotongan Berhasil! 🎉")
-                            .setMessage("Klip video baru telah disimpan di galeri ponsel:\n${outputFile.name}")
+                            .setMessage("Klip video baru telah disimpan di Galeri Rekamin Dulu (Movies/RekaminDulu):\n${outputFile.name}")
                             .setPositiveButton("Putar Video") { _, _ ->
                                 val intent = Intent(this@TrimActivity, PlayerActivity::class.java).apply {
                                     putExtra("VIDEO_PATH", outputFile.absolutePath)
@@ -505,6 +555,8 @@ class TrimActivity : AppCompatActivity() {
     override fun onDestroy() {
         super.onDestroy()
         handler.removeCallbacksAndMessages(null)
+        try { appLockDialog?.dismiss() } catch (ignored: Exception) {}
+        appLockDialog = null
         videoView?.stopPlayback()
         if (isTrimming) {
             deleteTempAfterTrim = true
