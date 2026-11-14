@@ -85,12 +85,24 @@ class LibraryActivity : AppCompatActivity() {
         override fun onReceive(context: Context?, intent: Intent?) {
             when (intent?.action) {
                 ScreenRecordingService.ACTION_RECORDING_STOPPED -> {
-                    MainActivity.hasPendingSaveDialog = false
                     val path = intent.getStringExtra(ScreenRecordingService.EXTRA_FILE_PATH)
                         ?: ScreenRecordingService.lastRecordedFilePath
+                    val isValidFile = !path.isNullOrEmpty() && File(path).exists() && File(path).length() > 10240
                     updateRecordingIndicator()
+                    if (AppLockHelper.shouldRequirePin(
+                            appPreferences.isAppLockEnabled,
+                            appPreferences.appLockPin,
+                            HomeActivity.isSessionUnlocked
+                        )
+                    ) {
+                        if (isValidFile) {
+                            MainActivity.hasPendingSaveDialog = true
+                        }
+                        return
+                    }
+                    MainActivity.hasPendingSaveDialog = false
                     loadVideoFiles()
-                    if (!path.isNullOrEmpty() && File(path).exists() && File(path).length() > 10240) {
+                    if (isValidFile && path != null) {
                         SaveTransitionDialog.show(this@LibraryActivity, path) {
                             loadVideoFiles()
                         }
@@ -159,18 +171,47 @@ class LibraryActivity : AppCompatActivity() {
             message = "Galeri rekaman dilindungi PIN. Masukkan PIN keamanan untuk mengakses:",
             negativeButtonLabel = "Kembali",
             onCancel = { finish() },
-            onUnlocked = { loadVideoFiles() }
+            onPinVerified = {
+                val fromNotification = intent.getBooleanExtra(MainActivity.EXTRA_CLEAR_PENDING_SAVE, false)
+                if (!fromNotification && MainActivity.shouldShowSaveDialog(
+                        hasPendingSave = MainActivity.hasPendingSaveDialog,
+                        isAppLockEnabled = appPreferences.isAppLockEnabled,
+                        savedPin = appPreferences.appLockPin,
+                        isSessionUnlocked = HomeActivity.isSessionUnlocked
+                    )
+                ) {
+                    MainActivity.hasPendingSaveDialog = false
+                    val path = ScreenRecordingService.lastRecordedFilePath
+                    if (!path.isNullOrEmpty() && File(path).exists() && File(path).length() > 10240) {
+                        SaveTransitionDialog.show(this, path) {
+                            loadVideoFiles()
+                        }
+                    }
+                }
+            },
+            onUnlocked = {
+                MainActivity.consumePendingSaveIfHandled(
+                    openedFilePath = null,
+                    lastRecordedPath = ScreenRecordingService.lastRecordedFilePath,
+                    forceClear = true
+                )
+                loadVideoFiles()
+            }
         )
     }
 
     override fun onResume() {
         super.onResume()
-        MainActivity.consumePendingSaveIfHandled(
-            openedFilePath = null,
-            lastRecordedPath = ScreenRecordingService.lastRecordedFilePath,
-            forceClear = true
-        )
         findViewById<BottomNavigationView>(R.id.bottom_navigation_library)?.selectedItemId = R.id.nav_library
+        if (AppLockHelper.shouldRequirePin(
+                appPreferences.isAppLockEnabled,
+                appPreferences.appLockPin,
+                HomeActivity.isSessionUnlocked
+            )
+        ) {
+            findViewById<RecyclerView>(R.id.library_recycler_view)?.visibility = View.INVISIBLE
+            findViewById<View>(R.id.empty_state)?.visibility = View.GONE
+        }
         checkAppLock()
         updateRecordingIndicator()
 

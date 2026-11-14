@@ -92,6 +92,19 @@ open class MainActivity : AppCompatActivity() {
             return false
         }
 
+        fun shouldShowSaveDialog(
+            hasPendingSave: Boolean,
+            isAppLockEnabled: Boolean,
+            savedPin: String,
+            isSessionUnlocked: Boolean
+        ): Boolean {
+            return hasPendingSave && !AppLockHelper.shouldRequirePin(
+                isAppLockEnabled = isAppLockEnabled,
+                savedPin = savedPin,
+                isSessionUnlocked = isSessionUnlocked
+            )
+        }
+
         /**
          * Menentukan daftar izin runtime sesuai opsi rekaman yang dipilih pengguna.
          */
@@ -246,13 +259,27 @@ open class MainActivity : AppCompatActivity() {
         override fun onReceive(context: Context?, intent: Intent?) {
             when (intent?.action) {
                 ScreenRecordingService.ACTION_RECORDING_STOPPED -> {
-                    hasPendingSaveDialog = false
                     val path = intent.getStringExtra(ScreenRecordingService.EXTRA_FILE_PATH)
                         ?: ScreenRecordingService.lastRecordedFilePath
+                    val isValidFile = !path.isNullOrEmpty() && File(path).exists() && File(path).length() > 10240
                     updateRecordingBanner()
                     updateLibraryStats()
                     updateHomeRecordingsList()
-                    if (!path.isNullOrEmpty() && File(path).exists() && File(path).length() > 10240) {
+
+                    if (AppLockHelper.shouldRequirePin(
+                            appPreferences.isAppLockEnabled,
+                            appPreferences.appLockPin,
+                            HomeActivity.isSessionUnlocked
+                        )
+                    ) {
+                        if (isValidFile) {
+                            hasPendingSaveDialog = true
+                        }
+                        return
+                    }
+
+                    hasPendingSaveDialog = false
+                    if (isValidFile && path != null) {
                         showSaveSuccessToast(path)
                         SaveTransitionDialog.show(this@MainActivity, path) {
                             updateLibraryStats()
@@ -533,8 +560,34 @@ open class MainActivity : AppCompatActivity() {
             message = "Aplikasi ini dilindungi PIN. Masukkan PIN keamanan untuk melanjutkan:",
             negativeButtonLabel = "Keluar",
             onCancel = { finishAffinity() },
-            onPinVerified = { showSnackbar("Kunci aplikasi berhasil dibuka") }
+            onPinVerified = {
+                showSnackbar("Kunci aplikasi berhasil dibuka")
+                updateLibraryStats()
+                updateHomeRecordingsList()
+                maybeShowPendingSaveDialog()
+            }
         )
+    }
+
+    private fun maybeShowPendingSaveDialog() {
+        if (!shouldShowSaveDialog(
+                hasPendingSave = hasPendingSaveDialog,
+                isAppLockEnabled = appPreferences.isAppLockEnabled,
+                savedPin = appPreferences.appLockPin,
+                isSessionUnlocked = HomeActivity.isSessionUnlocked
+            )
+        ) {
+            return
+        }
+        hasPendingSaveDialog = false
+        val path = ScreenRecordingService.lastRecordedFilePath
+        if (!path.isNullOrEmpty() && File(path).exists() && File(path).length() > 10240) {
+            showSaveSuccessToast(path)
+            SaveTransitionDialog.show(this, path) {
+                updateLibraryStats()
+                updateHomeRecordingsList()
+            }
+        }
     }
 
     override fun onResume() {
@@ -549,17 +602,7 @@ open class MainActivity : AppCompatActivity() {
         updateRecordingBanner()
         updateHomeRecordingsList()
 
-        if (hasPendingSaveDialog) {
-            hasPendingSaveDialog = false
-            val path = ScreenRecordingService.lastRecordedFilePath
-            if (!path.isNullOrEmpty() && File(path).exists() && File(path).length() > 10240) {
-                showSaveSuccessToast(path)
-                SaveTransitionDialog.show(this, path) {
-                    updateLibraryStats()
-                    updateHomeRecordingsList()
-                }
-            }
-        }
+        maybeShowPendingSaveDialog()
 
         val filter = IntentFilter().apply {
             addAction(ScreenRecordingService.ACTION_RECORDING_STOPPED)
@@ -1339,6 +1382,16 @@ open class MainActivity : AppCompatActivity() {
 
     private fun updateHomeRecordingsList() {
         if (!::homeRecordingsAdapter.isInitialized) return
+        if (AppLockHelper.shouldRequirePin(
+                appPreferences.isAppLockEnabled,
+                appPreferences.appLockPin,
+                HomeActivity.isSessionUnlocked
+            )
+        ) {
+            findViewById<RecyclerView>(R.id.recycler_home_recordings)?.visibility = View.GONE
+            findViewById<View>(R.id.home_recordings_empty)?.visibility = View.GONE
+            return
+        }
         lifecycleScope.launch(Dispatchers.IO) {
             val allFiles = StorageHelper.getAllVideoFiles(this@MainActivity)
             withContext(Dispatchers.Main) {

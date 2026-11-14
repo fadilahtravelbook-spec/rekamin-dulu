@@ -72,6 +72,7 @@ class TrimActivity : AppCompatActivity() {
     }
 
     private val pickVideoLauncher = registerForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+        AppLockHelper.clearBackgroundLockSuppression()
         if (uri != null) {
             handlePickedUri(uri)
         }
@@ -138,10 +139,6 @@ class TrimActivity : AppCompatActivity() {
         if (!videoPath.isNullOrEmpty()) {
             val file = File(videoPath)
             if (file.exists()) {
-                MainActivity.consumePendingSaveIfHandled(
-                    openedFilePath = file.absolutePath,
-                    lastRecordedPath = ScreenRecordingService.lastRecordedFilePath
-                )
                 pendingInitialVideoFile = file
             } else {
                 showEmptyVideoPlaceholder(true)
@@ -165,7 +162,13 @@ class TrimActivity : AppCompatActivity() {
                 val pending = pendingInitialVideoFile
                 if (pending != null) {
                     pendingInitialVideoFile = null
+                    MainActivity.consumePendingSaveIfHandled(
+                        openedFilePath = pending.absolutePath,
+                        lastRecordedPath = ScreenRecordingService.lastRecordedFilePath
+                    )
                     loadVideoFile(pending)
+                } else if (currentVideoFile != null) {
+                    textSelectedFileName?.text = currentVideoFile?.name
                 }
             }
         )
@@ -177,12 +180,15 @@ class TrimActivity : AppCompatActivity() {
                 appPreferences.isAppLockEnabled,
                 appPreferences.appLockPin,
                 HomeActivity.isSessionUnlocked
-            ) && videoView?.isPlaying == true
+            )
         ) {
-            videoView?.pause()
-            handler.removeCallbacks(checkTrimPlaybackRunnable)
-            btnPreviewPlay?.setImageResource(R.drawable.ic_play_arrow)
-            btnPreviewPlay?.visibility = View.VISIBLE
+            textSelectedFileName?.text = "Video Terkunci 🔒"
+            if (videoView?.isPlaying == true) {
+                videoView?.pause()
+                handler.removeCallbacks(checkTrimPlaybackRunnable)
+                btnPreviewPlay?.setImageResource(R.drawable.ic_play_arrow)
+                btnPreviewPlay?.visibility = View.VISIBLE
+            }
         }
         checkAppLock()
     }
@@ -216,15 +222,21 @@ class TrimActivity : AppCompatActivity() {
         }
 
         findViewById<Button>(R.id.btn_browse)?.setOnClickListener {
+            AppLockHelper.suppressNextBackgroundLock()
             try {
                 pickVideoLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.VideoOnly))
             } catch (e: Exception) {
-                val intent = Intent(Intent.ACTION_GET_CONTENT).apply {
-                    type = "video/*"
-                    addCategory(Intent.CATEGORY_OPENABLE)
+                try {
+                    val intent = Intent(Intent.ACTION_GET_CONTENT).apply {
+                        type = "video/*"
+                        addCategory(Intent.CATEGORY_OPENABLE)
+                    }
+                    @Suppress("DEPRECATION")
+                    startActivityForResult(Intent.createChooser(intent, "Pilih Video yang Akan Dipotong"), REQUEST_CODE_PICK_VIDEO)
+                } catch (inner: Exception) {
+                    AppLockHelper.clearBackgroundLockSuppression()
+                    Toast.makeText(this, "Tidak dapat membuka pemilih video", Toast.LENGTH_SHORT).show()
                 }
-                @Suppress("DEPRECATION")
-                startActivityForResult(Intent.createChooser(intent, "Pilih Video yang Akan Dipotong"), REQUEST_CODE_PICK_VIDEO)
             }
         }
 
@@ -479,9 +491,12 @@ class TrimActivity : AppCompatActivity() {
     @Deprecated("Deprecated in Java")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
-        if (requestCode == REQUEST_CODE_PICK_VIDEO && resultCode == Activity.RESULT_OK && data != null) {
-            val uri = data.data ?: return
-            handlePickedUri(uri)
+        if (requestCode == REQUEST_CODE_PICK_VIDEO) {
+            AppLockHelper.clearBackgroundLockSuppression()
+            if (resultCode == Activity.RESULT_OK && data != null) {
+                val uri = data.data ?: return
+                handlePickedUri(uri)
+            }
         }
     }
 

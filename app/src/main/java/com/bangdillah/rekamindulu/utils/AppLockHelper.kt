@@ -7,13 +7,69 @@ import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import com.bangdillah.rekamindulu.HomeActivity
+import com.bangdillah.rekamindulu.MainActivity
 import com.bangdillah.rekamindulu.R
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
+
+/**
+ * Melacak transisi foreground/background aplikasi agar sesi PIN otomatis terkunci kembali
+ * saat pengguna meninggalkan aplikasi (Home/Recents/mati layar), namun tidak terpicu oleh
+ * perpindahan antar-Activity internal atau perubahan konfigurasi (rotasi layar).
+ */
+class AppLockSessionTracker(
+    private val onLockSession: () -> Unit
+) {
+    var startedActivityCount: Int = 0
+        private set
+
+    var suppressNextBackgroundLock: Boolean = false
+        private set
+
+    fun suppressNextBackground() {
+        suppressNextBackgroundLock = true
+    }
+
+    fun clearBackgroundSuppression() {
+        suppressNextBackgroundLock = false
+    }
+
+    fun onActivityStarted() {
+        startedActivityCount++
+        suppressNextBackgroundLock = false
+    }
+
+    fun onActivityStopped(isChangingConfigurations: Boolean) {
+        startedActivityCount = (startedActivityCount - 1).coerceAtLeast(0)
+        if (startedActivityCount == 0 && !isChangingConfigurations) {
+            if (suppressNextBackgroundLock) {
+                suppressNextBackgroundLock = false
+            } else {
+                onLockSession()
+            }
+        }
+    }
+}
 
 /**
  * Pengelola gerbang PIN keamanan untuk melindungi layar utama, galeri, pemutar, pemotong video, dan pengaturan.
  */
 object AppLockHelper {
+
+    val sessionTracker = AppLockSessionTracker {
+        MainActivity.isSessionUnlocked = false
+    }
+
+    fun lockSession() {
+        MainActivity.isSessionUnlocked = false
+    }
+
+    fun suppressNextBackgroundLock() {
+        sessionTracker.suppressNextBackground()
+    }
+
+    fun clearBackgroundLockSuppression() {
+        sessionTracker.clearBackgroundSuppression()
+    }
 
     fun shouldRequirePin(
         isAppLockEnabled: Boolean,

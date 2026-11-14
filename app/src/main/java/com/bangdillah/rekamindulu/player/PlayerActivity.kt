@@ -34,6 +34,16 @@ import java.util.Locale
 
 class PlayerActivity : AppCompatActivity() {
 
+    companion object {
+        fun canLoadVideoDirectly(
+            isAppLockEnabled: Boolean,
+            savedPin: String,
+            isSessionUnlocked: Boolean
+        ): Boolean {
+            return !AppLockHelper.shouldRequirePin(isAppLockEnabled, savedPin, isSessionUnlocked)
+        }
+    }
+
     private var videoView: VideoView? = null
     private var playPauseBtn: ImageView? = null
     private var seekBar: SeekBar? = null
@@ -45,6 +55,8 @@ class PlayerActivity : AppCompatActivity() {
     private var btnSpeed: Button? = null
 
     private var currentFile: File? = null
+    private var pendingVideoFile: File? = null
+    private var pendingResetPlayback = false
     private var currentMediaPlayer: MediaPlayer? = null
     private var currentSpeedIndex = 2 // default 1.0x
     private val speedLabels = arrayOf("0.5x", "0.75x", "1.0x (Normal)", "1.25x", "1.5x", "2.0x")
@@ -139,13 +151,17 @@ class PlayerActivity : AppCompatActivity() {
             finish()
             return
         }
-        currentFile = file
-        MainActivity.consumePendingSaveIfHandled(
-            openedFilePath = file.absolutePath,
-            lastRecordedPath = ScreenRecordingService.lastRecordedFilePath,
-            forceClear = intent.getBooleanExtra(MainActivity.EXTRA_CLEAR_PENDING_SAVE, false)
-        )
-        titleText?.text = file.nameWithoutExtension.replace("_", " ")
+
+        pendingVideoFile = file
+        pendingResetPlayback = false
+        if (!canLoadVideoDirectly(
+                isAppLockEnabled = appPreferences.isAppLockEnabled,
+                savedPin = appPreferences.appLockPin,
+                isSessionUnlocked = com.bangdillah.rekamindulu.HomeActivity.isSessionUnlocked
+            )
+        ) {
+            titleText?.text = "Video Terkunci 🔒"
+        }
 
         setupListeners()
         checkAppLock()
@@ -160,19 +176,18 @@ class PlayerActivity : AppCompatActivity() {
             Toast.makeText(this, "File video tidak ditemukan di penyimpanan", Toast.LENGTH_SHORT).show()
             return
         }
-        MainActivity.consumePendingSaveIfHandled(
-            openedFilePath = newFile.absolutePath,
-            lastRecordedPath = ScreenRecordingService.lastRecordedFilePath,
-            forceClear = intent.getBooleanExtra(MainActivity.EXTRA_CLEAR_PENDING_SAVE, false)
-        )
-        handler.removeCallbacks(updateSeekRunnable)
-        handler.removeCallbacks(hideControlsRunnable)
-        videoView?.stopPlayback()
-        isVideoLoaded = false
-        restoredPosition = 0
-        restoredWasPlaying = true
-        currentFile = newFile
-        titleText?.text = newFile.nameWithoutExtension.replace("_", " ")
+
+        pendingVideoFile = newFile
+        pendingResetPlayback = true
+        if (!canLoadVideoDirectly(
+                isAppLockEnabled = appPreferences.isAppLockEnabled,
+                savedPin = appPreferences.appLockPin,
+                isSessionUnlocked = com.bangdillah.rekamindulu.HomeActivity.isSessionUnlocked
+            )
+        ) {
+            pausePlaybackIfRunning()
+            titleText?.text = "Video Terkunci 🔒"
+        }
         checkAppLock()
     }
 
@@ -185,28 +200,64 @@ class PlayerActivity : AppCompatActivity() {
             message = "Pemutar video dilindungi PIN. Masukkan PIN keamanan untuk memutar video:",
             negativeButtonLabel = "Kembali",
             onCancel = { finish() },
-            onUnlocked = {
-                val targetFile = currentFile
-                if (targetFile != null && !isVideoLoaded) {
-                    isVideoLoaded = true
-                    loadAndPlayVideo(targetFile)
-                }
-            }
+            onUnlocked = { openVideoAfterUnlock() }
         )
+    }
+
+    private fun openVideoAfterUnlock() {
+        val targetFile = pendingVideoFile ?: currentFile ?: return
+        val resetPlayback = pendingResetPlayback
+        val isSameLoadedFile = currentFile?.absolutePath == targetFile.absolutePath &&
+            isVideoLoaded &&
+            !resetPlayback
+
+        pendingVideoFile = null
+        pendingResetPlayback = false
+
+        MainActivity.consumePendingSaveIfHandled(
+            openedFilePath = targetFile.absolutePath,
+            lastRecordedPath = ScreenRecordingService.lastRecordedFilePath,
+            forceClear = intent.getBooleanExtra(MainActivity.EXTRA_CLEAR_PENDING_SAVE, false)
+        )
+
+        if (isSameLoadedFile) {
+            titleText?.text = targetFile.nameWithoutExtension.replace("_", " ")
+            return
+        }
+
+        handler.removeCallbacks(updateSeekRunnable)
+        handler.removeCallbacks(hideControlsRunnable)
+        videoView?.stopPlayback()
+        currentMediaPlayer = null
+        if (resetPlayback) {
+            restoredPosition = 0
+            restoredWasPlaying = true
+        }
+        currentFile = targetFile
+        titleText?.text = targetFile.nameWithoutExtension.replace("_", " ")
+        isVideoLoaded = true
+        loadAndPlayVideo(targetFile)
+    }
+
+    private fun pausePlaybackIfRunning() {
+        if (videoView?.isPlaying == true) {
+            videoView?.pause()
+            playPauseBtn?.setImageResource(R.drawable.ic_play_arrow)
+        }
+        handler.removeCallbacks(updateSeekRunnable)
+        handler.removeCallbacks(hideControlsRunnable)
     }
 
     override fun onResume() {
         super.onResume()
-        if (AppLockHelper.shouldRequirePin(
-                appPreferences.isAppLockEnabled,
-                appPreferences.appLockPin,
-                com.bangdillah.rekamindulu.HomeActivity.isSessionUnlocked
-            ) && videoView?.isPlaying == true
+        if (!canLoadVideoDirectly(
+                isAppLockEnabled = appPreferences.isAppLockEnabled,
+                savedPin = appPreferences.appLockPin,
+                isSessionUnlocked = com.bangdillah.rekamindulu.HomeActivity.isSessionUnlocked
+            )
         ) {
-            videoView?.pause()
-            playPauseBtn?.setImageResource(R.drawable.ic_play_arrow)
-            handler.removeCallbacks(updateSeekRunnable)
-            handler.removeCallbacks(hideControlsRunnable)
+            pausePlaybackIfRunning()
+            titleText?.text = "Video Terkunci 🔒"
         }
         checkAppLock()
     }

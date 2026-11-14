@@ -968,6 +968,93 @@ class RekaminDuluUnitTest {
             com.bangdillah.rekamindulu.about.AboutActivity.formatVersionBadge("")
         )
     }
+
+    @Test
+    fun testShouldShowSaveDialogRespectsPinLock() {
+        assertEquals(
+            false,
+            MainActivity.shouldShowSaveDialog(
+                hasPendingSave = true,
+                isAppLockEnabled = true,
+                savedPin = "1234",
+                isSessionUnlocked = false
+            )
+        )
+        assertTrue(
+            MainActivity.shouldShowSaveDialog(
+                hasPendingSave = true,
+                isAppLockEnabled = true,
+                savedPin = "1234",
+                isSessionUnlocked = true
+            )
+        )
+        assertEquals(
+            false,
+            MainActivity.shouldShowSaveDialog(
+                hasPendingSave = false,
+                isAppLockEnabled = false,
+                savedPin = "",
+                isSessionUnlocked = false
+            )
+        )
+    }
+
+    @Test
+    fun testPlayerCanLoadVideoDirectlyRespectsPinLock() {
+        assertEquals(
+            false,
+            com.bangdillah.rekamindulu.player.PlayerActivity.canLoadVideoDirectly(
+                isAppLockEnabled = true,
+                savedPin = "5678",
+                isSessionUnlocked = false
+            )
+        )
+        assertTrue(
+            com.bangdillah.rekamindulu.player.PlayerActivity.canLoadVideoDirectly(
+                isAppLockEnabled = true,
+                savedPin = "5678",
+                isSessionUnlocked = true
+            )
+        )
+    }
+
+    @Test
+    fun testAppLockSessionTrackerBackgroundRelock() {
+        var sessionUnlocked = true
+        val tracker = com.bangdillah.rekamindulu.utils.AppLockSessionTracker {
+            sessionUnlocked = false
+        }
+
+        // 1. Inter-activity transition (MainActivity -> LibraryActivity) must keep session unlocked
+        tracker.onActivityStarted() // MainActivity started (count=1)
+        tracker.onActivityStarted() // LibraryActivity started (count=2)
+        tracker.onActivityStopped(isChangingConfigurations = false) // MainActivity stopped (count=1)
+        assertTrue(sessionUnlocked)
+        assertEquals(1, tracker.startedActivityCount)
+
+        // 2. Configuration change (rotation) on last activity must keep session unlocked
+        tracker.onActivityStopped(isChangingConfigurations = true) // count=0, rotating
+        assertTrue(sessionUnlocked)
+        tracker.onActivityStarted() // recreated activity started (count=1)
+        assertTrue(sessionUnlocked)
+
+        // 3. Single-use suppression for system picker (e.g. Photo Picker) keeps session unlocked once
+        tracker.suppressNextBackground()
+        tracker.onActivityStopped(isChangingConfigurations = false) // count=0, picker active
+        assertTrue(sessionUnlocked)
+        assertEquals(false, tracker.suppressNextBackgroundLock)
+        tracker.onActivityStarted() // back to app (count=1)
+        assertTrue(sessionUnlocked)
+
+        // 4. Subsequent backgrounding (Home / Recents) must lock session immediately
+        tracker.onActivityStopped(isChangingConfigurations = false) // count=0, left app
+        assertEquals(false, sessionUnlocked)
+        assertEquals(0, tracker.startedActivityCount)
+
+        // 5. Re-entering after unlocking and pressing Home again locks again
+        sessionUnlocked = true
+        tracker.onActivityStarted() // count=1
+        tracker.onActivityStopped(isChangingConfigurations = false) // count=0
+        assertEquals(false, sessionUnlocked)
+    }
 }
-
-

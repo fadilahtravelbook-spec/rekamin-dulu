@@ -84,12 +84,24 @@ class SettingsActivity : AppCompatActivity() {
         override fun onReceive(context: Context?, intent: Intent?) {
             when (intent?.action) {
                 ScreenRecordingService.ACTION_RECORDING_STOPPED -> {
-                    MainActivity.hasPendingSaveDialog = false
                     val path = intent.getStringExtra(ScreenRecordingService.EXTRA_FILE_PATH)
                         ?: ScreenRecordingService.lastRecordedFilePath
+                    val isValidFile = !path.isNullOrEmpty() && File(path).exists() && File(path).length() > 10240
                     updateUIValues()
                     updateRecordingIndicator()
-                    if (!path.isNullOrEmpty() && File(path).exists() && File(path).length() > 10240) {
+                    if (AppLockHelper.shouldRequirePin(
+                            appPreferences.isAppLockEnabled,
+                            appPreferences.appLockPin,
+                            HomeActivity.isSessionUnlocked
+                        )
+                    ) {
+                        if (isValidFile) {
+                            MainActivity.hasPendingSaveDialog = true
+                        }
+                        return
+                    }
+                    MainActivity.hasPendingSaveDialog = false
+                    if (isValidFile && path != null) {
                         SaveTransitionDialog.show(this@SettingsActivity, path)
                     }
                 }
@@ -123,6 +135,21 @@ class SettingsActivity : AppCompatActivity() {
             message = "Pengaturan dilindungi PIN. Masukkan PIN keamanan untuk mengakses:",
             negativeButtonLabel = "Kembali",
             onCancel = { finish() },
+            onPinVerified = {
+                if (MainActivity.shouldShowSaveDialog(
+                        hasPendingSave = MainActivity.hasPendingSaveDialog,
+                        isAppLockEnabled = appPreferences.isAppLockEnabled,
+                        savedPin = appPreferences.appLockPin,
+                        isSessionUnlocked = HomeActivity.isSessionUnlocked
+                    )
+                ) {
+                    MainActivity.hasPendingSaveDialog = false
+                    val path = ScreenRecordingService.lastRecordedFilePath
+                    if (!path.isNullOrEmpty() && File(path).exists() && File(path).length() > 10240) {
+                        SaveTransitionDialog.show(this, path)
+                    }
+                }
+            },
             onUnlocked = { updateUIValues() }
         )
     }
@@ -336,10 +363,12 @@ class SettingsActivity : AppCompatActivity() {
                     }
                 } else {
                     appPreferences.isAppLockEnabled = true
+                    HomeActivity.isSessionUnlocked = true
                     updateUIValues(skipAppLockSwitch = true)
                 }
             } else {
                 appPreferences.isAppLockEnabled = false
+                HomeActivity.isSessionUnlocked = false
                 updateUIValues(skipAppLockSwitch = true)
             }
         }
