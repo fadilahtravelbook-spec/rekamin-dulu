@@ -120,8 +120,8 @@ class SettingsActivity : AppCompatActivity() {
         setContentView(R.layout.settings_screen)
         supportActionBar?.hide()
 
-        checkAppLock()
         initViews()
+        checkAppLock()
         setupListeners()
         setupBottomNavigation()
     }

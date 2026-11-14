@@ -1057,4 +1057,51 @@ class RekaminDuluUnitTest {
         tracker.onActivityStopped(isChangingConfigurations = false) // count=0
         assertEquals(false, sessionUnlocked)
     }
+
+    @Test
+    fun testAppLockHelperSingletonBackgroundRelockSyncsHomeAndPlayerGuards() {
+        try {
+            MainActivity.isSessionUnlocked = true
+            assertTrue(HomeActivity.isSessionUnlocked)
+            assertEquals(
+                false,
+                com.bangdillah.rekamindulu.utils.AppLockHelper.shouldRequirePin(
+                    isAppLockEnabled = true,
+                    savedPin = "1234",
+                    isSessionUnlocked = HomeActivity.isSessionUnlocked
+                )
+            )
+            assertTrue(
+                com.bangdillah.rekamindulu.player.PlayerActivity.canLoadVideoDirectly(
+                    isAppLockEnabled = true,
+                    savedPin = "1234",
+                    isSessionUnlocked = HomeActivity.isSessionUnlocked
+                )
+            )
+
+            // Simulate user opening Home/Library/Player/Trim then pressing Home (backgrounding)
+            com.bangdillah.rekamindulu.utils.AppLockHelper.sessionTracker.onActivityStarted()
+            com.bangdillah.rekamindulu.utils.AppLockHelper.sessionTracker.onActivityStopped(isChangingConfigurations = false)
+
+            assertEquals(false, MainActivity.isSessionUnlocked)
+            assertEquals(false, HomeActivity.isSessionUnlocked)
+            assertTrue(
+                com.bangdillah.rekamindulu.utils.AppLockHelper.shouldRequirePin(
+                    isAppLockEnabled = true,
+                    savedPin = "1234",
+                    isSessionUnlocked = HomeActivity.isSessionUnlocked
+                )
+            )
+            assertEquals(
+                false,
+                com.bangdillah.rekamindulu.player.PlayerActivity.canLoadVideoDirectly(
+                    isAppLockEnabled = true,
+                    savedPin = "1234",
+                    isSessionUnlocked = HomeActivity.isSessionUnlocked
+                )
+            )
+        } finally {
+            MainActivity.isSessionUnlocked = false
+        }
+    }
 }
