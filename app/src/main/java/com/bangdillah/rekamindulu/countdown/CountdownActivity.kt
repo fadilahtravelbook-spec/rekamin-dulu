@@ -14,6 +14,7 @@ import androidx.appcompat.app.AppCompatActivity
 import com.bangdillah.rekamindulu.R
 import com.bangdillah.rekamindulu.service.ScreenRecordingService
 import com.bangdillah.rekamindulu.utils.AppPreferences
+import com.bangdillah.rekamindulu.utils.UiHelper
 
 class CountdownActivity : AppCompatActivity() {
 
@@ -24,6 +25,13 @@ class CountdownActivity : AppCompatActivity() {
         AppPreferences(this).applyTheme()
         setContentView(R.layout.countdown_screen)
         supportActionBar?.hide()
+
+        val rootLayout = findViewById<View>(R.id.countdown_root_layout)
+        UiHelper.applySystemBarInsets(
+            anchorView = rootLayout,
+            topView = rootLayout,
+            bottomView = rootLayout
+        )
 
         val numberText = findViewById<TextView>(R.id.countdown_number)
         val progressBar = findViewById<ProgressBar>(R.id.countdown_progress)
@@ -107,6 +115,20 @@ class CountdownActivity : AppCompatActivity() {
                 onBackPressedDispatcher.onBackPressed()
             }
         })
+    }
+
+    override fun onStop() {
+        super.onStop()
+        if (!isChangingConfigurations && !isFinishing) {
+            countdownTimer?.cancel()
+            countdownTimer = null
+            android.widget.Toast.makeText(
+                this,
+                "Hitung mundur dibatalkan karena keluar dari aplikasi",
+                android.widget.Toast.LENGTH_SHORT
+            ).show()
+            finish()
+        }
     }
 
     override fun onDestroy() {

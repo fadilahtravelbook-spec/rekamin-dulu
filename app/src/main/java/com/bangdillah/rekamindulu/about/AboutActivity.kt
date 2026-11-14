@@ -13,6 +13,7 @@ import androidx.appcompat.app.AppCompatActivity
 import com.bangdillah.rekamindulu.R
 import com.bangdillah.rekamindulu.utils.AppPreferences
 import com.bangdillah.rekamindulu.utils.SpecAnalysisDialog
+import com.bangdillah.rekamindulu.utils.UiHelper
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 
 class AboutActivity : AppCompatActivity() {
@@ -31,6 +32,12 @@ class AboutActivity : AppCompatActivity() {
         AppPreferences(this).applyTheme()
         setContentView(R.layout.about_screen)
         supportActionBar?.hide()
+
+        UiHelper.applySystemBarInsets(
+            anchorView = findViewById(R.id.about_root_scroll),
+            topView = findViewById(R.id.about_inner_content),
+            bottomView = findViewById(R.id.about_inner_content)
+        )
 
         val appVersion = resolveAppVersionName()
         findViewById<TextView>(R.id.text_about_version)?.text = formatVersionBadge(appVersion)

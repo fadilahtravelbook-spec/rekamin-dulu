@@ -190,6 +190,7 @@
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
                     android:max="100"
+                    android:minHeight="48dp"
                     android:paddingHorizontal="12dp"
                     android:progress="0"
                     android:progressTint="@color/colorPrimary"

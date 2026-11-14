@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/sheet_selection_root"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:background="@drawable/bg_bottom_sheet_surface"
@@ -76,11 +77,10 @@
 
     <!-- SCROLLABLE OPTIONS CONTAINER -->
     <androidx.core.widget.NestedScrollView
+        android:id="@+id/scroll_selection_options"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_weight="1"
         android:fadeScrollbars="false"
-        android:maxHeight="420dp"
         android:overScrollMode="never">
 
         <LinearLayout

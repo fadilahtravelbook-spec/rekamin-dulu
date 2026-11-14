@@ -30,6 +30,7 @@ import com.bangdillah.rekamindulu.utils.SaveTransitionDialog
 import com.bangdillah.rekamindulu.utils.SelectionBottomSheetDialog
 import com.bangdillah.rekamindulu.utils.SelectionOption
 import com.bangdillah.rekamindulu.utils.SpecAnalysisDialog
+import com.bangdillah.rekamindulu.utils.UiHelper
 import com.google.android.material.bottomnavigation.BottomNavigationView
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.materialswitch.MaterialSwitch
@@ -67,6 +68,7 @@ class SettingsActivity : AppCompatActivity() {
 
     private var isUpdatingUi = false
     private var appLockDialog: AlertDialog? = null
+    private var activeDialog: AlertDialog? = null
 
     private val liveTimerHandler = Handler(Looper.getMainLooper())
     private val liveTimerRunnable = object : Runnable {
@@ -84,24 +86,27 @@ class SettingsActivity : AppCompatActivity() {
         override fun onReceive(context: Context?, intent: Intent?) {
             when (intent?.action) {
                 ScreenRecordingService.ACTION_RECORDING_STOPPED -> {
-                    val path = intent.getStringExtra(ScreenRecordingService.EXTRA_FILE_PATH)
-                        ?: ScreenRecordingService.lastRecordedFilePath
+                    val path = MainActivity.resolveStoppedBroadcastFilePath(
+                        intent.getStringExtra(ScreenRecordingService.EXTRA_FILE_PATH)
+                    )
                     val isValidFile = !path.isNullOrEmpty() && File(path).exists() && File(path).length() > 10240
                     updateUIValues()
                     updateRecordingIndicator()
+                    if (!isValidFile) {
+                        MainActivity.hasPendingSaveDialog = false
+                        return
+                    }
                     if (AppLockHelper.shouldRequirePin(
                             appPreferences.isAppLockEnabled,
                             appPreferences.appLockPin,
                             HomeActivity.isSessionUnlocked
                         )
                     ) {
-                        if (isValidFile) {
-                            MainActivity.hasPendingSaveDialog = true
-                        }
+                        MainActivity.hasPendingSaveDialog = true
                         return
                     }
                     MainActivity.hasPendingSaveDialog = false
-                    if (isValidFile && path != null) {
+                    if (path != null) {
                         SaveTransitionDialog.show(this@SettingsActivity, path)
                     }
                 }
@@ -120,8 +125,13 @@ class SettingsActivity : AppCompatActivity() {
         setContentView(R.layout.settings_screen)
         supportActionBar?.hide()
 
+        UiHelper.applySystemBarInsets(
+            anchorView = findViewById(R.id.settings_root_layout),
+            topView = findViewById(R.id.settings_inner_content),
+            bottomView = findViewById(R.id.bottom_navigation_settings)
+        )
+
         initViews()
-        checkAppLock()
         setupListeners()
         setupBottomNavigation()
     }
@@ -301,24 +311,9 @@ class SettingsActivity : AppCompatActivity() {
         toggleFloating?.setOnCheckedChangeListener { _, isChecked ->
             if (isUpdatingUi) return@setOnCheckedChangeListener
             appPreferences.showFloatingOverlay = isChecked
+            updateFloatingOverlayStatusSubtitle()
             if (isChecked && Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !android.provider.Settings.canDrawOverlays(this)) {
-                MaterialAlertDialogBuilder(this)
-                    .setIcon(R.drawable.ic_floating)
-                    .setTitle("Izin Jendela Mengambang Diperlukan")
-                    .setMessage("Untuk menampilkan tombol kontrol dan indikator FPS saat merekam di atas game/aplikasi lain, aktifkan izin \"Tampilkan di atas aplikasi lain\".")
-                    .setPositiveButton("Buka Pengaturan") { _, _ ->
-                        try {
-                            val intent = Intent(
-                                android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                                android.net.Uri.parse("package:$packageName")
-                            )
-                            startActivity(intent)
-                        } catch (e: Exception) {
-                            Toast.makeText(this, "Buka Pengaturan HP > Aplikasi > Rekamin Dulu > Izin Menimpa", Toast.LENGTH_LONG).show()
-                        }
-                    }
-                    .setNegativeButton("Nanti", null)
-                    .show()
+                showOverlayPermissionDialog()
             }
         }
 
@@ -364,13 +359,50 @@ class SettingsActivity : AppCompatActivity() {
                 } else {
                     appPreferences.isAppLockEnabled = true
                     HomeActivity.isSessionUnlocked = true
+                    AppLockHelper.syncWindowSecurityFlag(this, appPreferences)
                     updateUIValues(skipAppLockSwitch = true)
                 }
             } else {
                 appPreferences.isAppLockEnabled = false
                 HomeActivity.isSessionUnlocked = false
+                AppLockHelper.syncWindowSecurityFlag(this, appPreferences)
                 updateUIValues(skipAppLockSwitch = true)
             }
+        }
+
+        // Wire whole toggle rows for accessible touch area
+        fun bindToggleRow(rowId: Int, switchView: MaterialSwitch?) {
+            findViewById<View>(rowId)?.setOnClickListener {
+                if (ensureNotRecording()) {
+                    switchView?.toggle()
+                }
+            }
+        }
+        bindToggleRow(R.id.row_setting_gaming_mode, toggleGaming)
+        bindToggleRow(R.id.row_setting_fps_stabilizer, toggleFpsStabilizer)
+        bindToggleRow(R.id.row_setting_turbo_boost, toggleTurboBoost)
+        bindToggleRow(R.id.row_setting_hw_accel, toggleHardwareAcceleration)
+        bindToggleRow(R.id.row_setting_internal_audio_boost, toggleInternalAudioBoost)
+        bindToggleRow(R.id.row_setting_vibrate, toggleVibrate)
+        bindToggleRow(R.id.row_setting_stop_screen_off, toggleStopScreenOff)
+        bindToggleRow(R.id.row_setting_show_fps, toggleShowFps)
+        bindToggleRow(R.id.row_setting_storage_warning, toggleStorageWarning)
+
+        findViewById<View>(R.id.row_setting_floating_overlay)?.setOnClickListener {
+            if (ensureNotRecording()) {
+                val missingPerm = toggleFloating?.isChecked == true &&
+                    Build.VERSION.SDK_INT >= Build.VERSION_CODES.M &&
+                    !android.provider.Settings.canDrawOverlays(this)
+                if (missingPerm) {
+                    showOverlayPermissionDialog()
+                } else {
+                    toggleFloating?.toggle()
+                }
+            }
+        }
+
+        findViewById<View>(R.id.row_setting_app_lock)?.setOnClickListener {
+            toggleAppLock?.toggle()
         }
 
         // Change PIN row
@@ -454,6 +486,41 @@ class SettingsActivity : AppCompatActivity() {
                 }
             }
             Toast.makeText(this, "Menghentikan rekaman...", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun showOverlayPermissionDialog() {
+        try { activeDialog?.dismiss() } catch (ignored: Exception) {}
+        activeDialog = MaterialAlertDialogBuilder(this)
+            .setIcon(R.drawable.ic_floating)
+            .setTitle("Izin Jendela Mengambang Diperlukan")
+            .setMessage("Untuk menampilkan tombol kontrol dan indikator FPS saat merekam di atas game/aplikasi lain, aktifkan izin \"Tampilkan di atas aplikasi lain\".")
+            .setPositiveButton("Buka Pengaturan") { _, _ ->
+                try {
+                    val intent = Intent(
+                        android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                        android.net.Uri.parse("package:$packageName")
+                    )
+                    startActivity(intent)
+                } catch (e: Exception) {
+                    Toast.makeText(this, "Buka Pengaturan HP > Aplikasi > Rekamin Dulu > Izin Menimpa", Toast.LENGTH_LONG).show()
+                }
+            }
+            .setNegativeButton("Nanti", null)
+            .show()
+    }
+
+    private fun updateFloatingOverlayStatusSubtitle() {
+        val descView = findViewById<TextView>(R.id.text_floating_overlay_desc) ?: return
+        val missingOverlayPerm = appPreferences.showFloatingOverlay &&
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.M &&
+            !android.provider.Settings.canDrawOverlays(this)
+        if (missingOverlayPerm) {
+            descView.text = "⚠️ Izin 'Tampilkan di atas aplikasi lain' belum aktif (ketuk di sini)"
+            descView.setTextColor(ContextCompat.getColor(this, R.color.colorWarning))
+        } else {
+            descView.text = "Tampilkan tombol rekam & FPS saat main game"
+            descView.setTextColor(ContextCompat.getColor(this, R.color.textCaption))
         }
     }
 
@@ -546,6 +613,7 @@ class SettingsActivity : AppCompatActivity() {
                 if (appPreferences.isGamingMode) View.VISIBLE else View.GONE
 
             toggleFloating?.isChecked = appPreferences.showFloatingOverlay
+            updateFloatingOverlayStatusSubtitle()
             toggleFpsStabilizer?.isChecked = appPreferences.fpsStabilizerEnabled
             toggleTurboBoost?.isChecked = appPreferences.gamingTurboBoost
             toggleHardwareAcceleration?.isChecked = appPreferences.hardwareAccelerationEnabled
@@ -979,6 +1047,7 @@ class SettingsActivity : AppCompatActivity() {
             setHintTextColor(ContextCompat.getColor(this@SettingsActivity, R.color.textCaption))
         }
 
+        try { activeDialog?.dismiss() } catch (ignored: Exception) {}
         val dialog = MaterialAlertDialogBuilder(this)
             .setIcon(R.drawable.ic_lock)
             .setTitle("Atur PIN Keamanan")
@@ -992,6 +1061,7 @@ class SettingsActivity : AppCompatActivity() {
                 callback?.invoke(false)
             }
             .create()
+        activeDialog = dialog
 
         dialog.setOnShowListener {
             dialog.getButton(AlertDialog.BUTTON_POSITIVE)?.setOnClickListener {
@@ -1002,6 +1072,7 @@ class SettingsActivity : AppCompatActivity() {
                     appPreferences.appLockPin = pin
                     appPreferences.isAppLockEnabled = true
                     HomeActivity.isSessionUnlocked = true
+                    AppLockHelper.syncWindowSecurityFlag(this, appPreferences)
                     updateUIValues()
                     dialog.dismiss()
                     Toast.makeText(this, "PIN keamanan berhasil disimpan!", Toast.LENGTH_SHORT).show()
@@ -1058,7 +1129,8 @@ class SettingsActivity : AppCompatActivity() {
     }
 
     private fun showResetConfirmationDialog() {
-        MaterialAlertDialogBuilder(this)
+        try { activeDialog?.dismiss() } catch (ignored: Exception) {}
+        activeDialog = MaterialAlertDialogBuilder(this)
             .setIcon(R.drawable.ic_restore)
             .setTitle("Reset Pengaturan?")
             .setMessage("Semua konfigurasi video, audio, dan kontrol akan dikembalikan ke setelan bawaan Rekamin Dulu.")
@@ -1101,6 +1173,8 @@ class SettingsActivity : AppCompatActivity() {
     override fun onDestroy() {
         super.onDestroy()
         liveTimerHandler.removeCallbacksAndMessages(null)
+        try { activeDialog?.dismiss() } catch (ignored: Exception) {}
+        activeDialog = null
         appLockDialog?.dismiss()
         appLockDialog = null
     }

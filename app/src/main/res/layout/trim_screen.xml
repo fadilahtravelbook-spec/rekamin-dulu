@@ -1,12 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
 <ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/trim_root_scroll"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="@color/colorBackground"
+    android:clipToPadding="false"
     android:fillViewport="true">
 
     <LinearLayout
+        android:id="@+id/trim_inner_content"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
@@ -65,8 +68,12 @@
             app:cardElevation="4dp">
 
             <FrameLayout
+                android:id="@+id/layout_trim_preview_container"
                 android:layout_width="match_parent"
-                android:layout_height="match_parent">
+                android:layout_height="match_parent"
+                android:clickable="true"
+                android:contentDescription="Ketuk untuk putar atau jeda pratinjau video"
+                android:focusable="true">
 
                 <VideoView
                     android:id="@+id/trim_video_view"
@@ -215,13 +222,15 @@
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
                         android:layout_weight="1"
+                        android:minHeight="48dp"
                         android:progress="0" />
 
                     <TextView
                         android:id="@+id/text_start_time_val"
-                        android:layout_width="50dp"
+                        android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:gravity="end"
+                        android:minWidth="56dp"
                         android:text="00:00"
                         android:textColor="@color/colorPrimary"
                         android:textSize="13sp"
@@ -232,7 +241,7 @@
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="10dp"
+                    android:layout_marginTop="4dp"
                     android:gravity="center_vertical"
                     android:orientation="horizontal">
 
@@ -248,14 +257,16 @@
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
                         android:layout_weight="1"
+                        android:minHeight="48dp"
                         android:progress="100" />
 
                     <TextView
                         android:id="@+id/text_end_time_val"
-                        android:layout_width="50dp"
+                        android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:gravity="end"
-                        android:text="00:30"
+                        android:minWidth="56dp"
+                        android:text="00:00"
                         android:textColor="@color/colorPrimary"
                         android:textSize="13sp"
                         android:textStyle="bold" />
@@ -267,9 +278,9 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="12dp"
-                    android:background="@color/colorPrimaryContainer"
-                    android:padding="10dp"
-                    android:text="⏱️ Hasil Potongan: Durasi 30 detik (Dari 00:00 s/d 00:30)"
+                    android:background="@drawable/bg_telemetry_box"
+                    android:padding="12dp"
+                    android:text="⏱️ Pilih video untuk menentukan rentang potongan"
                     android:textColor="@color/colorPrimary"
                     android:textSize="12sp"
                     android:textStyle="bold" />
@@ -287,7 +298,7 @@
             android:visibility="gone" />
 
         <!-- APPLY BUTTON -->
-        <Button
+        <com.google.android.material.button.MaterialButton
             android:id="@+id/btn_apply_trim"
             android:layout_width="match_parent"
             android:layout_height="54dp"
@@ -296,7 +307,8 @@
             android:textColor="@color/colorOnPrimary"
             android:textSize="15sp"
             android:textStyle="bold"
-            app:backgroundTint="@color/colorPrimary" />
+            app:backgroundTint="@color/colorPrimary"
+            app:cornerRadius="16dp" />
 
     </LinearLayout>
 </ScrollView>

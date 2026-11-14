@@ -1104,4 +1104,134 @@ class RekaminDuluUnitTest {
             MainActivity.isSessionUnlocked = false
         }
     }
+
+    @Test
+    fun testUiHelperFormatDurationMsAndActivityFormatters() {
+        assertEquals("00:00", com.bangdillah.rekamindulu.utils.UiHelper.formatDurationMs(0L))
+        assertEquals("00:00", com.bangdillah.rekamindulu.utils.UiHelper.formatDurationMs(-5000L))
+        assertEquals("00:59", com.bangdillah.rekamindulu.utils.UiHelper.formatDurationMs(59_000L))
+        assertEquals("01:01:05", com.bangdillah.rekamindulu.utils.UiHelper.formatDurationMs(3_665_000L))
+
+        assertEquals("00:00", com.bangdillah.rekamindulu.player.PlayerActivity.formatTime(-100))
+        assertEquals("01:05", com.bangdillah.rekamindulu.player.PlayerActivity.formatTime(65_000))
+        assertEquals("01:01:05", com.bangdillah.rekamindulu.player.PlayerActivity.formatTime(3_665_000))
+
+        assertEquals("00:00", com.bangdillah.rekamindulu.trim.TrimActivity.formatTime(0))
+        assertEquals("01:05", com.bangdillah.rekamindulu.trim.TrimActivity.formatTime(65_000))
+        assertEquals("01:01:05", com.bangdillah.rekamindulu.trim.TrimActivity.formatTime(3_665_000))
+    }
+
+    @Test
+    fun testShouldMaskScreenInRecentsWhenPinConfigured() {
+        assertEquals(
+            false,
+            com.bangdillah.rekamindulu.utils.AppLockHelper.shouldMaskScreenInRecents(
+                isAppLockEnabled = false,
+                savedPin = "1234"
+            )
+        )
+        assertEquals(
+            false,
+            com.bangdillah.rekamindulu.utils.AppLockHelper.shouldMaskScreenInRecents(
+                isAppLockEnabled = true,
+                savedPin = ""
+            )
+        )
+        assertTrue(
+            com.bangdillah.rekamindulu.utils.AppLockHelper.shouldMaskScreenInRecents(
+                isAppLockEnabled = true,
+                savedPin = "1234"
+            )
+        )
+    }
+
+    @Test
+    fun testPartialRecordingRejectedWhenMuxerNotFinalized() {
+        // Partial >10KB file WITHOUT clean muxer finalization MUST be rejected
+        assertEquals(
+            false,
+            com.bangdillah.rekamindulu.service.ScreenRecordingService.isValidFinalizedRecording(
+                muxerFinalized = false,
+                fileExists = true,
+                fileLengthBytes = 5_000_000L
+            )
+        )
+        // Missing file or tiny file MUST be rejected even if flag is true
+        assertEquals(
+            false,
+            com.bangdillah.rekamindulu.service.ScreenRecordingService.isValidFinalizedRecording(
+                muxerFinalized = true,
+                fileExists = false,
+                fileLengthBytes = 5_000_000L
+            )
+        )
+        assertEquals(
+            false,
+            com.bangdillah.rekamindulu.service.ScreenRecordingService.isValidFinalizedRecording(
+                muxerFinalized = true,
+                fileExists = true,
+                fileLengthBytes = 10_240L
+            )
+        )
+        // Only finalized + existing + >10KB succeeds
+        assertTrue(
+            com.bangdillah.rekamindulu.service.ScreenRecordingService.isValidFinalizedRecording(
+                muxerFinalized = true,
+                fileExists = true,
+                fileLengthBytes = 10_241L
+            )
+        )
+    }
+
+    @Test
+    fun testTrimOutputValidationRequiresSuccessfulMuxerStop() {
+        assertEquals(
+            false,
+            com.bangdillah.rekamindulu.trim.TrimHelper.isTrimOutputValid(
+                muxerStopSucceeded = false,
+                fileExists = true,
+                fileLengthBytes = 2_000_000L
+            )
+        )
+        assertEquals(
+            false,
+            com.bangdillah.rekamindulu.trim.TrimHelper.isTrimOutputValid(
+                muxerStopSucceeded = true,
+                fileExists = false,
+                fileLengthBytes = 2_000_000L
+            )
+        )
+        assertEquals(
+            false,
+            com.bangdillah.rekamindulu.trim.TrimHelper.isTrimOutputValid(
+                muxerStopSucceeded = true,
+                fileExists = true,
+                fileLengthBytes = 512L
+            )
+        )
+        assertTrue(
+            com.bangdillah.rekamindulu.trim.TrimHelper.isTrimOutputValid(
+                muxerStopSucceeded = true,
+                fileExists = true,
+                fileLengthBytes = 1024L
+            )
+        )
+    }
+
+    @Test
+    fun testStoppedBroadcastNeverFallsBackToStalePreviousRecording() {
+        val originalLastPath = com.bangdillah.rekamindulu.service.ScreenRecordingService.lastRecordedFilePath
+        try {
+            com.bangdillah.rekamindulu.service.ScreenRecordingService.lastRecordedFilePath = "/storage/Movies/RekaminDulu/old_A.mp4"
+            assertEquals(null, MainActivity.resolveStoppedBroadcastFilePath(null))
+            assertEquals(null, MainActivity.resolveStoppedBroadcastFilePath(""))
+            assertEquals(null, MainActivity.resolveStoppedBroadcastFilePath("   "))
+            assertEquals(
+                "/storage/Movies/RekaminDulu/new_B.mp4",
+                MainActivity.resolveStoppedBroadcastFilePath("/storage/Movies/RekaminDulu/new_B.mp4")
+            )
+        } finally {
+            com.bangdillah.rekamindulu.service.ScreenRecordingService.lastRecordedFilePath = originalLastPath
+        }
+    }
 }

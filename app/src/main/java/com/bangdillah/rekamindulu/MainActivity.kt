@@ -18,6 +18,7 @@ import android.os.Looper
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
+import android.provider.Settings
 import android.text.InputFilter
 import android.text.InputType
 import android.util.Log
@@ -27,6 +28,7 @@ import android.widget.FrameLayout
 import android.widget.EditText
 import android.widget.ImageView
 import android.widget.ProgressBar
+import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.OnBackPressedCallback
@@ -34,6 +36,7 @@ import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import com.bangdillah.rekamindulu.about.AboutActivity
 import com.bangdillah.rekamindulu.library.LibraryActivity
@@ -47,6 +50,7 @@ import com.bangdillah.rekamindulu.utils.DeviceAnalyzer
 import com.bangdillah.rekamindulu.utils.SaveTransitionDialog
 import com.bangdillah.rekamindulu.utils.SpecAnalysisDialog
 import com.bangdillah.rekamindulu.utils.StorageHelper
+import com.bangdillah.rekamindulu.utils.UiHelper
 import com.bangdillah.rekamindulu.library.LibraryAdapter
 import com.bangdillah.rekamindulu.player.PlayerActivity
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -90,6 +94,10 @@ open class MainActivity : AppCompatActivity() {
                 return true
             }
             return false
+        }
+
+        fun resolveStoppedBroadcastFilePath(extraFilePath: String?): String? {
+            return extraFilePath?.takeIf { it.isNotBlank() }
         }
 
         fun shouldShowSaveDialog(
@@ -179,7 +187,8 @@ open class MainActivity : AppCompatActivity() {
                     isMicOn -> "suara mikrofon"
                     else -> "audio internal game"
                 }
-                MaterialAlertDialogBuilder(this)
+                try { activeDialog?.dismiss() } catch (ignored: Exception) {}
+                activeDialog = MaterialAlertDialogBuilder(this)
                     .setTitle("🎙️ Izin Audio Diperlukan")
                     .setMessage("Izin audio dibutuhkan agar rekaman layar memiliki $audioType Anda. Apakah Anda ingin tetap merekam tanpa suara (Mute), atau buka Pengaturan untuk mengaktifkan izin?")
                     .setIcon(R.drawable.ic_mic_off)
@@ -191,14 +200,7 @@ open class MainActivity : AppCompatActivity() {
                         initiateScreenCaptureFlow()
                     }
                     .setNeutralButton("Buka Pengaturan") { _, _ ->
-                        try {
-                            val intent = Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
-                                data = android.net.Uri.fromParts("package", packageName, null)
-                            }
-                            startActivity(intent)
-                        } catch (e: Exception) {
-                            Toast.makeText(this, "Buka Pengaturan HP > Aplikasi > Rekamin Dulu > Izin", Toast.LENGTH_SHORT).show()
-                        }
+                        openAppPermissionSettings()
                     }
                     .setNegativeButton("Batal", null)
                     .show()
@@ -221,7 +223,11 @@ open class MainActivity : AppCompatActivity() {
             isGameAudioOn = false
             syncAudioPreferences()
             updateAudioToggleViews()
-            showSnackbar("Izin audio ditolak — kanal suara disetel ke Mute")
+            if (!ActivityCompat.shouldShowRequestPermissionRationale(this, Manifest.permission.RECORD_AUDIO)) {
+                showPermissionSettingsSnackbar("Izin audio ditolak permanen — kanal suara disetel ke Mute")
+            } else {
+                showSnackbar("Izin audio ditolak — kanal suara disetel ke Mute")
+            }
         }
     }
 
@@ -235,7 +241,11 @@ open class MainActivity : AppCompatActivity() {
             facecamStateIndex = 0
             appPreferences.facecamMode = "OFF"
             updateAudioToggleViews()
-            showSnackbar("Izin kamera ditolak — Facecam dinonaktifkan")
+            if (!ActivityCompat.shouldShowRequestPermissionRationale(this, Manifest.permission.CAMERA)) {
+                showPermissionSettingsSnackbar("Izin kamera ditolak permanen — Facecam dinonaktifkan")
+            } else {
+                showSnackbar("Izin kamera ditolak — Facecam dinonaktifkan")
+            }
         }
     }
 
@@ -259,12 +269,18 @@ open class MainActivity : AppCompatActivity() {
         override fun onReceive(context: Context?, intent: Intent?) {
             when (intent?.action) {
                 ScreenRecordingService.ACTION_RECORDING_STOPPED -> {
-                    val path = intent.getStringExtra(ScreenRecordingService.EXTRA_FILE_PATH)
-                        ?: ScreenRecordingService.lastRecordedFilePath
+                    val path = resolveStoppedBroadcastFilePath(
+                        intent.getStringExtra(ScreenRecordingService.EXTRA_FILE_PATH)
+                    )
                     val isValidFile = !path.isNullOrEmpty() && File(path).exists() && File(path).length() > 10240
                     updateRecordingBanner()
                     updateLibraryStats()
                     updateHomeRecordingsList()
+
+                    if (!isValidFile) {
+                        hasPendingSaveDialog = false
+                        return
+                    }
 
                     if (AppLockHelper.shouldRequirePin(
                             appPreferences.isAppLockEnabled,
@@ -272,14 +288,12 @@ open class MainActivity : AppCompatActivity() {
                             HomeActivity.isSessionUnlocked
                         )
                     ) {
-                        if (isValidFile) {
-                            hasPendingSaveDialog = true
-                        }
+                        hasPendingSaveDialog = true
                         return
                     }
 
                     hasPendingSaveDialog = false
-                    if (isValidFile && path != null) {
+                    if (path != null) {
                         showSaveSuccessToast(path)
                         SaveTransitionDialog.show(this@MainActivity, path) {
                             updateLibraryStats()
@@ -302,7 +316,8 @@ open class MainActivity : AppCompatActivity() {
                     liveTimerHandler.removeCallbacks(liveTimerRunnable)
                     updateRecordingBanner()
                     if (!isFinishing && !isDestroyed) {
-                        MaterialAlertDialogBuilder(this@MainActivity)
+                        try { activeDialog?.dismiss() } catch (ignored: Exception) {}
+                        activeDialog = MaterialAlertDialogBuilder(this@MainActivity)
                             .setTitle("⚠️ Perekaman Gagal")
                             .setMessage(errorMsg)
                             .setPositiveButton("Mengerti", null)
@@ -320,15 +335,41 @@ open class MainActivity : AppCompatActivity() {
         setContentView(R.layout.activity_main)
         supportActionBar?.hide()
 
+        UiHelper.applySystemBarInsets(
+            anchorView = findViewById(R.id.main_root_layout),
+            topView = findViewById(R.id.home_inner_content),
+            bottomView = findViewById(R.id.bottom_navigation)
+        )
+        val countdownHud = findViewById<View>(R.id.layout_countdown_hud)
+        UiHelper.applySystemBarInsets(
+            anchorView = countdownHud,
+            topView = countdownHud,
+            bottomView = countdownHud
+        )
+
         mediaProjectionManager = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
 
         initAudioSettings()
-        checkAppLock()
         setupHeaderActions()
         setupLocalStorageStudioCard()
         setupDashboardCards()
         setupHomeRecordingsListView()
         setupBottomNavigation()
+
+        UiHelper.expandTouchTargets(
+            findViewById(R.id.home_header_actions),
+            listOf(
+                findViewById<View>(R.id.ic_about) to 48,
+                findViewById<View>(R.id.ic_settings) to 48
+            )
+        )
+        UiHelper.expandTouchTargets(
+            findViewById(R.id.layout_cloud_sync_row),
+            listOf(findViewById<View>(R.id.btn_trigger_sync_cloud) to 48)
+        )
+        findViewById<ScrollView>(R.id.home_scroll_view)?.setOnScrollChangeListener { _, _, _, _, _ ->
+            updateFloatingPillVisibility()
+        }
 
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
@@ -550,6 +591,8 @@ open class MainActivity : AppCompatActivity() {
 
 
     private var appLockDialog: AlertDialog? = null
+    private var activeDialog: AlertDialog? = null
+    private var extractProgressDialog: AlertDialog? = null
 
     private fun checkAppLock() {
         appLockDialog = AppLockHelper.showPinGateIfNeeded(
@@ -630,6 +673,21 @@ open class MainActivity : AppCompatActivity() {
             unregisterReceiver(recordingStatusReceiver)
         } catch (e: Exception) {
             // Receiver might not be registered
+        }
+    }
+
+    override fun onStop() {
+        super.onStop()
+        if (!isChangingConfigurations) {
+            val hud = findViewById<View>(R.id.layout_countdown_hud)
+            if (hud != null && hud.visibility == View.VISIBLE) {
+                cancelCountdownHUD()
+                Toast.makeText(
+                    this,
+                    "Hitung mundur dibatalkan karena aplikasi ke latar belakang",
+                    Toast.LENGTH_SHORT
+                ).show()
+            }
         }
     }
 
@@ -1136,9 +1194,11 @@ open class MainActivity : AppCompatActivity() {
 
     private fun showGuideTutorialDialog() {
         val dialogView = layoutInflater.inflate(R.layout.layout_guide_dialog, null)
+        try { activeDialog?.dismiss() } catch (ignored: Exception) {}
         val dialog = AlertDialog.Builder(this)
             .setView(dialogView)
             .create()
+        activeDialog = dialog
 
         dialogView.findViewById<Button>(R.id.btn_close_guide)?.setOnClickListener {
             dialog.dismiss()
@@ -1245,7 +1305,8 @@ open class MainActivity : AppCompatActivity() {
             setHintTextColor(ContextCompat.getColor(this@MainActivity, R.color.textCaption))
         }
 
-        MaterialAlertDialogBuilder(this)
+        try { activeDialog?.dismiss() } catch (ignored: Exception) {}
+        activeDialog = MaterialAlertDialogBuilder(this)
             .setIcon(R.drawable.ic_trim)
             .setTitle("Ubah Nama Rekaman")
             .setMessage("Masukkan nama baru untuk rekaman ini:")
@@ -1267,11 +1328,21 @@ open class MainActivity : AppCompatActivity() {
                     Toast.makeText(this, "Nama file tersebut sudah digunakan", Toast.LENGTH_SHORT).show()
                     return@setPositiveButton
                 }
-                if (file.renameTo(targetFile)) {
-                    LibraryAdapter.invalidateCache(file.absolutePath)
-                    StorageHelper.scanRenamedFile(this, file, targetFile)
-                    Toast.makeText(this, "Nama berhasil diubah", Toast.LENGTH_SHORT).show()
-                    updateHomeRecordingsList()
+                lifecycleScope.launch(Dispatchers.IO) {
+                    val renamed = file.renameTo(targetFile)
+                    if (renamed) {
+                        LibraryAdapter.invalidateCache(file.absolutePath)
+                        StorageHelper.scanRenamedFile(this@MainActivity, file, targetFile)
+                    }
+                    withContext(Dispatchers.Main) {
+                        if (isFinishing || isDestroyed) return@withContext
+                        if (renamed) {
+                            Toast.makeText(this@MainActivity, "Nama berhasil diubah", Toast.LENGTH_SHORT).show()
+                            updateHomeRecordingsList()
+                        } else {
+                            Toast.makeText(this@MainActivity, "Gagal mengubah nama file", Toast.LENGTH_SHORT).show()
+                        }
+                    }
                 }
             }
             .setNegativeButton("Batal", null)
@@ -1280,11 +1351,13 @@ open class MainActivity : AppCompatActivity() {
 
     private fun handleExtractAudioHome(file: File) {
         if (isFinishing || isDestroyed) return
+        try { extractProgressDialog?.dismiss() } catch (ignored: Exception) {}
         val progressDialog = MaterialAlertDialogBuilder(this)
             .setTitle("Mengekstrak Audio 🎵")
             .setMessage("Memeriksa trek audio dari ${file.name}...")
             .setCancelable(false)
             .create()
+        extractProgressDialog = progressDialog
         try {
             progressDialog.show()
         } catch (ignored: Exception) {}
@@ -1320,7 +1393,8 @@ open class MainActivity : AppCompatActivity() {
 
                     if (success && audioFile != null && audioFile.exists()) {
                         try {
-                            MaterialAlertDialogBuilder(this)
+                            try { activeDialog?.dismiss() } catch (ignored: Exception) {}
+                            activeDialog = MaterialAlertDialogBuilder(this)
                                 .setTitle("Ekstrak Audio Berhasil! 🎉")
                                 .setIcon(R.drawable.ic_check_circle)
                                 .setMessage(
@@ -1416,22 +1490,27 @@ open class MainActivity : AppCompatActivity() {
     }
 
     private fun confirmDeleteHomeRecording(file: File) {
-        MaterialAlertDialogBuilder(this)
+        try { activeDialog?.dismiss() } catch (ignored: Exception) {}
+        activeDialog = MaterialAlertDialogBuilder(this)
             .setTitle("Hapus Rekaman Video?")
             .setMessage("File \"${file.name}\" akan dihapus secara permanen dari penyimpanan.")
             .setIcon(R.drawable.ic_delete)
             .setPositiveButton("Hapus") { _, _ ->
-                if (file.exists()) {
+                lifecycleScope.launch(Dispatchers.IO) {
+                    if (!file.exists()) return@launch
                     LibraryAdapter.invalidateCache(file.absolutePath)
                     val deleted = file.delete()
-                    StorageHelper.scanDeletedFile(this, file)
-                    if (deleted) {
-                        Toast.makeText(this, "Rekaman video berhasil dihapus", Toast.LENGTH_SHORT).show()
-                    } else {
-                        Toast.makeText(this, "Gagal menghapus file rekaman", Toast.LENGTH_SHORT).show()
+                    StorageHelper.scanDeletedFile(this@MainActivity, file)
+                    withContext(Dispatchers.Main) {
+                        if (isFinishing || isDestroyed) return@withContext
+                        if (deleted) {
+                            Toast.makeText(this@MainActivity, "Rekaman video berhasil dihapus", Toast.LENGTH_SHORT).show()
+                        } else {
+                            Toast.makeText(this@MainActivity, "Gagal menghapus file rekaman", Toast.LENGTH_SHORT).show()
+                        }
+                        updateHomeRecordingsList()
+                        updateLibraryStats()
                     }
-                    updateHomeRecordingsList()
-                    updateLibraryStats()
                 }
             }
             .setNegativeButton("Batal", null)
@@ -1567,10 +1646,10 @@ open class MainActivity : AppCompatActivity() {
 
         if (ScreenRecordingService.isRecording) {
             stopBreathingGlowAnimation()
-            banner?.visibility = View.VISIBLE
-            floatingPill?.visibility = View.VISIBLE
+            banner?.visibility = View.GONE
             layoutIdle?.visibility = View.GONE
             layoutActive?.visibility = View.VISIBLE
+            layoutActive?.post { updateFloatingPillVisibility() }
 
             val sec = ScreenRecordingService.elapsedSeconds
             val isPaused = ScreenRecordingService.isPaused
@@ -1660,6 +1739,26 @@ open class MainActivity : AppCompatActivity() {
             btnStartStop?.backgroundTintList = ContextCompat.getColorStateList(this, R.color.colorPrimary)
             imgStartStopIcon?.setImageResource(R.drawable.ic_record)
         }
+    }
+
+    private fun updateFloatingPillVisibility() {
+        val floatingPill = findViewById<View>(R.id.card_floating_recording_pill) ?: return
+        if (!ScreenRecordingService.isRecording) {
+            floatingPill.visibility = View.GONE
+            return
+        }
+        val scrollView = findViewById<ScrollView>(R.id.home_scroll_view)
+        val layoutActive = findViewById<View>(R.id.layout_recording_active)
+        if (scrollView == null || layoutActive == null || layoutActive.visibility != View.VISIBLE || layoutActive.height == 0) {
+            floatingPill.visibility = View.GONE
+            return
+        }
+        val heroRect = android.graphics.Rect()
+        val scrollRect = android.graphics.Rect()
+        val heroVisible = layoutActive.getGlobalVisibleRect(heroRect) &&
+            scrollView.getGlobalVisibleRect(scrollRect) &&
+            android.graphics.Rect.intersects(heroRect, scrollRect)
+        floatingPill.visibility = if (heroVisible) View.GONE else View.VISIBLE
     }
 
     // =========================================================================
@@ -1763,7 +1862,8 @@ open class MainActivity : AppCompatActivity() {
             val freeBytes = com.bangdillah.rekamindulu.service.RecordingEngineOptimizer.getAvailableStorageBytes(this)
             val freeStorageGb = freeBytes.toDouble() / (1024.0 * 1024.0 * 1024.0)
             if (freeStorageGb < 0.2) {
-                MaterialAlertDialogBuilder(this)
+                try { activeDialog?.dismiss() } catch (ignored: Exception) {}
+                activeDialog = MaterialAlertDialogBuilder(this)
                     .setTitle("⚠️ Peringatan Sisa Memori HP")
                     .setMessage(
                         String.format(
@@ -2001,9 +2101,38 @@ open class MainActivity : AppCompatActivity() {
         super.onDestroy()
         liveTimerHandler.removeCallbacksAndMessages(null)
         cancelCountdownHUD()
+        try { activeDialog?.dismiss() } catch (ignored: Exception) {}
+        activeDialog = null
+        try { extractProgressDialog?.dismiss() } catch (ignored: Exception) {}
+        extractProgressDialog = null
         appLockDialog?.dismiss()
         appLockDialog = null
         stopBreathingGlowAnimation()
+    }
+
+    private fun openAppPermissionSettings() {
+        try {
+            val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                data = android.net.Uri.fromParts("package", packageName, null)
+            }
+            startActivity(intent)
+        } catch (e: Exception) {
+            Toast.makeText(this, "Buka Pengaturan HP > Aplikasi > Rekamin Dulu > Izin", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun showPermissionSettingsSnackbar(message: String) {
+        val view = findViewById<View>(android.R.id.content) ?: run {
+            Toast.makeText(this, message, Toast.LENGTH_LONG).show()
+            return
+        }
+        try {
+            Snackbar.make(view, message, Snackbar.LENGTH_LONG)
+                .setAction("Pengaturan") { openAppPermissionSettings() }
+                .show()
+        } catch (e: Exception) {
+            Toast.makeText(this, message, Toast.LENGTH_LONG).show()
+        }
     }
 
     fun showSnackbar(message: String, duration: Int = Snackbar.LENGTH_SHORT) {

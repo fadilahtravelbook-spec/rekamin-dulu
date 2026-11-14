@@ -38,11 +38,13 @@ object SelectionBottomSheetDialog {
         val sheetView = LayoutInflater.from(context).inflate(R.layout.layout_selection_bottom_sheet, null)
         dialog.setContentView(sheetView)
         dialog.window?.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+        UiHelper.applySystemBarInsets(anchorView = sheetView, bottomView = sheetView)
 
         // Bind Header
         val imgIcon = sheetView.findViewById<ImageView>(R.id.img_selection_icon)
         val textTitle = sheetView.findViewById<TextView>(R.id.text_selection_title)
         val textSubtitle = sheetView.findViewById<TextView>(R.id.text_selection_subtitle)
+        val scrollOptions = sheetView.findViewById<View>(R.id.scroll_selection_options)
         val containerOptions = sheetView.findViewById<LinearLayout>(R.id.container_selection_options)
         val btnCancel = sheetView.findViewById<View>(R.id.btn_selection_cancel)
 
@@ -108,6 +110,15 @@ object SelectionBottomSheetDialog {
             }
 
             containerOptions.addView(itemView)
+        }
+
+        scrollOptions?.post {
+            val maxScrollHeight = (context.resources.displayMetrics.heightPixels * 0.52f).toInt()
+            if (scrollOptions.height > maxScrollHeight) {
+                scrollOptions.layoutParams = scrollOptions.layoutParams.apply {
+                    height = maxScrollHeight
+                }
+            }
         }
 
         try {

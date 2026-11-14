@@ -14,6 +14,7 @@ import androidx.core.content.ContextCompat
 import com.bangdillah.rekamindulu.HomeActivity
 import com.bangdillah.rekamindulu.R
 import com.bangdillah.rekamindulu.utils.AppPreferences
+import com.bangdillah.rekamindulu.utils.UiHelper
 
 class OnboardingActivity : AppCompatActivity() {
 
@@ -34,6 +35,14 @@ class OnboardingActivity : AppCompatActivity() {
         appPreferences.applyTheme()
         setContentView(R.layout.onboarding_screen)
         supportActionBar?.hide()
+
+        val rootLayout = findViewById<View>(R.id.onboarding_root_layout)
+        val bottomContainer = findViewById<View>(R.id.bottom_container)
+        UiHelper.applySystemBarInsets(
+            anchorView = rootLayout,
+            topView = rootLayout,
+            bottomView = bottomContainer
+        )
 
         viewFlipper = findViewById(R.id.onboarding_view_flipper)
         btnAction = findViewById(R.id.btn_onboarding_action)
@@ -103,11 +112,18 @@ class OnboardingActivity : AppCompatActivity() {
                 return false
             }
         })
+    }
 
-        viewFlipper.setOnTouchListener { _, event ->
-            gestureDetector.onTouchEvent(event)
-            true
+    override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
+        if (::gestureDetector.isInitialized && gestureDetector.onTouchEvent(ev)) {
+            val cancelEvent = MotionEvent.obtain(ev).apply {
+                action = MotionEvent.ACTION_CANCEL
+            }
+            super.dispatchTouchEvent(cancelEvent)
+            cancelEvent.recycle()
+            return true
         }
+        return super.dispatchTouchEvent(ev)
     }
 
     private fun goToSlide(index: Int) {

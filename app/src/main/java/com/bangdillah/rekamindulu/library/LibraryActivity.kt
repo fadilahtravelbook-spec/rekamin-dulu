@@ -36,6 +36,7 @@ import com.bangdillah.rekamindulu.utils.SaveTransitionDialog
 import com.bangdillah.rekamindulu.utils.SelectionBottomSheetDialog
 import com.bangdillah.rekamindulu.utils.SelectionOption
 import com.bangdillah.rekamindulu.utils.StorageHelper
+import com.bangdillah.rekamindulu.utils.UiHelper
 import com.google.android.material.bottomnavigation.BottomNavigationView
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import androidx.lifecycle.lifecycleScope
@@ -80,29 +81,34 @@ class LibraryActivity : AppCompatActivity() {
 
     private var extractProgressDialog: AlertDialog? = null
     private var appLockDialog: AlertDialog? = null
+    private var activeDialog: AlertDialog? = null
 
     private val recordingReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             when (intent?.action) {
                 ScreenRecordingService.ACTION_RECORDING_STOPPED -> {
-                    val path = intent.getStringExtra(ScreenRecordingService.EXTRA_FILE_PATH)
-                        ?: ScreenRecordingService.lastRecordedFilePath
+                    val path = MainActivity.resolveStoppedBroadcastFilePath(
+                        intent.getStringExtra(ScreenRecordingService.EXTRA_FILE_PATH)
+                    )
                     val isValidFile = !path.isNullOrEmpty() && File(path).exists() && File(path).length() > 10240
                     updateRecordingIndicator()
+                    if (!isValidFile) {
+                        MainActivity.hasPendingSaveDialog = false
+                        loadVideoFiles()
+                        return
+                    }
                     if (AppLockHelper.shouldRequirePin(
                             appPreferences.isAppLockEnabled,
                             appPreferences.appLockPin,
                             HomeActivity.isSessionUnlocked
                         )
                     ) {
-                        if (isValidFile) {
-                            MainActivity.hasPendingSaveDialog = true
-                        }
+                        MainActivity.hasPendingSaveDialog = true
                         return
                     }
                     MainActivity.hasPendingSaveDialog = false
                     loadVideoFiles()
-                    if (isValidFile && path != null) {
+                    if (path != null) {
                         SaveTransitionDialog.show(this@LibraryActivity, path) {
                             loadVideoFiles()
                         }
@@ -121,7 +127,11 @@ class LibraryActivity : AppCompatActivity() {
         appPreferences.applyTheme()
         setContentView(R.layout.library_screen)
         supportActionBar?.hide()
-        checkAppLock()
+        UiHelper.applySystemBarInsets(
+            anchorView = findViewById(R.id.library_root_layout),
+            topView = findViewById(R.id.toolbar),
+            bottomView = findViewById(R.id.bottom_navigation_library)
+        )
 
         val recyclerView = findViewById<RecyclerView>(R.id.library_recycler_view)
         recyclerView?.layoutManager = LinearLayoutManager(this)
@@ -160,6 +170,15 @@ class LibraryActivity : AppCompatActivity() {
         setupSearchBar()
         setupFilterChips()
         setupBottomNavigation()
+
+        if (AppLockHelper.shouldRequirePin(
+                appPreferences.isAppLockEnabled,
+                appPreferences.appLockPin,
+                HomeActivity.isSessionUnlocked
+            )
+        ) {
+            recyclerView?.visibility = View.INVISIBLE
+        }
     }
 
     private fun checkAppLock() {
@@ -211,6 +230,7 @@ class LibraryActivity : AppCompatActivity() {
         ) {
             findViewById<RecyclerView>(R.id.library_recycler_view)?.visibility = View.INVISIBLE
             findViewById<View>(R.id.empty_state)?.visibility = View.GONE
+            findViewById<TextView>(R.id.text_library_stats_summary)?.text = "🔒 Galeri terkunci — masukkan PIN"
         }
         checkAppLock()
         updateRecordingIndicator()
@@ -241,6 +261,8 @@ class LibraryActivity : AppCompatActivity() {
     override fun onDestroy() {
         super.onDestroy()
         liveTimerHandler.removeCallbacksAndMessages(null)
+        try { activeDialog?.dismiss() } catch (ignored: Exception) {}
+        activeDialog = null
         try { extractProgressDialog?.dismiss() } catch (ignored: Exception) {}
         extractProgressDialog = null
         try { appLockDialog?.dismiss() } catch (ignored: Exception) {}
@@ -623,7 +645,8 @@ class LibraryActivity : AppCompatActivity() {
             setHintTextColor(ContextCompat.getColor(this@LibraryActivity, R.color.textCaption))
         }
 
-        MaterialAlertDialogBuilder(this)
+        try { activeDialog?.dismiss() } catch (ignored: Exception) {}
+        activeDialog = MaterialAlertDialogBuilder(this)
             .setIcon(R.drawable.ic_trim)
             .setTitle("Ubah Nama Rekaman")
             .setMessage("Masukkan nama baru untuk video ini:")
@@ -651,14 +674,25 @@ class LibraryActivity : AppCompatActivity() {
                     return@setPositiveButton
                 }
 
-                val success = file.renameTo(targetFile)
-                if (success) {
-                    LibraryAdapter.invalidateCache(file.absolutePath)
-                    StorageHelper.scanRenamedFile(this, file, targetFile)
-                    Toast.makeText(this, "Nama rekaman berhasil diubah", Toast.LENGTH_SHORT).show()
-                    loadVideoFiles()
-                } else {
-                    Toast.makeText(this, "Gagal mengubah nama file", Toast.LENGTH_SHORT).show()
+                lifecycleScope.launch(Dispatchers.IO) {
+                    val success = file.renameTo(targetFile)
+                    if (success) {
+                        val oldDuration = videoDurationsMs.remove(file.absolutePath)
+                        if (oldDuration != null) {
+                            videoDurationsMs[targetFile.absolutePath] = oldDuration
+                        }
+                        LibraryAdapter.invalidateCache(file.absolutePath)
+                        StorageHelper.scanRenamedFile(this@LibraryActivity, file, targetFile)
+                    }
+                    withContext(Dispatchers.Main) {
+                        if (isFinishing || isDestroyed) return@withContext
+                        if (success) {
+                            Toast.makeText(this@LibraryActivity, "Nama rekaman berhasil diubah", Toast.LENGTH_SHORT).show()
+                            loadVideoFiles()
+                        } else {
+                            Toast.makeText(this@LibraryActivity, "Gagal mengubah nama file", Toast.LENGTH_SHORT).show()
+                        }
+                    }
                 }
             }
             .setNegativeButton("Batal", null)
@@ -666,21 +700,27 @@ class LibraryActivity : AppCompatActivity() {
     }
 
     private fun confirmDelete(file: File) {
-        MaterialAlertDialogBuilder(this)
+        try { activeDialog?.dismiss() } catch (ignored: Exception) {}
+        activeDialog = MaterialAlertDialogBuilder(this)
             .setTitle("Hapus Rekaman Video?")
             .setMessage("File \"${file.name}\" akan dihapus secara permanen dari Galeri Rekamin Dulu.")
             .setIcon(R.drawable.ic_delete)
             .setPositiveButton("Hapus") { _, _ ->
-                if (file.exists()) {
+                lifecycleScope.launch(Dispatchers.IO) {
+                    if (!file.exists()) return@launch
                     LibraryAdapter.invalidateCache(file.absolutePath)
+                    videoDurationsMs.remove(file.absolutePath)
                     val deleted = file.delete()
-                    StorageHelper.scanDeletedFile(this, file)
-                    if (deleted) {
-                        Toast.makeText(this, "Rekaman video berhasil dihapus", Toast.LENGTH_SHORT).show()
-                    } else {
-                        Toast.makeText(this, "Gagal menghapus file rekaman", Toast.LENGTH_SHORT).show()
+                    StorageHelper.scanDeletedFile(this@LibraryActivity, file)
+                    withContext(Dispatchers.Main) {
+                        if (isFinishing || isDestroyed) return@withContext
+                        if (deleted) {
+                            Toast.makeText(this@LibraryActivity, "Rekaman video berhasil dihapus", Toast.LENGTH_SHORT).show()
+                        } else {
+                            Toast.makeText(this@LibraryActivity, "Gagal menghapus file rekaman", Toast.LENGTH_SHORT).show()
+                        }
+                        loadVideoFiles()
                     }
-                    loadVideoFiles()
                 }
             }
             .setNegativeButton("Batal", null)
@@ -731,7 +771,8 @@ class LibraryActivity : AppCompatActivity() {
 
                     if (success && audioFile != null && audioFile.exists()) {
                         try {
-                            MaterialAlertDialogBuilder(this)
+                            try { activeDialog?.dismiss() } catch (ignored: Exception) {}
+                            activeDialog = MaterialAlertDialogBuilder(this)
                                 .setTitle("Ekstrak Audio Berhasil! 🎉")
                                 .setIcon(R.drawable.ic_check_circle)
                                 .setMessage("Audio disimpan sebagai:\n${audioFile.name}\nUkuran: ${String.format(Locale.getDefault(), "%.1f MB", audioFile.length() / (1024.0 * 1024.0))}")

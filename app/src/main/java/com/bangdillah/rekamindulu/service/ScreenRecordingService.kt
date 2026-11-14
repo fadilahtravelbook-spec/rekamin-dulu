@@ -13,11 +13,8 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
-import android.graphics.Bitmap
-import android.graphics.PixelFormat
 import android.hardware.display.DisplayManager
 import android.hardware.display.VirtualDisplay
-import android.media.ImageReader
 import android.media.projection.MediaProjection
 import android.media.projection.MediaProjectionManager
 import android.os.Build
@@ -144,11 +141,22 @@ open class ScreenRecordingService : Service() {
             }
             return fgsType
         }
+
+        /**
+         * Rekaman hanya dianggap valid jika MediaMuxer benar-benar terfinalisasi
+         * dan file output ada dengan ukuran memadai (> 10 KB).
+         */
+        fun isValidFinalizedRecording(
+            muxerFinalized: Boolean,
+            fileExists: Boolean,
+            fileLengthBytes: Long
+        ): Boolean = muxerFinalized && fileExists && fileLengthBytes > 10240L
     }
 
     private val mainHandler = Handler(Looper.getMainLooper())
     private var mediaProjection: MediaProjection? = null
     private var virtualDisplay: VirtualDisplay? = null
+    private var surfaceRelay: ProjectionSurfaceRelay? = null
     private var codecRecorder: MediaCodecScreenRecorder? = null
     private var outputFile: File? = null
     private var notificationHelper: NotificationHelper? = null
@@ -215,6 +223,12 @@ open class ScreenRecordingService : Service() {
             return
         }
 
+        // Kosongkan path rekaman sesi sebelumnya sebelum memulai sesi baru
+        lastRecordedFilePath = null
+        currentActiveFilePath = null
+        outputFile = null
+        MainActivity.hasPendingSaveDialog = false
+
         // Harus masuk ke foreground terlebih dahulu sebelum memanggil getMediaProjection (Android 14+)
         startOrUpdateForegroundService()
 
@@ -260,13 +274,28 @@ open class ScreenRecordingService : Service() {
             val inputSurface = recorder.prepare(metrics)
             codecRecorder = recorder
 
+            val relaySurface = try {
+                ProjectionSurfaceRelay(
+                    encoderSurface = inputSurface,
+                    width = recorder.actualWidth,
+                    height = recorder.actualHeight
+                ).also { relay ->
+                    surfaceRelay = relay
+                }.prepare()
+            } catch (e: Exception) {
+                Log.w(TAG, "ProjectionSurfaceRelay fallback ke inputSurface langsung: ${e.message}")
+                try { surfaceRelay?.release() } catch (_: Exception) {}
+                surfaceRelay = null
+                inputSurface
+            }
+
             virtualDisplay = projection.createVirtualDisplay(
                 "RekaminDuluDisplay",
                 recorder.actualWidth,
                 recorder.actualHeight,
                 recorder.actualDensityDpi,
                 DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
-                inputSurface,
+                relaySurface,
                 null,
                 mainHandler
             )
@@ -313,6 +342,7 @@ open class ScreenRecordingService : Service() {
         if (!isRecording || isPaused) return
         isPaused = true
         pausedAtMillis = System.currentTimeMillis()
+        surfaceRelay?.setPaused(true)
         codecRecorder?.pause()
         updateForegroundNotification()
         broadcastStatusChanged()
@@ -325,6 +355,7 @@ open class ScreenRecordingService : Service() {
             pausedAtMillis = 0L
         }
         isPaused = false
+        surfaceRelay?.setPaused(false)
         codecRecorder?.resume()
         updateForegroundNotification()
         broadcastStatusChanged()
@@ -351,8 +382,7 @@ open class ScreenRecordingService : Service() {
     }
 
     private fun handleCaptureScreenshot() {
-        val projection = mediaProjection
-        if (!isRecording || projection == null) {
+        if (!isRecording || mediaProjection == null) {
             mainHandler.post {
                 Toast.makeText(this, "Perekaman layar belum aktif untuk tangkap layar", Toast.LENGTH_SHORT).show()
             }
@@ -360,104 +390,46 @@ open class ScreenRecordingService : Service() {
             return
         }
 
-        val metrics = obtainDisplayMetrics()
-        val width = metrics.widthPixels.coerceAtLeast(320)
-        val height = metrics.heightPixels.coerceAtLeast(480)
-        val densityDpi = metrics.densityDpi.coerceAtLeast(160)
-
-        val workerThread = android.os.HandlerThread("RekaminScreenshotWorker").apply { start() }
-        val workerHandler = Handler(workerThread.looper)
-
-        try {
-            val imageReader = ImageReader.newInstance(width, height, PixelFormat.RGBA_8888, 2)
-            val shotVirtualDisplay = projection.createVirtualDisplay(
-                "RekaminScreenshot",
-                width,
-                height,
-                densityDpi,
-                DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
-                imageReader.surface,
-                null,
-                workerHandler
-            )
-
-            val captured = AtomicBoolean(false)
-            lateinit var timeoutRunnable: Runnable
-            timeoutRunnable = Runnable {
-                if (!captured.getAndSet(true)) {
-                    try { shotVirtualDisplay?.release() } catch (_: Exception) {}
-                    try { imageReader.close() } catch (_: Exception) {}
-                    workerThread.quitSafely()
-                    Toast.makeText(this, "Waktu tangkap layar habis, coba lagi", Toast.LENGTH_SHORT).show()
-                    broadcastScreenshotResult(success = false, uriString = null)
-                }
-            }
-
-            imageReader.setOnImageAvailableListener({ reader ->
-                if (captured.getAndSet(true)) return@setOnImageAvailableListener
-                mainHandler.removeCallbacks(timeoutRunnable)
-                var image: android.media.Image? = null
-                try {
-                    image = reader.acquireLatestImage()
-                    if (image != null) {
-                        val plane = image.planes[0]
-                        val buffer = plane.buffer
-                        val pixelStride = plane.pixelStride.coerceAtLeast(1)
-                        val rowStride = plane.rowStride
-                        val rowPadding = (rowStride - pixelStride * width).coerceAtLeast(0)
-                        val rawBitmap = Bitmap.createBitmap(
-                            width + rowPadding / pixelStride,
-                            height,
-                            Bitmap.Config.ARGB_8888
-                        )
-                        rawBitmap.copyPixelsFromBuffer(buffer)
-                        val croppedBitmap = if (rawBitmap.width != width || rawBitmap.height != height) {
-                            Bitmap.createBitmap(rawBitmap, 0, 0, width, height).also {
-                                rawBitmap.recycle()
-                            }
-                        } else {
-                            rawBitmap
-                        }
-                        val savedUri = StorageHelper.saveScreenshot(this, croppedBitmap)
-                        croppedBitmap.recycle()
-
-                        mainHandler.post {
-                            if (savedUri != null) {
-                                Toast.makeText(this, "📸 Tangkapan layar disimpan ke Galeri", Toast.LENGTH_SHORT).show()
-                                broadcastScreenshotResult(success = true, uriString = savedUri.toString())
-                            } else {
-                                Toast.makeText(this, "Gagal menyimpan tangkapan layar", Toast.LENGTH_SHORT).show()
-                                broadcastScreenshotResult(success = false, uriString = null)
-                            }
-                        }
-                    } else {
-                        mainHandler.post {
-                            Toast.makeText(this, "Gagal mengambil frame tangkapan layar", Toast.LENGTH_SHORT).show()
-                            broadcastScreenshotResult(success = false, uriString = null)
-                        }
-                    }
-                } catch (e: Exception) {
-                    Log.e(TAG, "Screenshot capture error", e)
-                    mainHandler.post {
-                        Toast.makeText(this, "Gagal mengambil tangkapan layar", Toast.LENGTH_SHORT).show()
-                        broadcastScreenshotResult(success = false, uriString = null)
-                    }
-                } finally {
-                    try { image?.close() } catch (_: Exception) {}
-                    try { shotVirtualDisplay?.release() } catch (_: Exception) {}
-                    try { reader.close() } catch (_: Exception) {}
-                    workerThread.quitSafely()
-                }
-            }, workerHandler)
-
-            mainHandler.postDelayed(timeoutRunnable, 2500L)
-        } catch (e: Exception) {
-            workerThread.quitSafely()
-            Log.e(TAG, "Failed creating screenshot VirtualDisplay", e)
+        val relay = surfaceRelay
+        if (relay == null) {
             mainHandler.post {
-                Toast.makeText(this, "Perangkat membatasi tangkap layar sekunder saat merekam", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "Permukaan tangkap layar aktif belum siap", Toast.LENGTH_SHORT).show()
             }
             broadcastScreenshotResult(success = false, uriString = null)
+            return
+        }
+
+        relay.captureBitmap { bitmap ->
+            if (bitmap == null) {
+                mainHandler.post {
+                    Toast.makeText(this, "Gagal mengambil frame dari permukaan rekaman", Toast.LENGTH_SHORT).show()
+                    broadcastScreenshotResult(success = false, uriString = null)
+                }
+                return@captureBitmap
+            }
+
+            Thread({
+                var savedUri: android.net.Uri? = null
+                try {
+                    savedUri = StorageHelper.saveScreenshot(this, bitmap)
+                } catch (e: Exception) {
+                    Log.e(TAG, "Screenshot save error", e)
+                } finally {
+                    if (!bitmap.isRecycled) {
+                        bitmap.recycle()
+                    }
+                }
+
+                mainHandler.post {
+                    if (savedUri != null) {
+                        Toast.makeText(this, "📸 Tangkapan layar disimpan ke Galeri", Toast.LENGTH_SHORT).show()
+                        broadcastScreenshotResult(success = true, uriString = savedUri.toString())
+                    } else {
+                        Toast.makeText(this, "Gagal menyimpan tangkapan layar", Toast.LENGTH_SHORT).show()
+                        broadcastScreenshotResult(success = false, uriString = null)
+                    }
+                }
+            }, "RekaminScreenshotSave").start()
         }
     }
 
@@ -467,12 +439,18 @@ open class ScreenRecordingService : Service() {
         mainHandler.removeCallbacks(notificationUpdateRunnable)
         val recorder = codecRecorder
         val targetFile = outputFile
+        outputFile = null
 
         Thread({
             try {
                 virtualDisplay?.release()
             } catch (ignored: Exception) {}
             virtualDisplay = null
+
+            try {
+                surfaceRelay?.release()
+            } catch (ignored: Exception) {}
+            surfaceRelay = null
 
             val muxerWritten = try {
                 recorder?.stop() ?: false
@@ -488,12 +466,18 @@ open class ScreenRecordingService : Service() {
             } catch (ignored: Exception) {}
             mediaProjection = null
 
-            val isValidFile = targetFile != null && targetFile.exists() && targetFile.length() > 10240L
-            if (!muxerWritten && targetFile != null && targetFile.exists() && targetFile.length() <= 10240L) {
-                try { targetFile.delete() } catch (_: Exception) {}
-            }
-
-            if (isValidFile && targetFile != null) {
+            val isValidFile = isValidFinalizedRecording(
+                muxerFinalized = muxerWritten,
+                fileExists = targetFile?.exists() == true,
+                fileLengthBytes = targetFile?.length() ?: 0L
+            )
+            if (!isValidFile) {
+                if (targetFile != null && targetFile.exists()) {
+                    try { targetFile.delete() } catch (_: Exception) {}
+                }
+                lastRecordedFilePath = null
+                MainActivity.hasPendingSaveDialog = false
+            } else if (targetFile != null) {
                 lastRecordedFilePath = targetFile.absolutePath
                 MainActivity.hasPendingSaveDialog = true
                 StorageHelper.scanVideoFile(this, targetFile)
@@ -521,6 +505,14 @@ open class ScreenRecordingService : Service() {
                         putExtra(EXTRA_FILE_PATH, targetFile.absolutePath)
                     }
                 })
+                if (!isValidFile) {
+                    sendPackageBroadcast(Intent(ACTION_RECORDING_ERROR).apply {
+                        putExtra(
+                            EXTRA_ERROR_MESSAGE,
+                            "Rekaman gagal difinalisasi dengan benar oleh encoder/muxer. File parsial dihapus."
+                        )
+                    })
+                }
 
                 stopForegroundCompat()
                 stopSelf()
@@ -684,6 +676,9 @@ open class ScreenRecordingService : Service() {
     }
 
     private fun notifyErrorAndStop(message: String) {
+        lastRecordedFilePath = null
+        currentActiveFilePath = null
+        MainActivity.hasPendingSaveDialog = false
         sendPackageBroadcast(Intent(ACTION_RECORDING_ERROR).apply {
             putExtra(EXTRA_ERROR_MESSAGE, message)
         })
@@ -701,6 +696,8 @@ open class ScreenRecordingService : Service() {
         unregisterScreenOffReceiver()
         try { virtualDisplay?.release() } catch (_: Exception) {}
         virtualDisplay = null
+        try { surfaceRelay?.release() } catch (_: Exception) {}
+        surfaceRelay = null
         try { codecRecorder?.releaseAll() } catch (_: Exception) {}
         codecRecorder = null
         try {
@@ -708,6 +705,15 @@ open class ScreenRecordingService : Service() {
             mediaProjection?.stop()
         } catch (_: Exception) {}
         mediaProjection = null
+        try {
+            val leftover = outputFile
+            if (leftover != null && leftover.exists()) {
+                leftover.delete()
+            }
+        } catch (_: Exception) {}
+        outputFile = null
+        lastRecordedFilePath = null
+        MainActivity.hasPendingSaveDialog = false
         currentActiveFilePath = null
         effectiveAudioMode = null
         isRecording = false

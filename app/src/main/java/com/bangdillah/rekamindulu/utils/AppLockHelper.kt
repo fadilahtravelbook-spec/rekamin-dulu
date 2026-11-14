@@ -1,7 +1,9 @@
 package com.bangdillah.rekamindulu.utils
 
+import android.app.Activity
 import android.text.InputFilter
 import android.text.InputType
+import android.view.WindowManager
 import android.widget.EditText
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
@@ -69,6 +71,22 @@ object AppLockHelper {
 
     fun clearBackgroundLockSuppression() {
         sessionTracker.clearBackgroundSuppression()
+    }
+
+    fun shouldMaskScreenInRecents(
+        isAppLockEnabled: Boolean,
+        savedPin: String
+    ): Boolean {
+        return isAppLockEnabled && savedPin.isNotEmpty()
+    }
+
+    fun syncWindowSecurityFlag(activity: Activity, appPreferences: AppPreferences) {
+        val window = activity.window ?: return
+        if (shouldMaskScreenInRecents(appPreferences.isAppLockEnabled, appPreferences.appLockPin)) {
+            window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
+        } else {
+            window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
+        }
     }
 
     fun shouldRequirePin(

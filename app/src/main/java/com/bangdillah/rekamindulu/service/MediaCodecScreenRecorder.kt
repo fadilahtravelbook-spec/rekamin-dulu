@@ -141,6 +141,8 @@ class MediaCodecScreenRecorder(
     private var audioTrackIndex: Int = -1
     private var expectAudioTrack: Boolean = false
     private var muxerStarted: Boolean = false
+    private var videoSamplesWritten: Int = 0
+    private var muxerWriteError: Boolean = false
     private val muxerLock = ReentrantLock()
 
     private val pendingVideoSamples = mutableListOf<Pair<ByteBuffer, MediaCodec.BufferInfo>>()
@@ -536,17 +538,18 @@ class MediaCodecScreenRecorder(
         try { videoDrainThread?.join(3500) } catch (ignored: InterruptedException) {}
 
         val cleanlyWritten = muxerLock.withLock {
-            try {
-                if (muxerStarted) {
+            val stopSucceeded = if (muxerStarted) {
+                try {
                     mediaMuxer?.stop()
                     true
-                } else {
+                } catch (e: Exception) {
+                    Log.w(TAG, "mediaMuxer.stop notice: ${e.message}")
                     false
                 }
-            } catch (e: Exception) {
-                Log.w(TAG, "mediaMuxer.stop notice: ${e.message}")
+            } else {
                 false
             }
+            muxerStarted && !muxerWriteError && videoSamplesWritten > 0 && stopSucceeded
         }
 
         releaseAll()
@@ -903,7 +906,9 @@ class MediaCodecScreenRecorder(
                     for ((buf, info) in pendingVideoSamples) {
                         try {
                             muxer.writeSampleData(videoTrackIndex, buf, info)
+                            videoSamplesWritten++
                         } catch (e: Exception) {
+                            muxerWriteError = true
                             Log.w(TAG, "flush pending video sample error: ${e.message}")
                         }
                     }
@@ -914,6 +919,7 @@ class MediaCodecScreenRecorder(
                             try {
                                 muxer.writeSampleData(audioTrackIndex, buf, info)
                             } catch (e: Exception) {
+                                muxerWriteError = true
                                 Log.w(TAG, "flush pending audio sample error: ${e.message}")
                             }
                         }
@@ -922,6 +928,7 @@ class MediaCodecScreenRecorder(
                     Log.i(TAG, "MediaMuxer started (videoTrack=$videoTrackIndex, audioTrack=$audioTrackIndex)")
                 }
             } catch (e: Exception) {
+                muxerWriteError = true
                 Log.e(TAG, "onOutputFormatChanged muxer error: ${e.message}", e)
             }
         }
@@ -935,7 +942,11 @@ class MediaCodecScreenRecorder(
                 if (track >= 0) {
                     try {
                         muxer.writeSampleData(track, data, info)
+                        if (isVideo) {
+                            videoSamplesWritten++
+                        }
                     } catch (e: Exception) {
+                        muxerWriteError = true
                         Log.w(TAG, "writeSampleData error (isVideo=$isVideo): ${e.message}")
                     }
                 }
@@ -987,6 +998,8 @@ class MediaCodecScreenRecorder(
             try { mediaMuxer?.release() } catch (ignored: Exception) {}
             mediaMuxer = null
             muxerStarted = false
+            videoSamplesWritten = 0
+            muxerWriteError = false
             videoTrackIndex = -1
             audioTrackIndex = -1
             pendingVideoSamples.clear()

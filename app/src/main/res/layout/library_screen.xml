@@ -2,6 +2,7 @@
 <androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/library_root_layout"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="@color/colorBackground"
@@ -171,11 +172,11 @@
 
             <ImageView
                 android:id="@+id/btn_clear_search"
-                android:layout_width="28dp"
-                android:layout_height="28dp"
+                android:layout_width="44dp"
+                android:layout_height="44dp"
                 android:background="?attr/selectableItemBackgroundBorderless"
                 android:contentDescription="Hapus Pencarian"
-                android:padding="6dp"
+                android:padding="12dp"
                 android:src="@drawable/ic_clear"
                 android:visibility="gone"
                 app:tint="@color/textCaption" />
@@ -183,16 +184,16 @@
             <View
                 android:layout_width="1dp"
                 android:layout_height="22dp"
-                android:layout_marginHorizontal="6dp"
+                android:layout_marginHorizontal="4dp"
                 android:background="@color/colorBorder" />
 
             <ImageView
                 android:id="@+id/btn_sort_library"
-                android:layout_width="32dp"
-                android:layout_height="32dp"
+                android:layout_width="44dp"
+                android:layout_height="44dp"
                 android:background="?attr/selectableItemBackgroundBorderless"
                 android:contentDescription="Urutkan Rekaman"
-                android:padding="6dp"
+                android:padding="10dp"
                 android:src="@drawable/ic_sort"
                 app:tint="@color/colorPrimary" />
         </LinearLayout>
@@ -205,8 +206,10 @@
         android:layout_height="wrap_content"
         android:layout_marginTop="8dp"
         android:clipToPadding="false"
+        android:fadingEdgeLength="24dp"
         android:overScrollMode="never"
         android:paddingHorizontal="16dp"
+        android:requiresFadingEdge="horizontal"
         android:scrollbars="none"
         app:layout_constraintTop_toBottomOf="@id/card_search_bar">
 
@@ -218,11 +221,13 @@
             <TextView
                 android:id="@+id/chip_filter_all"
                 android:layout_width="wrap_content"
-                android:layout_height="32dp"
+                android:layout_height="wrap_content"
                 android:layout_marginEnd="8dp"
                 android:background="@drawable/bg_filter_chip"
                 android:gravity="center"
+                android:minHeight="38dp"
                 android:paddingHorizontal="14dp"
+                android:paddingVertical="8dp"
                 android:text="Semua"
                 android:textColor="@color/color_filter_chip_text"
                 android:textSize="12sp"
@@ -231,11 +236,13 @@
             <TextView
                 android:id="@+id/chip_filter_game"
                 android:layout_width="wrap_content"
-                android:layout_height="32dp"
+                android:layout_height="wrap_content"
                 android:layout_marginEnd="8dp"
                 android:background="@drawable/bg_filter_chip"
                 android:gravity="center"
+                android:minHeight="38dp"
                 android:paddingHorizontal="14dp"
+                android:paddingVertical="8dp"
                 android:text="🎮 Rekaman Game"
                 android:textColor="@color/color_filter_chip_text"
                 android:textSize="12sp" />
@@ -243,11 +250,13 @@
             <TextView
                 android:id="@+id/chip_filter_recent"
                 android:layout_width="wrap_content"
-                android:layout_height="32dp"
+                android:layout_height="wrap_content"
                 android:layout_marginEnd="8dp"
                 android:background="@drawable/bg_filter_chip"
                 android:gravity="center"
+                android:minHeight="38dp"
                 android:paddingHorizontal="14dp"
+                android:paddingVertical="8dp"
                 android:text="📁 Hari Ini"
                 android:textColor="@color/color_filter_chip_text"
                 android:textSize="12sp" />
@@ -255,10 +264,12 @@
             <TextView
                 android:id="@+id/chip_filter_long"
                 android:layout_width="wrap_content"
-                android:layout_height="32dp"
+                android:layout_height="wrap_content"
                 android:background="@drawable/bg_filter_chip"
                 android:gravity="center"
+                android:minHeight="38dp"
                 android:paddingHorizontal="14dp"
+                android:paddingVertical="8dp"
                 android:text="⏱️ &gt; 1 Menit"
                 android:textColor="@color/color_filter_chip_text"
                 android:textSize="12sp" />

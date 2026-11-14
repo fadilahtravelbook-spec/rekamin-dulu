@@ -4,6 +4,7 @@ import android.app.Activity
 import android.app.Application
 import android.os.Bundle
 import com.bangdillah.rekamindulu.utils.AppLockHelper
+import com.bangdillah.rekamindulu.utils.AppPreferences
 
 /**
  * Application class untuk memantau siklus foreground/background aplikasi secara global
@@ -14,13 +15,17 @@ class RekaminDuluApplication : Application() {
     override fun onCreate() {
         super.onCreate()
         registerActivityLifecycleCallbacks(object : ActivityLifecycleCallbacks {
-            override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) {}
+            override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) {
+                AppLockHelper.syncWindowSecurityFlag(activity, AppPreferences(activity))
+            }
 
             override fun onActivityStarted(activity: Activity) {
                 AppLockHelper.sessionTracker.onActivityStarted()
             }
 
-            override fun onActivityResumed(activity: Activity) {}
+            override fun onActivityResumed(activity: Activity) {
+                AppLockHelper.syncWindowSecurityFlag(activity, AppPreferences(activity))
+            }
 
             override fun onActivityPaused(activity: Activity) {}
 

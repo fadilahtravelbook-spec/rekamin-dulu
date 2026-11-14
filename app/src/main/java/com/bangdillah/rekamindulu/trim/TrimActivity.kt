@@ -34,6 +34,7 @@ import com.bangdillah.rekamindulu.service.ScreenRecordingService
 import com.bangdillah.rekamindulu.utils.AppLockHelper
 import com.bangdillah.rekamindulu.utils.AppPreferences
 import com.bangdillah.rekamindulu.utils.StorageHelper
+import com.bangdillah.rekamindulu.utils.UiHelper
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import java.io.File
 import java.io.FileOutputStream
@@ -46,6 +47,8 @@ class TrimActivity : AppCompatActivity() {
     companion object {
         private const val REQUEST_CODE_PICK_VIDEO = 3001
         private const val MIN_CLIP_DURATION_MS = 1000
+
+        fun formatTime(ms: Int): String = UiHelper.formatDurationMs(ms.toLong())
 
         /**
          * Menjaga posisi slider awal & akhir tetap valid dengan jarak minimal [minClipMs]
@@ -93,10 +96,12 @@ class TrimActivity : AppCompatActivity() {
 
     private lateinit var appPreferences: AppPreferences
     private var appLockDialog: AlertDialog? = null
+    private var activeDialog: AlertDialog? = null
     private var pendingInitialVideoFile: File? = null
 
     private var currentVideoFile: File? = null
     private var tempPickedFile: File? = null
+    private var surfaceLostInStop = false
     @Volatile
     private var isTrimming = false
     @Volatile
@@ -104,6 +109,7 @@ class TrimActivity : AppCompatActivity() {
     private var videoDurationMs: Int = 0
     private var startTrimMs: Long = 0L
     private var endTrimMs: Long = 0L
+    private var currentResolutionLabel: String = ""
 
     private val handler = Handler(Looper.getMainLooper())
 
@@ -132,6 +138,12 @@ class TrimActivity : AppCompatActivity() {
 
         supportActionBar?.hide()
 
+        UiHelper.applySystemBarInsets(
+            anchorView = findViewById(R.id.trim_root_scroll),
+            topView = findViewById(R.id.trim_inner_content),
+            bottomView = findViewById(R.id.trim_inner_content)
+        )
+
         initViews()
         setupListeners()
 
@@ -146,7 +158,6 @@ class TrimActivity : AppCompatActivity() {
         } else {
             showEmptyVideoPlaceholder(true)
         }
-        checkAppLock()
     }
 
     private fun checkAppLock() {
@@ -159,16 +170,23 @@ class TrimActivity : AppCompatActivity() {
             negativeButtonLabel = "Kembali",
             onCancel = { finish() },
             onUnlocked = {
+                videoView?.visibility = View.VISIBLE
                 val pending = pendingInitialVideoFile
                 if (pending != null) {
                     pendingInitialVideoFile = null
+                    surfaceLostInStop = false
                     MainActivity.consumePendingSaveIfHandled(
                         openedFilePath = pending.absolutePath,
                         lastRecordedPath = ScreenRecordingService.lastRecordedFilePath
                     )
                     loadVideoFile(pending)
                 } else if (currentVideoFile != null) {
-                    textSelectedFileName?.text = currentVideoFile?.name
+                    val fileToRestore = currentVideoFile!!
+                    textSelectedFileName?.text = fileToRestore.name
+                    if (surfaceLostInStop && fileToRestore.exists()) {
+                        surfaceLostInStop = false
+                        rebindPreviewSurface(fileToRestore)
+                    }
                 }
             }
         )
@@ -182,6 +200,7 @@ class TrimActivity : AppCompatActivity() {
                 HomeActivity.isSessionUnlocked
             )
         ) {
+            videoView?.visibility = View.INVISIBLE
             textSelectedFileName?.text = "Video Terkunci 🔒"
             if (videoView?.isPlaying == true) {
                 videoView?.pause()
@@ -203,6 +222,12 @@ class TrimActivity : AppCompatActivity() {
 
     private fun initViews() {
         videoView = findViewById(R.id.trim_video_view)
+        videoView?.setSecure(
+            AppLockHelper.shouldMaskScreenInRecents(
+                appPreferences.isAppLockEnabled,
+                appPreferences.appLockPin
+            )
+        )
         btnPreviewPlay = findViewById(R.id.btn_preview_play)
         textSelectedFileName = findViewById(R.id.text_selected_file_name)
         textVideoDurationInfo = findViewById(R.id.text_video_duration_info)
@@ -244,10 +269,26 @@ class TrimActivity : AppCompatActivity() {
             togglePreviewPlayback()
         }
 
+        findViewById<View>(R.id.layout_trim_preview_container)?.setOnClickListener {
+            if (currentVideoFile != null && !isTrimming) {
+                togglePreviewPlayback()
+            }
+        }
+
         videoView?.setOnCompletionListener {
             handler.removeCallbacks(checkTrimPlaybackRunnable)
             btnPreviewPlay?.setImageResource(R.drawable.ic_play_arrow)
             btnPreviewPlay?.visibility = View.VISIBLE
+        }
+
+        videoView?.setOnErrorListener { _, _, _ ->
+            handler.removeCallbacks(checkTrimPlaybackRunnable)
+            btnPreviewPlay?.visibility = View.GONE
+            btnApplyTrim?.isEnabled = false
+            if (!isFinishing && !isDestroyed) {
+                Toast.makeText(this, "Preview video tidak dapat diputar", Toast.LENGTH_SHORT).show()
+            }
+            true
         }
 
         seekStartTime?.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
@@ -326,6 +367,7 @@ class TrimActivity : AppCompatActivity() {
 
     private fun loadVideoFile(file: File) {
         currentVideoFile = file
+        surfaceLostInStop = false
         showEmptyVideoPlaceholder(false)
         textSelectedFileName?.text = file.name
         textVideoDurationInfo?.text = "Memuat informasi video..."
@@ -333,18 +375,18 @@ class TrimActivity : AppCompatActivity() {
 
         lifecycleScope.launch(Dispatchers.IO) {
             var retriever: MediaMetadataRetriever? = null
-            var durationMs = 10000
-            var width = "1080"
-            var height = "1920"
+            var durationMs = 0
+            var width = 0
+            var height = 0
             var loadError = false
 
             try {
                 retriever = MediaMetadataRetriever()
                 retriever.setDataSource(file.absolutePath)
                 val durationStr = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)
-                width = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH) ?: "1080"
-                height = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT) ?: "1920"
-                durationMs = (durationStr?.toIntOrNull() ?: 10000).let { if (it <= 0) 10000 else it }
+                width = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)?.toIntOrNull() ?: 0
+                height = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)?.toIntOrNull() ?: 0
+                durationMs = durationStr?.toIntOrNull()?.takeIf { it > 0 } ?: 0
             } catch (e: Exception) {
                 loadError = true
             } finally {
@@ -354,53 +396,100 @@ class TrimActivity : AppCompatActivity() {
             withContext(Dispatchers.Main) {
                 if (isFinishing || isDestroyed) return@withContext
                 if (loadError) {
+                    videoDurationMs = 0
                     btnApplyTrim?.isEnabled = false
+                    textVideoDurationInfo?.text = "Gagal membaca detail video"
                     Toast.makeText(this@TrimActivity, "Gagal membaca detail video", Toast.LENGTH_SHORT).show()
                     return@withContext
                 }
 
-                videoDurationMs = durationMs
-                textVideoDurationInfo?.text = String.format(
-                    Locale.getDefault(),
-                    "Total Durasi: %s • Resolusi %sx%s",
-                    formatTime(videoDurationMs),
-                    width,
-                    height
-                )
+                currentResolutionLabel = if (width > 0 && height > 0) " • Resolusi ${width}x${height}" else ""
 
-                startTrimMs = 0L
-                endTrimMs = videoDurationMs.toLong()
-
-                seekStartTime?.max = videoDurationMs
-                seekStartTime?.progress = 0
-
-                seekEndTime?.max = videoDurationMs
-                seekEndTime?.progress = videoDurationMs
-
-                textStartTimeVal?.text = "00:00"
-                textEndTimeVal?.text = formatTime(videoDurationMs)
-
-                videoView?.setOnPreparedListener { mp ->
-                    val actualDur = mp.duration
-                    if (actualDur > 0) {
-                        videoDurationMs = actualDur
-                        seekStartTime?.max = actualDur
-                        seekEndTime?.max = actualDur
-                        if (endTrimMs > actualDur || endTrimMs == durationMs.toLong()) {
-                            endTrimMs = actualDur.toLong()
-                            seekEndTime?.progress = actualDur
-                            textEndTimeVal?.text = formatTime(actualDur)
-                            updateSummary()
-                        }
-                    }
-                    videoView?.seekTo(100.coerceAtMost(videoDurationMs))
+                if (durationMs > 0) {
+                    initializeDurationBounds(durationMs)
+                } else {
+                    videoDurationMs = 0
+                    startTrimMs = 0L
+                    endTrimMs = 0L
+                    seekStartTime?.max = 0
+                    seekStartTime?.progress = 0
+                    seekEndTime?.max = 0
+                    seekEndTime?.progress = 0
+                    textStartTimeVal?.text = formatTime(0)
+                    textEndTimeVal?.text = formatTime(0)
+                    textVideoDurationInfo?.text = "Memeriksa durasi dari pemutar..."
+                    btnApplyTrim?.isEnabled = false
                 }
-                videoView?.setVideoPath(file.absolutePath)
-                btnApplyTrim?.isEnabled = true
 
-                updateSummary()
+                bindVideoPreview(file, expectedMetadataDurationMs = durationMs)
             }
         }
+    }
+
+    private fun initializeDurationBounds(durationMs: Int) {
+        videoDurationMs = durationMs
+        textVideoDurationInfo?.text = String.format(
+            Locale.getDefault(),
+            "Total Durasi: %s%s",
+            formatTime(videoDurationMs),
+            currentResolutionLabel
+        )
+        startTrimMs = 0L
+        endTrimMs = videoDurationMs.toLong()
+        seekStartTime?.max = videoDurationMs
+        seekStartTime?.progress = 0
+        seekEndTime?.max = videoDurationMs
+        seekEndTime?.progress = videoDurationMs
+        textStartTimeVal?.text = formatTime(0)
+        textEndTimeVal?.text = formatTime(videoDurationMs)
+        btnApplyTrim?.isEnabled = true
+        updateSummary()
+    }
+
+    private fun bindVideoPreview(file: File, expectedMetadataDurationMs: Int) {
+        videoView?.setOnPreparedListener { mp ->
+            val actualDur = mp.duration
+            if (actualDur > 0) {
+                if (videoDurationMs <= 0) {
+                    initializeDurationBounds(actualDur)
+                } else {
+                    videoDurationMs = actualDur
+                    seekStartTime?.max = actualDur
+                    seekEndTime?.max = actualDur
+                    if (endTrimMs > actualDur || endTrimMs == expectedMetadataDurationMs.toLong()) {
+                        endTrimMs = actualDur.toLong()
+                        seekEndTime?.progress = actualDur
+                        textEndTimeVal?.text = formatTime(actualDur)
+                        textVideoDurationInfo?.text = String.format(
+                            Locale.getDefault(),
+                            "Total Durasi: %s%s",
+                            formatTime(actualDur),
+                            currentResolutionLabel
+                        )
+                        updateSummary()
+                    }
+                    btnApplyTrim?.isEnabled = true
+                }
+                videoView?.seekTo(startTrimMs.toInt().coerceIn(0, actualDur))
+            } else if (videoDurationMs <= 0) {
+                btnApplyTrim?.isEnabled = false
+                textVideoDurationInfo?.text = "Durasi video tidak valid"
+                Toast.makeText(this@TrimActivity, "Durasi video tidak valid atau file rusak", Toast.LENGTH_SHORT).show()
+            }
+        }
+        videoView?.setVideoPath(file.absolutePath)
+    }
+
+    private fun rebindPreviewSurface(file: File) {
+        videoView?.setOnPreparedListener { mp ->
+            val actualDur = mp.duration
+            if (actualDur > 0 && videoDurationMs <= 0) {
+                initializeDurationBounds(actualDur)
+            }
+            val safeDur = (if (actualDur > 0) actualDur else videoDurationMs).coerceAtLeast(0)
+            videoView?.seekTo(startTrimMs.toInt().coerceIn(0, safeDur))
+        }
+        videoView?.setVideoPath(file.absolutePath)
     }
 
     private fun updateSummary() {
@@ -462,7 +551,8 @@ class TrimActivity : AppCompatActivity() {
                     StorageHelper.scanVideoFile(this@TrimActivity, outputFile)
 
                     try {
-                        MaterialAlertDialogBuilder(this@TrimActivity)
+                        try { activeDialog?.dismiss() } catch (ignored: Exception) {}
+                        activeDialog = MaterialAlertDialogBuilder(this@TrimActivity)
                             .setIcon(R.drawable.ic_check_circle)
                             .setTitle("Pemotongan Berhasil! 🎉")
                             .setMessage("Klip video baru telah disimpan di Galeri Rekamin Dulu (Movies/RekaminDulu):\n${outputFile.name}")
@@ -550,12 +640,7 @@ class TrimActivity : AppCompatActivity() {
         }
     }
 
-    private fun formatTime(ms: Int): String {
-        val totalSec = ms / 1000
-        val min = totalSec / 60
-        val sec = totalSec % 60
-        return String.format(Locale.getDefault(), "%02d:%02d", min, sec)
-    }
+    private fun formatTime(ms: Int): String = Companion.formatTime(ms)
 
     override fun onPause() {
         super.onPause()
@@ -567,9 +652,16 @@ class TrimActivity : AppCompatActivity() {
         }
     }
 
+    override fun onStop() {
+        super.onStop()
+        surfaceLostInStop = true
+    }
+
     override fun onDestroy() {
         super.onDestroy()
         handler.removeCallbacksAndMessages(null)
+        try { activeDialog?.dismiss() } catch (ignored: Exception) {}
+        activeDialog = null
         try { appLockDialog?.dismiss() } catch (ignored: Exception) {}
         appLockDialog = null
         videoView?.stopPlayback()

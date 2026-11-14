@@ -1,19 +1,23 @@
 <?xml version="1.0" encoding="utf-8"?>
 <androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/settings_root_layout"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="@color/colorBackground">
 
     <ScrollView
+        android:id="@+id/settings_scroll_view"
         android:layout_width="match_parent"
         android:layout_height="0dp"
+        android:clipToPadding="false"
         android:fillViewport="true"
         android:scrollbars="none"
         app:layout_constraintBottom_toTopOf="@id/bottom_navigation_settings"
         app:layout_constraintTop_toTopOf="parent">
 
         <LinearLayout
+            android:id="@+id/settings_inner_content"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
@@ -107,8 +111,12 @@
                     android:padding="16dp">
 
                     <LinearLayout
+                        android:id="@+id/row_setting_gaming_mode"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
+                        android:background="?attr/selectableItemBackground"
+                        android:clickable="true"
+                        android:focusable="true"
                         android:gravity="center_vertical"
                         android:orientation="horizontal">
 
@@ -186,9 +194,14 @@
                         android:background="@color/colorBorder" />
 
                     <LinearLayout
+                        android:id="@+id/row_setting_fps_stabilizer"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
+                        android:background="?attr/selectableItemBackground"
+                        android:clickable="true"
+                        android:focusable="true"
                         android:gravity="center_vertical"
+                        android:minHeight="48dp"
                         android:orientation="horizontal"
                         android:paddingVertical="4dp">
 
@@ -240,9 +253,14 @@
                         android:background="@color/colorBorder" />
 
                     <LinearLayout
+                        android:id="@+id/row_setting_turbo_boost"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
+                        android:background="?attr/selectableItemBackground"
+                        android:clickable="true"
+                        android:focusable="true"
                         android:gravity="center_vertical"
+                        android:minHeight="48dp"
                         android:orientation="horizontal"
                         android:paddingVertical="4dp">
 
@@ -294,9 +312,14 @@
                         android:background="@color/colorBorder" />
 
                     <LinearLayout
+                        android:id="@+id/row_setting_hw_accel"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
+                        android:background="?attr/selectableItemBackground"
+                        android:clickable="true"
+                        android:focusable="true"
                         android:gravity="center_vertical"
+                        android:minHeight="48dp"
                         android:orientation="horizontal"
                         android:paddingVertical="4dp">
 
@@ -571,7 +594,7 @@
                             android:background="@drawable/bg_setting_val_badge"
                             android:paddingHorizontal="10dp"
                             android:paddingVertical="4dp"
-                            android:text="12 Mbps"
+                            android:text="24 Mbps"
                             android:textColor="@color/colorPrimary"
                             android:textSize="12sp"
                             android:textStyle="bold" />
@@ -911,9 +934,14 @@
                         android:background="@color/colorBorder" />
 
                     <LinearLayout
+                        android:id="@+id/row_setting_internal_audio_boost"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
+                        android:background="?attr/selectableItemBackground"
+                        android:clickable="true"
+                        android:focusable="true"
                         android:gravity="center_vertical"
+                        android:minHeight="48dp"
                         android:orientation="horizontal"
                         android:paddingHorizontal="10dp"
                         android:paddingVertical="4dp">
@@ -1062,8 +1090,12 @@
 
                     <!-- Floating Overlay Switch -->
                     <LinearLayout
+                        android:id="@+id/row_setting_floating_overlay"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
+                        android:background="?attr/selectableItemBackground"
+                        android:clickable="true"
+                        android:focusable="true"
                         android:gravity="center_vertical"
                         android:minHeight="56dp"
                         android:orientation="horizontal"
@@ -1098,6 +1130,7 @@
                                 android:textStyle="bold" />
 
                             <TextView
+                                android:id="@+id/text_floating_overlay_desc"
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
                                 android:layout_marginTop="1dp"
@@ -1123,8 +1156,12 @@
 
                     <!-- Vibrate Switch -->
                     <LinearLayout
+                        android:id="@+id/row_setting_vibrate"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
+                        android:background="?attr/selectableItemBackground"
+                        android:clickable="true"
+                        android:focusable="true"
                         android:gravity="center_vertical"
                         android:minHeight="56dp"
                         android:orientation="horizontal"
@@ -1184,8 +1221,12 @@
 
                     <!-- Stop Screen Off -->
                     <LinearLayout
+                        android:id="@+id/row_setting_stop_screen_off"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
+                        android:background="?attr/selectableItemBackground"
+                        android:clickable="true"
+                        android:focusable="true"
                         android:gravity="center_vertical"
                         android:minHeight="56dp"
                         android:orientation="horizontal"
@@ -1245,8 +1286,12 @@
 
                     <!-- Show FPS Overlay -->
                     <LinearLayout
+                        android:id="@+id/row_setting_show_fps"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
+                        android:background="?attr/selectableItemBackground"
+                        android:clickable="true"
+                        android:focusable="true"
                         android:gravity="center_vertical"
                         android:minHeight="56dp"
                         android:orientation="horizontal"
@@ -1306,8 +1351,12 @@
 
                     <!-- Low Storage Warning -->
                     <LinearLayout
+                        android:id="@+id/row_setting_storage_warning"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
+                        android:background="?attr/selectableItemBackground"
+                        android:clickable="true"
+                        android:focusable="true"
                         android:gravity="center_vertical"
                         android:minHeight="56dp"
                         android:orientation="horizontal"
@@ -1336,7 +1385,7 @@
                             <TextView
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:text="Peringatan Sisa Memori (&lt; 2 GB)"
+                                android:text="Peringatan Sisa Memori (&lt; 200 MB)"
                                 android:textColor="@color/textTitle"
                                 android:textSize="14sp"
                                 android:textStyle="bold" />
@@ -1464,8 +1513,12 @@
 
                     <!-- App Lock Switch -->
                     <LinearLayout
+                        android:id="@+id/row_setting_app_lock"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
+                        android:background="?attr/selectableItemBackground"
+                        android:clickable="true"
+                        android:focusable="true"
                         android:gravity="center_vertical"
                         android:minHeight="56dp"
                         android:orientation="horizontal"
@@ -1569,7 +1622,7 @@
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
                                 android:layout_marginTop="1dp"
-                                android:text="Ganti kode sandi 4 angka"
+                                android:text="Ganti kode sandi 4–6 angka"
                                 android:textColor="@color/textCaption"
                                 android:textSize="11sp" />
                         </LinearLayout>

@@ -17,8 +17,6 @@ import android.widget.VideoView
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.FileProvider
-import androidx.core.view.ViewCompat
-import androidx.core.view.WindowInsetsCompat
 import com.bangdillah.rekamindulu.MainActivity
 import com.bangdillah.rekamindulu.R
 import com.bangdillah.rekamindulu.audio.AudioExtractorHelper
@@ -28,6 +26,7 @@ import com.bangdillah.rekamindulu.utils.AppLockHelper
 import com.bangdillah.rekamindulu.utils.AppPreferences
 import com.bangdillah.rekamindulu.utils.SelectionBottomSheetDialog
 import com.bangdillah.rekamindulu.utils.SelectionOption
+import com.bangdillah.rekamindulu.utils.UiHelper
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import java.io.File
 import java.util.Locale
@@ -42,6 +41,8 @@ class PlayerActivity : AppCompatActivity() {
         ): Boolean {
             return !AppLockHelper.shouldRequirePin(isAppLockEnabled, savedPin, isSessionUnlocked)
         }
+
+        fun formatTime(ms: Int): String = UiHelper.formatDurationMs(ms.toLong())
     }
 
     private var videoView: VideoView? = null
@@ -67,9 +68,11 @@ class PlayerActivity : AppCompatActivity() {
 
     private var areControlsVisible = true
     private var extractProgressDialog: AlertDialog? = null
+    private var activeDialog: AlertDialog? = null
     private lateinit var appPreferences: AppPreferences
     private var appLockDialog: AlertDialog? = null
     private var isVideoLoaded = false
+    private var surfaceLostInStop = false
 
     private val handler = Handler(Looper.getMainLooper())
     private val updateSeekRunnable = object : Runnable {
@@ -99,6 +102,12 @@ class PlayerActivity : AppCompatActivity() {
         supportActionBar?.hide()
 
         videoView = findViewById(R.id.video_view)
+        videoView?.setSecure(
+            AppLockHelper.shouldMaskScreenInRecents(
+                appPreferences.isAppLockEnabled,
+                appPreferences.appLockPin
+            )
+        )
         playPauseBtn = findViewById(R.id.play_pause_btn)
         seekBar = findViewById(R.id.seek_bar)
         currentTimeText = findViewById(R.id.current_time)
@@ -108,25 +117,11 @@ class PlayerActivity : AppCompatActivity() {
         bottomPanel = findViewById(R.id.player_bottom_panel)
         btnSpeed = findViewById(R.id.btn_playback_speed)
 
-        findViewById<View>(R.id.player_root_layout)?.let { root ->
-            ViewCompat.setOnApplyWindowInsetsListener(root) { _, insets ->
-                val statusBarHeight = insets.getInsets(WindowInsetsCompat.Type.statusBars()).top
-                val navBarHeight = insets.getInsets(WindowInsetsCompat.Type.navigationBars()).bottom
-                topBar?.setPadding(
-                    topBar?.paddingLeft ?: 0,
-                    statusBarHeight + (8 * resources.displayMetrics.density).toInt(),
-                    topBar?.paddingRight ?: 0,
-                    topBar?.paddingBottom ?: 0
-                )
-                bottomPanel?.setPadding(
-                    bottomPanel?.paddingLeft ?: 0,
-                    bottomPanel?.paddingTop ?: 0,
-                    bottomPanel?.paddingRight ?: 0,
-                    navBarHeight + (12 * resources.displayMetrics.density).toInt()
-                )
-                insets
-            }
-        }
+        UiHelper.applySystemBarInsets(
+            anchorView = findViewById(R.id.player_root_layout),
+            topView = topBar,
+            bottomView = bottomPanel
+        )
 
         if (savedInstanceState != null) {
             restoredPosition = savedInstanceState.getInt("KEY_PLAYBACK_POSITION", 0)
@@ -160,11 +155,11 @@ class PlayerActivity : AppCompatActivity() {
                 isSessionUnlocked = com.bangdillah.rekamindulu.HomeActivity.isSessionUnlocked
             )
         ) {
+            videoView?.visibility = View.INVISIBLE
             titleText?.text = "Video Terkunci 🔒"
         }
 
         setupListeners()
-        checkAppLock()
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -186,6 +181,7 @@ class PlayerActivity : AppCompatActivity() {
             )
         ) {
             pausePlaybackIfRunning()
+            videoView?.visibility = View.INVISIBLE
             titleText?.text = "Video Terkunci 🔒"
         }
         checkAppLock()
@@ -205,11 +201,13 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     private fun openVideoAfterUnlock() {
+        videoView?.visibility = View.VISIBLE
         val targetFile = pendingVideoFile ?: currentFile ?: return
         val resetPlayback = pendingResetPlayback
         val isSameLoadedFile = currentFile?.absolutePath == targetFile.absolutePath &&
             isVideoLoaded &&
-            !resetPlayback
+            !resetPlayback &&
+            !surfaceLostInStop
 
         pendingVideoFile = null
         pendingResetPlayback = false
@@ -225,6 +223,7 @@ class PlayerActivity : AppCompatActivity() {
             return
         }
 
+        surfaceLostInStop = false
         handler.removeCallbacks(updateSeekRunnable)
         handler.removeCallbacks(hideControlsRunnable)
         videoView?.stopPlayback()
@@ -257,6 +256,7 @@ class PlayerActivity : AppCompatActivity() {
             )
         ) {
             pausePlaybackIfRunning()
+            videoView?.visibility = View.INVISIBLE
             titleText?.text = "Video Terkunci 🔒"
         }
         checkAppLock()
@@ -463,12 +463,13 @@ class PlayerActivity : AppCompatActivity() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             try {
                 currentMediaPlayer?.let { mp ->
-                    val wasPlaying = mp.isPlaying
+                    val wasPlaying = videoView?.isPlaying == true || mp.isPlaying
                     val params = mp.playbackParams ?: PlaybackParams()
                     params.speed = speed
                     mp.playbackParams = params
                     if (!wasPlaying) {
-                        mp.pause()
+                        videoView?.pause()
+                        playPauseBtn?.setImageResource(R.drawable.ic_play_arrow)
                     }
                 }
             } catch (e: Exception) {
@@ -484,7 +485,7 @@ class PlayerActivity : AppCompatActivity() {
 
         videoView?.setOnPreparedListener { mp ->
             currentMediaPlayer = mp
-            val duration = mp.duration
+            val duration = mp.duration.coerceAtLeast(0)
             seekBar?.max = duration
             totalTimeText?.text = formatTime(duration)
 
@@ -516,12 +517,13 @@ class PlayerActivity : AppCompatActivity() {
             showControls()
             videoView?.seekTo(0)
             seekBar?.progress = 0
-            currentTimeText?.text = "00:00"
+            currentTimeText?.text = formatTime(0)
         }
 
         videoView?.setOnErrorListener { _, what, extra ->
             if (!isFinishing && !isDestroyed) {
-                MaterialAlertDialogBuilder(this)
+                try { activeDialog?.dismiss() } catch (ignored: Exception) {}
+                activeDialog = MaterialAlertDialogBuilder(this)
                     .setIcon(R.drawable.ic_video_error)
                     .setTitle("Tidak Dapat Memutar Video")
                     .setMessage("Format file video tidak didukung atau file rekaman rusak (Error $what, $extra).")
@@ -612,7 +614,8 @@ class PlayerActivity : AppCompatActivity() {
 
                     if (success && audioFile != null && audioFile.exists()) {
                         try {
-                            MaterialAlertDialogBuilder(this)
+                            try { activeDialog?.dismiss() } catch (ignored: Exception) {}
+                            activeDialog = MaterialAlertDialogBuilder(this)
                                 .setTitle("Ekstrak Audio Berhasil! 🎉")
                                 .setIcon(R.drawable.ic_check_circle)
                                 .setMessage("Audio disimpan sebagai:\n${audioFile.name}\nUkuran: ${String.format(Locale.getDefault(), "%.1f MB", audioFile.length() / (1024.0 * 1024.0))}")
@@ -684,10 +687,17 @@ class PlayerActivity : AppCompatActivity() {
         }
     }
 
+    override fun onStop() {
+        super.onStop()
+        surfaceLostInStop = true
+    }
+
     override fun onDestroy() {
         super.onDestroy()
         handler.removeCallbacks(updateSeekRunnable)
         handler.removeCallbacks(hideControlsRunnable)
+        try { activeDialog?.dismiss() } catch (ignored: Exception) {}
+        activeDialog = null
         try { extractProgressDialog?.dismiss() } catch (ignored: Exception) {}
         extractProgressDialog = null
         try { appLockDialog?.dismiss() } catch (ignored: Exception) {}
@@ -695,10 +705,5 @@ class PlayerActivity : AppCompatActivity() {
         videoView?.stopPlayback()
     }
 
-    private fun formatTime(ms: Int): String {
-        val totalSec = ms / 1000
-        val min = totalSec / 60
-        val sec = totalSec % 60
-        return String.format(Locale.getDefault(), "%02d:%02d", min, sec)
-    }
+    private fun formatTime(ms: Int): String = Companion.formatTime(ms)
 }

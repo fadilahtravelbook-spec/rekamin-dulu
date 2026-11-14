@@ -36,6 +36,7 @@ object SaveTransitionDialog {
         val view = LayoutInflater.from(context).inflate(R.layout.layout_save_transition_dialog, null)
         dialog.setContentView(view)
         dialog.window?.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT))
+        UiHelper.applySystemBarInsets(anchorView = view, bottomView = view)
 
         val imgThumbnail = view.findViewById<ImageView>(R.id.img_save_dialog_thumbnail)
         val textTitle = view.findViewById<TextView>(R.id.text_save_dialog_title)
@@ -83,8 +84,7 @@ object SaveTransitionDialog {
                 try { retriever?.release() } catch (ignored: Exception) {}
             }
 
-            val totalSec = (durationMs / 1000).toInt().coerceAtLeast(0)
-            val durFormatted = String.format(Locale.getDefault(), "%02d:%02d", totalSec / 60, totalSec % 60)
+            val durFormatted = UiHelper.formatDurationMs(durationMs)
             val resInfo = if (width > 0 && height > 0) " • ${width}x${height}" else ""
 
             mainHandler.post {

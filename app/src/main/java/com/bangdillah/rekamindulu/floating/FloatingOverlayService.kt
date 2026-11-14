@@ -48,6 +48,7 @@ import com.bangdillah.rekamindulu.HomeActivity
 import com.bangdillah.rekamindulu.R
 import com.bangdillah.rekamindulu.service.ScreenRecordingService
 import com.bangdillah.rekamindulu.utils.AppPreferences
+import com.bangdillah.rekamindulu.utils.UiHelper
 import java.util.Locale
 import kotlin.math.abs
 
@@ -753,6 +754,15 @@ class FloatingOverlayService : Service() {
             stopOverlay()
         }
 
+        UiHelper.expandTouchTargets(
+            overlayView?.findViewById(R.id.overlay_header_controls_row),
+            listOf(
+                overlayView?.findViewById<View>(R.id.btn_overlay_transparency) to 44,
+                overlayView?.findViewById<View>(R.id.btn_overlay_minimize) to 44,
+                overlayView?.findViewById<View>(R.id.overlay_close_btn) to 44
+            )
+        )
+
         // Action Stop Button
         val onStopClick = View.OnClickListener {
             triggerVibration(60)
@@ -884,6 +894,7 @@ class FloatingOverlayService : Service() {
         try {
             windowManager?.addView(overlayView, params)
             calculateAndDispatchDynamicFps(System.nanoTime())
+            handler.removeCallbacks(timerRunnable)
             handler.post(timerRunnable)
             Choreographer.getInstance().postFrameCallback(frameCallback)
             dockBubbleToNearestEdge()
@@ -1256,6 +1267,14 @@ class FloatingOverlayService : Service() {
             syncFacecamButtonUi()
             openCameraForMode(newMode)
         }
+
+        UiHelper.expandTouchTargets(
+            view.findViewById(R.id.facecam_inner_frame),
+            listOf(
+                view.findViewById<View>(R.id.btn_facecam_close) to 44,
+                view.findViewById<View>(R.id.btn_facecam_flip) to 44
+            )
+        )
 
         setupFacecamDragListener(view)
 

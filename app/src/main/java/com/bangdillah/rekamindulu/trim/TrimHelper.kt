@@ -42,6 +42,14 @@ object TrimHelper {
         return candidate
     }
 
+    fun isTrimOutputValid(
+        muxerStopSucceeded: Boolean,
+        fileExists: Boolean,
+        fileLengthBytes: Long
+    ): Boolean {
+        return muxerStopSucceeded && fileExists && fileLengthBytes >= 1024L
+    }
+
     /**
      * Memotong video dari startMs sampai endMs dan menyimpannya ke outputFile.
      * @return Pair<Boolean, String> (status sukses, pesan hasil)
@@ -222,9 +230,26 @@ object TrimHelper {
                 extractor.advance()
             }
 
-            if (lastWrittenPtsMap.isEmpty() || !outputFile.exists() || outputFile.length() < 1024) {
+            if (lastWrittenPtsMap.isEmpty()) {
                 if (outputFile.exists()) outputFile.delete()
                 return Pair(false, "Rentang waktu potong tidak menghasilkan sampel video yang valid")
+            }
+
+            var muxerStopSucceeded = false
+            if (muxerStarted) {
+                muxerStarted = false
+                muxer.stop()
+                muxerStopSucceeded = true
+            }
+
+            if (!isTrimOutputValid(
+                    muxerStopSucceeded = muxerStopSucceeded,
+                    fileExists = outputFile.exists(),
+                    fileLengthBytes = outputFile.length()
+                )
+            ) {
+                if (outputFile.exists()) outputFile.delete()
+                return Pair(false, "Hasil pemotongan video tidak valid setelah finalisasi")
             }
 
             progressCallback?.invoke(100)
@@ -232,7 +257,7 @@ object TrimHelper {
 
         } catch (e: Exception) {
             Log.e(TAG, "Gagal memotong video", e)
-            outputFile.delete()
+            if (outputFile.exists()) outputFile.delete()
             return Pair(false, "Gagal memotong video: ${e.localizedMessage ?: "Kesalahan I/O"}")
         } finally {
             if (muxerStarted) {
