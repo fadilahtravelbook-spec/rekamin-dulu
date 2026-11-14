@@ -41,7 +41,8 @@ class OnboardingActivity : AppCompatActivity() {
         UiHelper.applySystemBarInsets(
             anchorView = rootLayout,
             topView = rootLayout,
-            bottomView = bottomContainer
+            bottomView = bottomContainer,
+            horizontalView = rootLayout
         )
 
         viewFlipper = findViewById(R.id.onboarding_view_flipper)
@@ -150,7 +151,7 @@ class OnboardingActivity : AppCompatActivity() {
             params.height = dotHeight
             if (i == currentSlide) {
                 params.width = wideWidth
-                d.backgroundTintList = ContextCompat.getColorStateList(this, R.color.colorPrimary)
+                d.backgroundTintList = ContextCompat.getColorStateList(this, R.color.colorPrimaryNav)
             } else {
                 params.width = dotWidth
                 d.backgroundTintList = ContextCompat.getColorStateList(this, R.color.colorBorder)

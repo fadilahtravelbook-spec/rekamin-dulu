@@ -269,6 +269,7 @@ open class MainActivity : AppCompatActivity() {
         override fun onReceive(context: Context?, intent: Intent?) {
             when (intent?.action) {
                 ScreenRecordingService.ACTION_RECORDING_STOPPED -> {
+                    val stoppedByError = intent.getBooleanExtra(ScreenRecordingService.EXTRA_STOPPED_BY_ERROR, false)
                     val path = resolveStoppedBroadcastFilePath(
                         intent.getStringExtra(ScreenRecordingService.EXTRA_FILE_PATH)
                     )
@@ -277,7 +278,7 @@ open class MainActivity : AppCompatActivity() {
                     updateLibraryStats()
                     updateHomeRecordingsList()
 
-                    if (!isValidFile) {
+                    if (stoppedByError || !isValidFile) {
                         hasPendingSaveDialog = false
                         return
                     }
@@ -315,10 +316,12 @@ open class MainActivity : AppCompatActivity() {
                         ?: "Gagal memulai perekaman layar. Pastikan izin telah diberikan."
                     liveTimerHandler.removeCallbacks(liveTimerRunnable)
                     updateRecordingBanner()
+                    updateLibraryStats()
+                    updateHomeRecordingsList()
                     if (!isFinishing && !isDestroyed) {
                         try { activeDialog?.dismiss() } catch (ignored: Exception) {}
                         activeDialog = MaterialAlertDialogBuilder(this@MainActivity)
-                            .setTitle("⚠️ Perekaman Gagal")
+                            .setTitle("⚠️ Perekaman Dihentikan")
                             .setMessage(errorMsg)
                             .setPositiveButton("Mengerti", null)
                             .show()
@@ -338,13 +341,15 @@ open class MainActivity : AppCompatActivity() {
         UiHelper.applySystemBarInsets(
             anchorView = findViewById(R.id.main_root_layout),
             topView = findViewById(R.id.home_inner_content),
-            bottomView = findViewById(R.id.bottom_navigation)
+            bottomView = findViewById(R.id.bottom_navigation),
+            horizontalView = findViewById(R.id.main_root_layout)
         )
         val countdownHud = findViewById<View>(R.id.layout_countdown_hud)
         UiHelper.applySystemBarInsets(
             anchorView = countdownHud,
             topView = countdownHud,
-            bottomView = countdownHud
+            bottomView = countdownHud,
+            horizontalView = countdownHud
         )
 
         mediaProjectionManager = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
@@ -366,6 +371,23 @@ open class MainActivity : AppCompatActivity() {
         UiHelper.expandTouchTargets(
             findViewById(R.id.layout_cloud_sync_row),
             listOf(findViewById<View>(R.id.btn_trigger_sync_cloud) to 48)
+        )
+        UiHelper.expandTouchTargets(
+            findViewById(R.id.layout_quick_resolution_row),
+            listOf(
+                findViewById<View>(R.id.chip_quick_1080p) to 48,
+                findViewById<View>(R.id.chip_quick_720p) to 48,
+                findViewById<View>(R.id.chip_quick_native) to 48
+            )
+        )
+        UiHelper.expandTouchTargets(
+            findViewById(R.id.layout_quick_audio_row),
+            listOf(
+                findViewById<View>(R.id.chip_quick_audio_online) to 48,
+                findViewById<View>(R.id.chip_quick_audio_both) to 48,
+                findViewById<View>(R.id.chip_quick_audio_mic) to 48,
+                findViewById<View>(R.id.chip_quick_audio_mute) to 48
+            )
         )
         findViewById<ScrollView>(R.id.home_scroll_view)?.setOnScrollChangeListener { _, _, _, _, _ ->
             updateFloatingPillVisibility()
@@ -530,7 +552,7 @@ open class MainActivity : AppCompatActivity() {
             text = if (isMicOn) "✓ AKTIF" else "NONAKTIF"
             if (isMicOn) {
                 backgroundTintList = ContextCompat.getColorStateList(this@MainActivity, R.color.colorPrimaryContainer)
-                setTextColor(ContextCompat.getColor(this@MainActivity, R.color.colorPrimary))
+                setTextColor(ContextCompat.getColor(this@MainActivity, R.color.colorOnPrimaryContainer))
             } else {
                 backgroundTintList = ContextCompat.getColorStateList(this@MainActivity, R.color.colorSurfaceVariant)
                 setTextColor(ContextCompat.getColor(this@MainActivity, R.color.textCaption))
@@ -541,7 +563,7 @@ open class MainActivity : AppCompatActivity() {
             text = if (isGameAudioOn) "✓ AKTIF" else "NONAKTIF"
             if (isGameAudioOn) {
                 backgroundTintList = ContextCompat.getColorStateList(this@MainActivity, R.color.colorPrimaryContainer)
-                setTextColor(ContextCompat.getColor(this@MainActivity, R.color.colorPrimary))
+                setTextColor(ContextCompat.getColor(this@MainActivity, R.color.colorOnPrimaryContainer))
             } else {
                 backgroundTintList = ContextCompat.getColorStateList(this@MainActivity, R.color.colorSurfaceVariant)
                 setTextColor(ContextCompat.getColor(this@MainActivity, R.color.textCaption))
@@ -553,7 +575,7 @@ open class MainActivity : AppCompatActivity() {
             text = stateStr
             if (stateStr != "OFF") {
                 backgroundTintList = ContextCompat.getColorStateList(this@MainActivity, R.color.colorPrimaryContainer)
-                setTextColor(ContextCompat.getColor(this@MainActivity, R.color.colorPrimary))
+                setTextColor(ContextCompat.getColor(this@MainActivity, R.color.colorOnPrimaryContainer))
             } else {
                 backgroundTintList = ContextCompat.getColorStateList(this@MainActivity, R.color.colorSurfaceVariant)
                 setTextColor(ContextCompat.getColor(this@MainActivity, R.color.textCaption))
@@ -575,7 +597,7 @@ open class MainActivity : AppCompatActivity() {
             chip?.apply {
                 if (isSelected) {
                     backgroundTintList = ContextCompat.getColorStateList(this@MainActivity, R.color.colorPrimaryContainer)
-                    setTextColor(ContextCompat.getColor(this@MainActivity, R.color.colorPrimary))
+                    setTextColor(ContextCompat.getColor(this@MainActivity, R.color.colorOnPrimaryContainer))
                 } else {
                     backgroundTintList = ContextCompat.getColorStateList(this@MainActivity, R.color.colorSurfaceVariant)
                     setTextColor(ContextCompat.getColor(this@MainActivity, R.color.textTitle))
@@ -1134,9 +1156,9 @@ open class MainActivity : AppCompatActivity() {
             card?.strokeWidth = 3
             btn?.text = "✓ ${appPreferences.fps} FPS TERKUNCI"
             btn?.backgroundTintList = ContextCompat.getColorStateList(this, R.color.colorSuccessContainer)
-            btn?.setTextColor(ContextCompat.getColor(this, R.color.colorSuccess))
+            btn?.setTextColor(ContextCompat.getColor(this, R.color.colorOnSuccessContainer))
             statusText?.text = "Terkunci Stabil ${appPreferences.fps} FPS • Offload GPU Aktif (0 Frame Drop)"
-            statusText?.setTextColor(ContextCompat.getColor(this, R.color.colorSuccess))
+            statusText?.setTextColor(ContextCompat.getColor(this, R.color.colorOnSuccessContainer))
             iconBox?.backgroundTintList = ContextCompat.getColorStateList(this, R.color.colorSuccessContainer)
         } else {
             card?.strokeColor = ContextCompat.getColor(this, R.color.colorBorder)
@@ -1294,10 +1316,13 @@ open class MainActivity : AppCompatActivity() {
 
     private fun showRenameHomeRecordingDialog(file: File) {
         val currentNameWithoutExt = file.nameWithoutExtension
+        val density = resources.displayMetrics.density
+        val padH = (20 * density).toInt()
+        val padV = (14 * density).toInt()
         val input = EditText(this).apply {
             setText(currentNameWithoutExt)
             setSelection(currentNameWithoutExt.length)
-            setPadding(48, 32, 48, 32)
+            setPadding(padH, padV, padH, padV)
             hint = "Nama baru video"
             maxLines = 1
             isSingleLine = true
@@ -1306,28 +1331,35 @@ open class MainActivity : AppCompatActivity() {
         }
 
         try { activeDialog?.dismiss() } catch (ignored: Exception) {}
-        activeDialog = MaterialAlertDialogBuilder(this)
+        val dialog = MaterialAlertDialogBuilder(this)
             .setIcon(R.drawable.ic_trim)
             .setTitle("Ubah Nama Rekaman")
             .setMessage("Masukkan nama baru untuk rekaman ini:")
             .setView(input)
-            .setPositiveButton("Simpan") { _, _ ->
+            .setPositiveButton("Simpan", null)
+            .setNegativeButton("Batal", null)
+            .create()
+        activeDialog = dialog
+
+        dialog.setOnShowListener {
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE)?.setOnClickListener {
                 val newName = input.text.toString().trim()
                 if (newName.isEmpty()) {
-                    Toast.makeText(this, "Nama tidak boleh kosong", Toast.LENGTH_SHORT).show()
-                    return@setPositiveButton
+                    input.error = "Nama tidak boleh kosong"
+                    return@setOnClickListener
                 }
                 val illegalChars = charArrayOf('/', '\\', ':', '*', '?', '"', '<', '>', '|')
                 if (newName.any { it in illegalChars }) {
-                    Toast.makeText(this, "Nama mengandung karakter tidak valid", Toast.LENGTH_SHORT).show()
-                    return@setPositiveButton
+                    input.error = "Nama mengandung karakter terlarang (/ \\ : * ? \" < > |)"
+                    return@setOnClickListener
                 }
                 val finalFileName = if (newName.endsWith(".mp4", ignoreCase = true)) newName else "$newName.mp4"
                 val targetFile = File(file.parentFile, finalFileName)
                 if (targetFile.exists() && targetFile.absolutePath != file.absolutePath) {
-                    Toast.makeText(this, "Nama file tersebut sudah digunakan", Toast.LENGTH_SHORT).show()
-                    return@setPositiveButton
+                    input.error = "Nama file tersebut sudah digunakan"
+                    return@setOnClickListener
                 }
+                dialog.dismiss()
                 lifecycleScope.launch(Dispatchers.IO) {
                     val renamed = file.renameTo(targetFile)
                     if (renamed) {
@@ -1339,14 +1371,15 @@ open class MainActivity : AppCompatActivity() {
                         if (renamed) {
                             Toast.makeText(this@MainActivity, "Nama berhasil diubah", Toast.LENGTH_SHORT).show()
                             updateHomeRecordingsList()
+                            updateLibraryStats()
                         } else {
                             Toast.makeText(this@MainActivity, "Gagal mengubah nama file", Toast.LENGTH_SHORT).show()
                         }
                     }
                 }
             }
-            .setNegativeButton("Batal", null)
-            .show()
+        }
+        dialog.show()
     }
 
     private fun handleExtractAudioHome(file: File) {
@@ -1497,7 +1530,16 @@ open class MainActivity : AppCompatActivity() {
             .setIcon(R.drawable.ic_delete)
             .setPositiveButton("Hapus") { _, _ ->
                 lifecycleScope.launch(Dispatchers.IO) {
-                    if (!file.exists()) return@launch
+                    if (!file.exists()) {
+                        LibraryAdapter.invalidateCache(file.absolutePath)
+                        withContext(Dispatchers.Main) {
+                            if (isFinishing || isDestroyed) return@withContext
+                            Toast.makeText(this@MainActivity, "File rekaman sudah tidak ditemukan", Toast.LENGTH_SHORT).show()
+                            updateHomeRecordingsList()
+                            updateLibraryStats()
+                        }
+                        return@launch
+                    }
                     LibraryAdapter.invalidateCache(file.absolutePath)
                     val deleted = file.delete()
                     StorageHelper.scanDeletedFile(this@MainActivity, file)
@@ -1731,7 +1773,7 @@ open class MainActivity : AppCompatActivity() {
             layoutActive?.visibility = View.GONE
 
             headerStatus?.text = "● Siap Merekam • Status Optimal"
-            headerStatus?.setTextColor(ContextCompat.getColor(this, R.color.colorSuccess))
+            headerStatus?.setTextColor(ContextCompat.getColor(this, R.color.colorOnSuccessContainer))
             startRecordLabel?.text = "Tekan tombol untuk mulai merekam layar & audio"
             val resDisplay = com.bangdillah.rekamindulu.service.RecordingEngineOptimizer.getResolutionLabel(appPreferences.resolution)
             btnStartStop?.isEnabled = true
@@ -2127,9 +2169,12 @@ open class MainActivity : AppCompatActivity() {
             return
         }
         try {
-            Snackbar.make(view, message, Snackbar.LENGTH_LONG)
+            val sb = Snackbar.make(view, message, Snackbar.LENGTH_LONG)
                 .setAction("Pengaturan") { openAppPermissionSettings() }
-                .show()
+            findViewById<View>(R.id.bottom_navigation)
+                ?.takeIf { it.visibility == View.VISIBLE }
+                ?.let { sb.setAnchorView(it) }
+            sb.show()
         } catch (e: Exception) {
             Toast.makeText(this, message, Toast.LENGTH_LONG).show()
         }
@@ -2141,7 +2186,11 @@ open class MainActivity : AppCompatActivity() {
             return
         }
         try {
-            Snackbar.make(view, message, duration).show()
+            val sb = Snackbar.make(view, message, duration)
+            findViewById<View>(R.id.bottom_navigation)
+                ?.takeIf { it.visibility == View.VISIBLE }
+                ?.let { sb.setAnchorView(it) }
+            sb.show()
         } catch (e: Exception) {
             Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
         }

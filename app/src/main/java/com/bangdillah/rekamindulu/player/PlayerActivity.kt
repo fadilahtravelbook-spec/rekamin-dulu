@@ -17,6 +17,7 @@ import android.widget.VideoView
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.FileProvider
+import androidx.core.view.WindowCompat
 import com.bangdillah.rekamindulu.MainActivity
 import com.bangdillah.rekamindulu.R
 import com.bangdillah.rekamindulu.audio.AudioExtractorHelper
@@ -100,6 +101,14 @@ class PlayerActivity : AppCompatActivity() {
         appPreferences.applyTheme()
         setContentView(R.layout.player_screen)
         supportActionBar?.hide()
+        @Suppress("DEPRECATION")
+        window.statusBarColor = 0xD90E0F1A.toInt()
+        @Suppress("DEPRECATION")
+        window.navigationBarColor = 0xFF0A0A12.toInt()
+        WindowCompat.getInsetsController(window, window.decorView)?.apply {
+            isAppearanceLightStatusBars = false
+            isAppearanceLightNavigationBars = false
+        }
 
         videoView = findViewById(R.id.video_view)
         videoView?.setSecure(
@@ -117,10 +126,13 @@ class PlayerActivity : AppCompatActivity() {
         bottomPanel = findViewById(R.id.player_bottom_panel)
         btnSpeed = findViewById(R.id.btn_playback_speed)
 
+        val bottomInsetWrapper = findViewById<View>(R.id.player_bottom_inset_wrapper)
         UiHelper.applySystemBarInsets(
             anchorView = findViewById(R.id.player_root_layout),
             topView = topBar,
-            bottomView = bottomPanel
+            bottomView = bottomInsetWrapper,
+            horizontalView = topBar,
+            extraHorizontalViews = listOfNotNull(bottomInsetWrapper)
         )
 
         if (savedInstanceState != null) {

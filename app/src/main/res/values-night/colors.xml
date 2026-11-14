@@ -20,5 +20,11 @@
     
     <color name="colorPrimaryContainer">#2D245A</color>
     <color name="colorOnPrimaryContainer">#E0DBFE</color>
+    <color name="colorPrimaryNav">#8E82F3</color>
+    <color name="colorErrorContainer">#3D161A</color>
+    <color name="colorOnErrorContainer">#FF8A80</color>
+    <color name="colorWarningContainer">#3B2610</color>
+    <color name="colorSuccessContainer">#0D3830</color>
+    <color name="colorOnSuccessContainer">#55EFC4</color>
     <color name="navInactive">#9EA3BA</color>
 </resources>

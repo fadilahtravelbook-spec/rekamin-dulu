@@ -401,7 +401,8 @@
         <Button
             android:id="@+id/btn_onboarding_action"
             android:layout_width="match_parent"
-            android:layout_height="54dp"
+            android:layout_height="wrap_content"
+            android:minHeight="54dp"
             android:text="@string/onboarding_lanjut"
             android:textColor="@color/colorOnPrimary"
             android:textSize="16sp"

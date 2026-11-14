@@ -660,16 +660,16 @@ class FloatingOverlayService : Service() {
 
         if (isMicActive) {
             btnMic?.setImageResource(R.drawable.ic_mic)
-            btnMic?.imageTintList = ContextCompat.getColorStateList(this, R.color.colorPrimary)
-            btnMic?.backgroundTintList = ContextCompat.getColorStateList(this, R.color.colorPrimaryContainer)
+            btnMic?.imageTintList = ColorStateList.valueOf(0xFFA29BFE.toInt())
+            btnMic?.backgroundTintList = ColorStateList.valueOf(0x2E6C5CE7)
             labelMic?.text = "Mic On"
-            labelMic?.setTextColor(ContextCompat.getColor(this, R.color.colorPrimary))
+            labelMic?.setTextColor(0xFFA29BFE.toInt())
         } else {
             btnMic?.setImageResource(R.drawable.ic_mic_off)
-            btnMic?.imageTintList = ContextCompat.getColorStateList(this, R.color.colorError)
-            btnMic?.backgroundTintList = ContextCompat.getColorStateList(this, R.color.colorErrorContainer)
+            btnMic?.imageTintList = ColorStateList.valueOf(0xFFFF6B6B.toInt())
+            btnMic?.backgroundTintList = ColorStateList.valueOf(0x33FF4757)
             labelMic?.text = if (activeAudioSource == "INTERNAL" || activeAudioSource == "MUTE") "No Mic" else "Mic Mute"
-            labelMic?.setTextColor(ContextCompat.getColor(this, R.color.colorError))
+            labelMic?.setTextColor(0xFFFF6B6B.toInt())
         }
     }
 
@@ -680,16 +680,20 @@ class FloatingOverlayService : Service() {
         val labelFacecam = overlayView?.findViewById<TextView>(R.id.label_overlay_facecam)
 
         if (isFacecamActive) {
-            btnFacecam?.imageTintList = ContextCompat.getColorStateList(this, R.color.colorPrimary)
-            btnFacecam?.backgroundTintList = ContextCompat.getColorStateList(this, R.color.colorPrimaryContainer)
+            btnFacecam?.imageTintList = ColorStateList.valueOf(0xFFA29BFE.toInt())
+            btnFacecam?.backgroundTintList = ColorStateList.valueOf(0x2E6C5CE7)
             labelFacecam?.text = if (prefs.facecamMode == "BACK") "Cam Belakang" else "Facecam On"
-            labelFacecam?.setTextColor(ContextCompat.getColor(this, R.color.colorPrimary))
+            labelFacecam?.setTextColor(0xFFA29BFE.toInt())
         } else {
-            btnFacecam?.imageTintList = ContextCompat.getColorStateList(this, R.color.textCaption)
-            btnFacecam?.backgroundTintList = ContextCompat.getColorStateList(this, R.color.colorSurfaceVariant)
+            btnFacecam?.imageTintList = ColorStateList.valueOf(0xFF9E9EA8.toInt())
+            btnFacecam?.backgroundTintList = ColorStateList.valueOf(0x24FFFFFF)
             labelFacecam?.text = "Facecam"
-            labelFacecam?.setTextColor(ContextCompat.getColor(this, R.color.textBody))
+            labelFacecam?.setTextColor(0xFFD0D0DC.toInt())
         }
+    }
+
+    private fun dpToPx(dp: Int): Int {
+        return (dp * resources.displayMetrics.density).toInt()
     }
 
     private fun setupOverlayWindow() {
@@ -718,8 +722,8 @@ class FloatingOverlayService : Service() {
             PixelFormat.TRANSPARENT
         ).apply {
             gravity = Gravity.TOP or Gravity.START
-            x = (screenWidth - 160).coerceAtLeast(16)
-            y = (screenHeight * 0.22f).toInt().coerceAtLeast(100)
+            x = (screenWidth - dpToPx(120)).coerceAtLeast(dpToPx(8))
+            y = (screenHeight * 0.22f).toInt().coerceAtLeast(dpToPx(48))
         }
 
         val themedContext = ContextThemeWrapper(this, R.style.Theme_RekaminDulu)
@@ -947,10 +951,11 @@ class FloatingOverlayService : Service() {
     private fun dockBubbleToNearestEdge() {
         val currentParams = params ?: return
         val (screenWidth, _) = getScreenDimensions()
-        val viewWidth = overlayView?.width?.coerceAtLeast(80) ?: 130
+        val viewWidth = overlayView?.width?.coerceAtLeast(dpToPx(56)) ?: dpToPx(110)
         val maxX = (screenWidth - viewWidth).coerceAtLeast(0)
+        val edgeMargin = dpToPx(8)
         // Snaps magnetic ke tepi kiri (8dp) atau tepi kanan (maxX - 8dp)
-        val targetX = if (currentParams.x + viewWidth / 2 < screenWidth / 2) 8 else (maxX - 8)
+        val targetX = if (currentParams.x + viewWidth / 2 < screenWidth / 2) edgeMargin else (maxX - edgeMargin).coerceAtLeast(0)
         animateSnapX(currentParams.x, targetX)
     }
 
@@ -972,13 +977,14 @@ class FloatingOverlayService : Service() {
     private fun clampOverlayPosition() {
         val currentParams = params ?: return
         val (screenWidth, screenHeight) = getScreenDimensions()
-        val viewWidth = overlayView?.width?.coerceAtLeast(80) ?: 264
-        val viewHeight = overlayView?.height?.coerceAtLeast(60) ?: 210
+        val viewWidth = overlayView?.width?.coerceAtLeast(dpToPx(56)) ?: dpToPx(280)
+        val viewHeight = overlayView?.height?.coerceAtLeast(dpToPx(40)) ?: dpToPx(210)
         val maxX = (screenWidth - viewWidth).coerceAtLeast(0)
-        val maxY = (screenHeight - viewHeight).coerceAtLeast(60)
+        val minY = dpToPx(16)
+        val maxY = (screenHeight - viewHeight).coerceAtLeast(minY)
 
         currentParams.x = currentParams.x.coerceIn(0, maxX)
-        currentParams.y = currentParams.y.coerceIn(40, maxY)
+        currentParams.y = currentParams.y.coerceIn(minY, maxY)
         try {
             windowManager?.updateViewLayout(overlayView, currentParams)
         } catch (ignored: Exception) {}
@@ -988,10 +994,11 @@ class FloatingOverlayService : Service() {
         val v = facecamView ?: return
         val p = facecamParams ?: return
         val (screenWidth, screenHeight) = getScreenDimensions()
-        val w = v.width.coerceAtLeast(108)
-        val h = v.height.coerceAtLeast(144)
+        val w = v.width.coerceAtLeast(dpToPx(96))
+        val h = v.height.coerceAtLeast(dpToPx(128))
+        val minY = dpToPx(12)
         p.x = p.x.coerceIn(0, (screenWidth - w).coerceAtLeast(0))
-        p.y = p.y.coerceIn(24, (screenHeight - h).coerceAtLeast(24))
+        p.y = p.y.coerceIn(minY, (screenHeight - h).coerceAtLeast(minY))
         try {
             windowManager?.updateViewLayout(v, p)
         } catch (ignored: Exception) {}
@@ -1089,13 +1096,14 @@ class FloatingOverlayService : Service() {
                                 resetAutoCollapseTimer()
                             }
                             val (screenWidth, screenHeight) = getScreenDimensions()
-                            val viewWidth = overlayView?.width?.coerceAtLeast(80) ?: (if (isBubble) 130 else 264)
-                            val viewHeight = overlayView?.height?.coerceAtLeast(40) ?: (if (isBubble) 40 else 210)
+                            val viewWidth = overlayView?.width?.coerceAtLeast(dpToPx(56)) ?: dpToPx(if (isBubble) 110 else 280)
+                            val viewHeight = overlayView?.height?.coerceAtLeast(dpToPx(36)) ?: dpToPx(if (isBubble) 40 else 210)
                             val maxX = (screenWidth - viewWidth).coerceAtLeast(0)
-                            val maxY = (screenHeight - viewHeight).coerceAtLeast(60)
+                            val minY = dpToPx(16)
+                            val maxY = (screenHeight - viewHeight).coerceAtLeast(minY)
 
                             currentParams.x = (initialX + dx).coerceIn(0, maxX)
-                            currentParams.y = (initialY + dy).coerceIn(40, maxY)
+                            currentParams.y = (initialY + dy).coerceIn(minY, maxY)
                             try {
                                 windowManager?.updateViewLayout(overlayView, currentParams)
                             } catch (ignored: Exception) {}
@@ -1219,8 +1227,8 @@ class FloatingOverlayService : Service() {
             PixelFormat.TRANSLUCENT
         ).apply {
             gravity = Gravity.TOP or Gravity.START
-            x = 24
-            y = 140
+            x = dpToPx(16)
+            y = dpToPx(64)
         }
         facecamParams = fcParams
 
@@ -1313,10 +1321,11 @@ class FloatingOverlayService : Service() {
                         if (Math.hypot(dx.toDouble(), dy.toDouble()) > touchSlop) {
                             isDrag = true
                             val (screenWidth, screenHeight) = getScreenDimensions()
-                            val w = v.width.coerceAtLeast(108)
-                            val h = v.height.coerceAtLeast(144)
+                            val w = v.width.coerceAtLeast(dpToPx(96))
+                            val h = v.height.coerceAtLeast(dpToPx(128))
+                            val minY = dpToPx(12)
                             p.x = (initialX + dx).coerceIn(0, (screenWidth - w).coerceAtLeast(0))
-                            p.y = (initialY + dy).coerceIn(24, (screenHeight - h).coerceAtLeast(24))
+                            p.y = (initialY + dy).coerceIn(minY, (screenHeight - h).coerceAtLeast(minY))
                             try {
                                 windowManager?.updateViewLayout(v, p)
                             } catch (ignored: Exception) {}

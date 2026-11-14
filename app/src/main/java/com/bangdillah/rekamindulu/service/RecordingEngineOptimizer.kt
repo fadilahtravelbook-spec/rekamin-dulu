@@ -109,6 +109,55 @@ object RecordingEngineOptimizer {
     }
 
     /**
+     * Menghitung dimensi output encoder dan VirtualDisplay dari ukuran tangkapan aktual
+     * (misalnya dari MediaProjection.Callback.onCapturedContentResize pada jendela aplikasi Android 14+)
+     * tanpa memaksa minimum tinggi potret sehingga rasio aspek jendela/layar tetap presisi.
+     */
+    fun calculateCapturedDimensions(
+        rawWidth: Int,
+        rawHeight: Int,
+        baseDensityDpi: Int,
+        resolutionPref: String,
+        orientationPref: String = "AUTO"
+    ): OutputDimensions {
+        val safeRawW = rawWidth.coerceAtLeast(64)
+        val safeRawH = rawHeight.coerceAtLeast(64)
+        val safeBaseDpi = if (baseDensityDpi > 0) baseDensityDpi else 320
+
+        val isPortrait = when (orientationPref) {
+            "LANDSCAPE" -> false
+            "PORTRAIT" -> true
+            else -> safeRawH >= safeRawW
+        }
+
+        val longSide = maxOf(safeRawW, safeRawH)
+        val shortSide = minOf(safeRawW, safeRawH)
+
+        val desiredShort = when (resolutionPref) {
+            "NATIVE" -> shortSide
+            "4K" -> 2160
+            "2K" -> 1440
+            "1080p" -> 1080
+            "720p" -> 720
+            "480p" -> 480
+            else -> 1080
+        }
+        val scale = if (shortSide > desiredShort) desiredShort.toDouble() / shortSide.toDouble() else 1.0
+
+        val alignedLong = (((longSide * scale).toInt()) / 2 * 2).coerceAtLeast(64)
+        val alignedShort = (((shortSide * scale).toInt()) / 2 * 2).coerceAtLeast(64)
+
+        val finalW = if (isPortrait) alignedShort else alignedLong
+        val finalH = if (isPortrait) alignedLong else alignedShort
+
+        val referenceRawForScale = if (isPortrait == (safeRawH >= safeRawW)) safeRawW else safeRawH
+        val scaleRatio = finalW.toDouble() / referenceRawForScale.coerceAtLeast(64).toDouble()
+        val targetDensity = (safeBaseDpi * scaleRatio).toInt().coerceIn(120, 640)
+
+        return OutputDimensions(finalW, finalH, targetDensity)
+    }
+
+    /**
      * Menghasilkan konfigurasi profil perekaman yang dioptimalkan khusus untuk 1080p, 720p, dan Native.
      */
     fun getOptimizedProfile(

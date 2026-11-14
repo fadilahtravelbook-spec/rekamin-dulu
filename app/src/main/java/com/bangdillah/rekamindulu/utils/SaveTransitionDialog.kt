@@ -18,6 +18,7 @@ import com.bangdillah.rekamindulu.R
 import com.bangdillah.rekamindulu.library.LibraryActivity
 import com.bangdillah.rekamindulu.player.PlayerActivity
 import com.bangdillah.rekamindulu.trim.TrimActivity
+import com.google.android.material.bottomsheet.BottomSheetBehavior
 import com.google.android.material.bottomsheet.BottomSheetDialog
 import java.io.File
 import java.util.Locale
@@ -35,8 +36,13 @@ object SaveTransitionDialog {
         val dialog = BottomSheetDialog(context)
         val view = LayoutInflater.from(context).inflate(R.layout.layout_save_transition_dialog, null)
         dialog.setContentView(view)
+        AppLockHelper.syncWindowSecurityFlag(dialog.window, AppPreferences(context))
+        dialog.behavior.apply {
+            state = BottomSheetBehavior.STATE_EXPANDED
+            skipCollapsed = true
+        }
         dialog.window?.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT))
-        UiHelper.applySystemBarInsets(anchorView = view, bottomView = view)
+        UiHelper.applySystemBarInsets(anchorView = view, bottomView = view, horizontalView = view)
 
         val imgThumbnail = view.findViewById<ImageView>(R.id.img_save_dialog_thumbnail)
         val textTitle = view.findViewById<TextView>(R.id.text_save_dialog_title)

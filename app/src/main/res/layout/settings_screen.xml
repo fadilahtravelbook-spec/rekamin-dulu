@@ -118,6 +118,7 @@
                         android:clickable="true"
                         android:focusable="true"
                         android:gravity="center_vertical"
+                        android:minHeight="48dp"
                         android:orientation="horizontal">
 
                         <FrameLayout
@@ -180,7 +181,7 @@
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:text="⚡ Mode Gaming diaktifkan: Rekaman dioptimalkan untuk 60 FPS tinggi, bitrate jernih, dan audio game lancar."
-                            android:textColor="@color/colorPrimary"
+                            android:textColor="@color/colorOnPrimaryContainer"
                             android:textSize="11sp"
                             android:textStyle="bold" />
                     </LinearLayout>
@@ -447,7 +448,7 @@
                             android:paddingHorizontal="10dp"
                             android:paddingVertical="4dp"
                             android:text="1080p (Full HD)"
-                            android:textColor="@color/colorPrimary"
+                            android:textColor="@color/colorOnPrimaryContainer"
                             android:textSize="12sp"
                             android:textStyle="bold" />
 
@@ -521,7 +522,7 @@
                             android:paddingHorizontal="10dp"
                             android:paddingVertical="4dp"
                             android:text="60 FPS"
-                            android:textColor="@color/colorPrimary"
+                            android:textColor="@color/colorOnPrimaryContainer"
                             android:textSize="12sp"
                             android:textStyle="bold" />
 
@@ -595,7 +596,7 @@
                             android:paddingHorizontal="10dp"
                             android:paddingVertical="4dp"
                             android:text="24 Mbps"
-                            android:textColor="@color/colorPrimary"
+                            android:textColor="@color/colorOnPrimaryContainer"
                             android:textSize="12sp"
                             android:textStyle="bold" />
 
@@ -669,7 +670,7 @@
                             android:paddingHorizontal="10dp"
                             android:paddingVertical="4dp"
                             android:text="H.264 (AVC)"
-                            android:textColor="@color/colorPrimary"
+                            android:textColor="@color/colorOnPrimaryContainer"
                             android:textSize="12sp"
                             android:textStyle="bold" />
 
@@ -743,7 +744,7 @@
                             android:paddingHorizontal="10dp"
                             android:paddingVertical="4dp"
                             android:text="Otomatis"
-                            android:textColor="@color/colorPrimary"
+                            android:textColor="@color/colorOnPrimaryContainer"
                             android:textSize="12sp"
                             android:textStyle="bold" />
 
@@ -840,7 +841,7 @@
                             android:paddingHorizontal="10dp"
                             android:paddingVertical="4dp"
                             android:text="Mikrofon + Game"
-                            android:textColor="@color/colorPrimary"
+                            android:textColor="@color/colorOnPrimaryContainer"
                             android:textSize="12sp"
                             android:textStyle="bold" />
 
@@ -914,7 +915,7 @@
                             android:paddingHorizontal="10dp"
                             android:paddingVertical="4dp"
                             android:text="Default (Bawaan)"
-                            android:textColor="@color/colorPrimary"
+                            android:textColor="@color/colorOnPrimaryContainer"
                             android:textSize="12sp"
                             android:textStyle="bold" />
 
@@ -1070,7 +1071,7 @@
                             android:paddingHorizontal="10dp"
                             android:paddingVertical="4dp"
                             android:text="3 Detik"
-                            android:textColor="@color/colorPrimary"
+                            android:textColor="@color/colorOnPrimaryContainer"
                             android:textSize="12sp"
                             android:textStyle="bold" />
 
@@ -1493,7 +1494,7 @@
                             android:paddingHorizontal="10dp"
                             android:paddingVertical="4dp"
                             android:text="Ikuti Sistem"
-                            android:textColor="@color/colorPrimary"
+                            android:textColor="@color/colorOnPrimaryContainer"
                             android:textSize="12sp"
                             android:textStyle="bold" />
 
@@ -1635,7 +1636,7 @@
                             android:paddingHorizontal="10dp"
                             android:paddingVertical="4dp"
                             android:text="••••"
-                            android:textColor="@color/colorPrimary"
+                            android:textColor="@color/colorOnPrimaryContainer"
                             android:textSize="12sp"
                             android:textStyle="bold" />
 
@@ -1731,7 +1732,7 @@
                             android:paddingHorizontal="10dp"
                             android:paddingVertical="4dp"
                             android:text="Uji Sekarang"
-                            android:textColor="@color/colorPrimary"
+                            android:textColor="@color/colorOnPrimaryContainer"
                             android:textSize="12sp"
                             android:textStyle="bold" />
 
@@ -1820,7 +1821,8 @@
         android:id="@+id/bottom_navigation_settings"
         style="@style/Widget.App.BottomNav"
         android:layout_width="match_parent"
-        android:layout_height="68dp"
+        android:layout_height="wrap_content"
+        android:minHeight="68dp"
         app:elevation="12dp"
         app:layout_constraintBottom_toBottomOf="parent"
         app:menu="@menu/bottom_nav_menu" />

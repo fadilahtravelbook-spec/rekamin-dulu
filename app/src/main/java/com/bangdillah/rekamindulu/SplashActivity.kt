@@ -33,7 +33,8 @@ class SplashActivity : AppCompatActivity() {
         UiHelper.applySystemBarInsets(
             anchorView = rootLayout,
             topView = rootLayout,
-            bottomView = rootLayout
+            bottomView = rootLayout,
+            horizontalView = rootLayout
         )
 
         val versionName = try {

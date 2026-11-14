@@ -152,6 +152,9 @@ class MediaCodecScreenRecorder(
     private val isPaused = AtomicBoolean(false)
     private val isMicMuted = AtomicBoolean(false)
     private val stopRequested = AtomicBoolean(false)
+    private val isReconfiguringVideo = AtomicBoolean(false)
+    private val reconfigureLock = Any()
+    private var activeVideoMime: String = MediaFormat.MIMETYPE_VIDEO_AVC
 
     @Volatile
     private var recordingStartUs: Long = 0L
@@ -202,6 +205,7 @@ class MediaCodecScreenRecorder(
         outer@ for (mime in mimesToTry) {
             for ((w, h, bps) in candidates) {
                 if (tryConfigureVideoEncoder(mime, w, h, bps, actualFps)) {
+                    activeVideoMime = mime
                     actualWidth = w
                     actualHeight = h
                     actualBitrateBps = bps
@@ -510,6 +514,107 @@ class MediaCodecScreenRecorder(
     }
 
     /**
+     * Mengembalikan true hanya bila MediaMuxer belum mulai menulis track video sehingga
+     * encoder video dapat dikonfigurasi ulang ke resolusi baru tanpa merusak file MP4.
+     */
+    fun canReconfigureVideoSize(): Boolean {
+        if (!isRunning.get() || stopRequested.get()) return false
+        return muxerLock.withLock {
+            !muxerStarted && videoSamplesWritten == 0
+        }
+    }
+
+    /**
+     * Mencoba mengonfigurasi ulang video encoder sebelum MediaMuxer dikunci oleh track video.
+     * Mengembalikan input Surface baru jika berhasil, atau null jika muxer sudah aktif maupun
+     * hardware encoder menolak dimensi baru.
+     */
+    fun reconfigureVideoSize(
+        newWidth: Int,
+        newHeight: Int,
+        newDensityDpi: Int,
+        newBitrateBps: Int
+    ): Surface? {
+        synchronized(reconfigureLock) {
+            if (!canReconfigureVideoSize()) return null
+            if (newWidth == actualWidth && newHeight == actualHeight) {
+                actualDensityDpi = newDensityDpi
+                return inputSurface
+            }
+
+            isReconfiguringVideo.set(true)
+            try {
+                try {
+                    videoEncoder?.signalEndOfInputStream()
+                } catch (ignored: Exception) {}
+                try {
+                    videoDrainThread?.join(1000L)
+                } catch (ignored: InterruptedException) {}
+
+                if (videoDrainThread?.isAlive == true) {
+                    try { videoEncoder?.stop() } catch (ignored: Exception) {}
+                    try { videoDrainThread?.join(500L) } catch (ignored: InterruptedException) {}
+                }
+                videoDrainThread = null
+
+                try { inputSurface?.release() } catch (ignored: Exception) {}
+                inputSurface = null
+                try { videoEncoder?.stop() } catch (ignored: Exception) {}
+                try { videoEncoder?.release() } catch (ignored: Exception) {}
+                videoEncoder = null
+
+                val canProceed = muxerLock.withLock {
+                    if (muxerStarted || videoSamplesWritten > 0 || stopRequested.get()) {
+                        false
+                    } else {
+                        pendingVideoSamples.clear()
+                        videoTrackIndex = -1
+                        lastVideoPtsUs = -1L
+                        true
+                    }
+                }
+                if (!canProceed) {
+                    return null
+                }
+
+                val mimesToTry = if (activeVideoMime == MediaFormat.MIMETYPE_VIDEO_HEVC) {
+                    listOf(MediaFormat.MIMETYPE_VIDEO_HEVC, MediaFormat.MIMETYPE_VIDEO_AVC)
+                } else {
+                    listOf(MediaFormat.MIMETYPE_VIDEO_AVC)
+                }
+
+                var configuredMime: String? = null
+                for (mime in mimesToTry) {
+                    if (tryConfigureVideoEncoder(mime, newWidth, newHeight, newBitrateBps, actualFps)) {
+                        configuredMime = mime
+                        break
+                    }
+                }
+
+                if (configuredMime == null || inputSurface == null) {
+                    Log.w(TAG, "Encoder gagal mengonfigurasi dimensi baru ${newWidth}x${newHeight}")
+                    return null
+                }
+
+                activeVideoMime = configuredMime
+                actualWidth = newWidth
+                actualHeight = newHeight
+                actualDensityDpi = newDensityDpi
+                actualBitrateBps = newBitrateBps
+
+                videoDrainThread = Thread({ drainVideoEncoderLoop() }, "RekaminVideoDrain").apply {
+                    priority = Thread.MAX_PRIORITY
+                    start()
+                }
+                Log.i(TAG, "Video encoder berhasil dikonfigurasi ulang ke ${newWidth}x${newHeight} ($newDensityDpi dpi)")
+                return inputSurface
+            } finally {
+                isReconfiguringVideo.set(false)
+            }
+        }
+    }
+
+    /**
      * Menghentikan perekaman secara sinkron, mengirim EOS ke video & audio encoder,
      * menunggu muxer selesai menulis moov atom, lalu merilis semua resource.
      */
@@ -608,7 +713,9 @@ class MediaCodecScreenRecorder(
             when {
                 outIndex == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED -> {
                     idleAfterStop = 0
-                    onOutputFormatChanged(isVideo = true, format = encoder.outputFormat)
+                    if (!isReconfiguringVideo.get()) {
+                        onOutputFormatChanged(isVideo = true, format = encoder.outputFormat)
+                    }
                 }
                 outIndex >= 0 -> {
                     idleAfterStop = 0
@@ -616,7 +723,7 @@ class MediaCodecScreenRecorder(
                     val isEos = (bufferInfo.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM) != 0
                     val encodedData = try { encoder.getOutputBuffer(outIndex) } catch (e: Exception) { null }
 
-                    if (encodedData != null && bufferInfo.size > 0 && !isConfig) {
+                    if (encodedData != null && bufferInfo.size > 0 && !isConfig && !isReconfiguringVideo.get()) {
                         if (!isPaused.get() || isEos) {
                             val normalizedPts = if (bufferInfo.presentationTimeUs > recordingStartUs) {
                                 (bufferInfo.presentationTimeUs - recordingStartUs - totalPausedUs).coerceAtLeast(0L)
@@ -885,6 +992,7 @@ class MediaCodecScreenRecorder(
 
     private fun onOutputFormatChanged(isVideo: Boolean, format: MediaFormat) {
         muxerLock.withLock {
+            if (isVideo && isReconfiguringVideo.get()) return
             val muxer = mediaMuxer ?: return
             try {
                 if (isVideo) {
@@ -936,6 +1044,7 @@ class MediaCodecScreenRecorder(
 
     private fun writeOrBufferSample(isVideo: Boolean, data: ByteBuffer, info: MediaCodec.BufferInfo) {
         muxerLock.withLock {
+            if (isVideo && isReconfiguringVideo.get()) return
             val muxer = mediaMuxer ?: return
             if (muxerStarted) {
                 val track = if (isVideo) videoTrackIndex else audioTrackIndex

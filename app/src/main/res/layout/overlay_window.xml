@@ -25,10 +25,10 @@
 
         <LinearLayout
             android:layout_width="wrap_content"
-            android:layout_height="36dp"
+            android:layout_height="40dp"
             android:gravity="center_vertical"
             android:orientation="horizontal"
-            android:paddingHorizontal="9dp">
+            android:paddingHorizontal="10dp">
 
             <!-- Pulsing Record Glowing Beacon -->
             <ImageView
@@ -88,7 +88,7 @@
     <!-- ============================================================ -->
     <com.google.android.material.card.MaterialCardView
         android:id="@+id/overlay_container"
-        android:layout_width="264dp"
+        android:layout_width="280dp"
         android:layout_height="wrap_content"
         android:visibility="gone"
         app:cardBackgroundColor="#F20D0E1A"
@@ -168,41 +168,41 @@
                 <!-- Transparency / Stealth Mode Toggle (Cycles 100% -> 65% -> 35%) -->
                 <ImageView
                     android:id="@+id/btn_overlay_transparency"
-                    android:layout_width="30dp"
-                    android:layout_height="30dp"
+                    android:layout_width="38dp"
+                    android:layout_height="40dp"
                     android:layout_marginEnd="2dp"
                     android:background="?android:attr/selectableItemBackgroundBorderless"
                     android:clickable="true"
                     android:contentDescription="Ubah Transparansi / Mode Stealth Gamer"
                     android:focusable="true"
-                    android:padding="6dp"
+                    android:padding="9dp"
                     android:src="@drawable/ic_visibility"
                     app:tint="#AAFFFFFF" />
 
                 <!-- Minimize Button (collapses to stealth bubble) -->
                 <ImageView
                     android:id="@+id/btn_overlay_minimize"
-                    android:layout_width="30dp"
-                    android:layout_height="30dp"
+                    android:layout_width="38dp"
+                    android:layout_height="40dp"
                     android:layout_marginEnd="2dp"
                     android:background="?android:attr/selectableItemBackgroundBorderless"
                     android:clickable="true"
                     android:contentDescription="Kecilkan ke Bola Melayang"
                     android:focusable="true"
-                    android:padding="6dp"
+                    android:padding="9dp"
                     android:src="@drawable/ic_collapse"
                     app:tint="#AAFFFFFF" />
 
                 <!-- Close / Hide Overlay Button -->
                 <ImageView
                     android:id="@+id/overlay_close_btn"
-                    android:layout_width="30dp"
-                    android:layout_height="30dp"
+                    android:layout_width="38dp"
+                    android:layout_height="40dp"
                     android:background="?android:attr/selectableItemBackgroundBorderless"
                     android:clickable="true"
                     android:contentDescription="Tutup Overlay"
                     android:focusable="true"
-                    android:padding="6dp"
+                    android:padding="9dp"
                     android:src="@drawable/ic_close"
                     app:tint="#88FFFFFF" />
                 </LinearLayout>

@@ -39,7 +39,7 @@
                 android:layout_gravity="center"
                 android:contentDescription="Ikon Pengaturan"
                 android:src="@drawable/ic_video"
-                app:tint="@color/colorPrimary" />
+                app:tint="@color/colorOnPrimaryContainer" />
         </FrameLayout>
 
         <LinearLayout
@@ -94,7 +94,7 @@
     <com.google.android.material.button.MaterialButton
         android:id="@+id/btn_selection_cancel"
         android:layout_width="match_parent"
-        android:layout_height="50dp"
+        android:layout_height="wrap_content"
         android:layout_marginTop="10dp"
         android:minHeight="48dp"
         android:text="Tutup / Batal"

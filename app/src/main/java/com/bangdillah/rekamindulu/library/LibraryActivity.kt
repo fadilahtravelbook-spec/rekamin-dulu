@@ -52,6 +52,9 @@ class LibraryActivity : AppCompatActivity() {
 
     companion object {
         const val ONE_MINUTE_MS = 60_000L
+        private const val KEY_SORT_ORDER = "KEY_LIBRARY_SORT_ORDER"
+        private const val KEY_FILTER_MODE = "KEY_LIBRARY_FILTER_MODE"
+        private const val KEY_SEARCH_QUERY = "KEY_LIBRARY_SEARCH_QUERY"
 
         fun isDurationOverOneMinute(durationMs: Long): Boolean {
             return durationMs > ONE_MINUTE_MS
@@ -87,12 +90,13 @@ class LibraryActivity : AppCompatActivity() {
         override fun onReceive(context: Context?, intent: Intent?) {
             when (intent?.action) {
                 ScreenRecordingService.ACTION_RECORDING_STOPPED -> {
+                    val stoppedByError = intent.getBooleanExtra(ScreenRecordingService.EXTRA_STOPPED_BY_ERROR, false)
                     val path = MainActivity.resolveStoppedBroadcastFilePath(
                         intent.getStringExtra(ScreenRecordingService.EXTRA_FILE_PATH)
                     )
                     val isValidFile = !path.isNullOrEmpty() && File(path).exists() && File(path).length() > 10240
                     updateRecordingIndicator()
-                    if (!isValidFile) {
+                    if (stoppedByError || !isValidFile) {
                         MainActivity.hasPendingSaveDialog = false
                         loadVideoFiles()
                         return
@@ -117,6 +121,20 @@ class LibraryActivity : AppCompatActivity() {
                 ScreenRecordingService.ACTION_RECORDING_STATUS_CHANGED -> {
                     updateRecordingIndicator()
                 }
+                ScreenRecordingService.ACTION_RECORDING_ERROR -> {
+                    val errorMsg = intent.getStringExtra(ScreenRecordingService.EXTRA_ERROR_MESSAGE)
+                        ?: "Perekaman dihentikan oleh sistem atau encoder."
+                    updateRecordingIndicator()
+                    loadVideoFiles()
+                    if (!isFinishing && !isDestroyed) {
+                        try { activeDialog?.dismiss() } catch (ignored: Exception) {}
+                        activeDialog = MaterialAlertDialogBuilder(this@LibraryActivity)
+                            .setTitle("⚠️ Perekaman Dihentikan")
+                            .setMessage(errorMsg)
+                            .setPositiveButton("Mengerti", null)
+                            .show()
+                    }
+                }
             }
         }
     }
@@ -130,8 +148,14 @@ class LibraryActivity : AppCompatActivity() {
         UiHelper.applySystemBarInsets(
             anchorView = findViewById(R.id.library_root_layout),
             topView = findViewById(R.id.toolbar),
-            bottomView = findViewById(R.id.bottom_navigation_library)
+            bottomView = findViewById(R.id.bottom_navigation_library),
+            horizontalView = findViewById(R.id.library_root_layout)
         )
+
+        if (savedInstanceState != null) {
+            currentSortOrder = savedInstanceState.getInt(KEY_SORT_ORDER, 0)
+            currentFilterMode = savedInstanceState.getInt(KEY_FILTER_MODE, 0)
+        }
 
         val recyclerView = findViewById<RecyclerView>(R.id.library_recycler_view)
         recyclerView?.layoutManager = LinearLayoutManager(this)
@@ -170,6 +194,25 @@ class LibraryActivity : AppCompatActivity() {
         setupSearchBar()
         setupFilterChips()
         setupBottomNavigation()
+
+        val restoredQuery = savedInstanceState?.getString(KEY_SEARCH_QUERY).orEmpty()
+        if (restoredQuery.isNotEmpty()) {
+            findViewById<EditText>(R.id.et_search_library)?.apply {
+                setText(restoredQuery)
+                setSelection(restoredQuery.length)
+            }
+            findViewById<ImageView>(R.id.btn_clear_search)?.visibility = View.VISIBLE
+        }
+
+        UiHelper.expandTouchTargets(
+            findViewById(R.id.layout_filter_chips_container),
+            listOf(
+                findViewById<View>(R.id.chip_filter_all) to 48,
+                findViewById<View>(R.id.chip_filter_game) to 48,
+                findViewById<View>(R.id.chip_filter_recent) to 48,
+                findViewById<View>(R.id.chip_filter_long) to 48
+            )
+        )
 
         if (AppLockHelper.shouldRequirePin(
                 appPreferences.isAppLockEnabled,
@@ -238,6 +281,7 @@ class LibraryActivity : AppCompatActivity() {
         val filter = IntentFilter().apply {
             addAction(ScreenRecordingService.ACTION_RECORDING_STOPPED)
             addAction(ScreenRecordingService.ACTION_RECORDING_STATUS_CHANGED)
+            addAction(ScreenRecordingService.ACTION_RECORDING_ERROR)
         }
         ContextCompat.registerReceiver(this, recordingReceiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED)
 
@@ -246,6 +290,14 @@ class LibraryActivity : AppCompatActivity() {
         } else {
             liveTimerHandler.removeCallbacks(liveTimerRunnable)
         }
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        outState.putInt(KEY_SORT_ORDER, currentSortOrder)
+        outState.putInt(KEY_FILTER_MODE, currentFilterMode)
+        val query = findViewById<EditText>(R.id.et_search_library)?.text?.toString().orEmpty()
+        outState.putString(KEY_SEARCH_QUERY, query)
     }
 
     override fun onPause() {
@@ -634,10 +686,13 @@ class LibraryActivity : AppCompatActivity() {
 
     private fun showRenameDialog(file: File) {
         val currentNameWithoutExt = file.nameWithoutExtension
+        val density = resources.displayMetrics.density
+        val padH = (20 * density).toInt()
+        val padV = (14 * density).toInt()
         val input = EditText(this).apply {
             setText(currentNameWithoutExt)
             setSelection(currentNameWithoutExt.length)
-            setPadding(48, 32, 48, 32)
+            setPadding(padH, padV, padH, padV)
             hint = "Masukkan nama baru rekaman"
             maxLines = 1
             isSingleLine = true
@@ -646,23 +701,29 @@ class LibraryActivity : AppCompatActivity() {
         }
 
         try { activeDialog?.dismiss() } catch (ignored: Exception) {}
-        activeDialog = MaterialAlertDialogBuilder(this)
+        val dialog = MaterialAlertDialogBuilder(this)
             .setIcon(R.drawable.ic_trim)
             .setTitle("Ubah Nama Rekaman")
             .setMessage("Masukkan nama baru untuk video ini:")
             .setView(input)
-            .setPositiveButton("Simpan") { _, _ ->
+            .setPositiveButton("Simpan", null)
+            .setNegativeButton("Batal", null)
+            .create()
+        activeDialog = dialog
+
+        dialog.setOnShowListener {
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE)?.setOnClickListener {
                 val newName = input.text.toString().trim()
                 if (newName.isEmpty()) {
-                    Toast.makeText(this, "Nama rekaman tidak boleh kosong", Toast.LENGTH_SHORT).show()
-                    return@setPositiveButton
+                    input.error = "Nama rekaman tidak boleh kosong"
+                    return@setOnClickListener
                 }
 
                 // Check for illegal characters
                 val illegalChars = charArrayOf('/', '\\', ':', '*', '?', '"', '<', '>', '|')
                 if (newName.any { it in illegalChars }) {
-                    Toast.makeText(this, "Nama mengandung karakter terlarang (/ \\ : * ? \" < > |)", Toast.LENGTH_LONG).show()
-                    return@setPositiveButton
+                    input.error = "Nama mengandung karakter terlarang (/ \\ : * ? \" < > |)"
+                    return@setOnClickListener
                 }
 
                 val finalFileName = if (newName.endsWith(".mp4", ignoreCase = true)) newName else "$newName.mp4"
@@ -670,10 +731,11 @@ class LibraryActivity : AppCompatActivity() {
                 val targetFile = File(parentDir, finalFileName)
 
                 if (targetFile.exists() && targetFile.absolutePath != file.absolutePath) {
-                    Toast.makeText(this, "File dengan nama tersebut sudah ada", Toast.LENGTH_SHORT).show()
-                    return@setPositiveButton
+                    input.error = "File dengan nama tersebut sudah ada"
+                    return@setOnClickListener
                 }
 
+                dialog.dismiss()
                 lifecycleScope.launch(Dispatchers.IO) {
                     val success = file.renameTo(targetFile)
                     if (success) {
@@ -695,8 +757,8 @@ class LibraryActivity : AppCompatActivity() {
                     }
                 }
             }
-            .setNegativeButton("Batal", null)
-            .show()
+        }
+        dialog.show()
     }
 
     private fun confirmDelete(file: File) {
@@ -707,7 +769,16 @@ class LibraryActivity : AppCompatActivity() {
             .setIcon(R.drawable.ic_delete)
             .setPositiveButton("Hapus") { _, _ ->
                 lifecycleScope.launch(Dispatchers.IO) {
-                    if (!file.exists()) return@launch
+                    if (!file.exists()) {
+                        LibraryAdapter.invalidateCache(file.absolutePath)
+                        videoDurationsMs.remove(file.absolutePath)
+                        withContext(Dispatchers.Main) {
+                            if (isFinishing || isDestroyed) return@withContext
+                            Toast.makeText(this@LibraryActivity, "File rekaman sudah tidak ditemukan", Toast.LENGTH_SHORT).show()
+                            loadVideoFiles()
+                        }
+                        return@launch
+                    }
                     LibraryAdapter.invalidateCache(file.absolutePath)
                     videoDurationsMs.remove(file.absolutePath)
                     val deleted = file.delete()

@@ -61,7 +61,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="📋 TATA CARA SEBELUM MULAI MEREKAM:"
-            android:textColor="@color/colorPrimary"
+            android:textColor="@color/colorPrimaryNav"
             android:textSize="13sp"
             android:textStyle="bold" />
 
@@ -276,8 +276,9 @@
         <Button
             android:id="@+id/btn_close_guide"
             android:layout_width="match_parent"
-            android:layout_height="48dp"
+            android:layout_height="wrap_content"
             android:layout_marginTop="16dp"
+            android:minHeight="48dp"
             android:backgroundTint="@color/colorPrimary"
             android:text="Saya Mengerti, Siap Merekam"
             android:textColor="@color/colorOnPrimary"

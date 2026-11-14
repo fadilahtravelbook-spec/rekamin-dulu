@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/sheet_save_transition_root"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:background="@drawable/bg_bottom_sheet_surface"
@@ -18,220 +19,237 @@
         android:background="@drawable/bg_chip_pill"
         android:backgroundTint="@color/colorBorder" />
 
-    <!-- SUCCESS HEADER -->
-    <LinearLayout
+    <androidx.core.widget.NestedScrollView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:gravity="center_vertical"
-        android:orientation="horizontal">
-
-        <FrameLayout
-            android:layout_width="44dp"
-            android:layout_height="44dp"
-            android:background="@drawable/bg_chip_pill"
-            android:backgroundTint="@color/colorSuccessContainer">
-
-            <ImageView
-                android:layout_width="26dp"
-                android:layout_height="26dp"
-                android:layout_gravity="center"
-                android:contentDescription="Tersimpan"
-                android:src="@drawable/ic_check_circle"
-                app:tint="@color/colorSuccess" />
-        </FrameLayout>
+        android:fillViewport="true"
+        android:overScrollMode="never">
 
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginStart="14dp"
             android:orientation="vertical">
 
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Rekaman Berhasil Disimpan"
-                android:textColor="@color/textTitle"
-                android:textSize="18sp"
-                android:textStyle="bold" />
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="2dp"
-                android:text="Tersimpan aman di Galeri Rekamin Dulu"
-                android:textColor="@color/colorSuccess"
-                android:textSize="12sp"
-                android:textStyle="bold" />
-        </LinearLayout>
-    </LinearLayout>
-
-    <!-- VIDEO PREVIEW CARD -->
-    <androidx.cardview.widget.CardView
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="16dp"
-        app:cardBackgroundColor="@color/colorBackground"
-        app:cardCornerRadius="18dp"
-        app:cardElevation="2dp">
-
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:padding="12dp">
-
-            <RelativeLayout
+            <!-- SUCCESS HEADER -->
+            <LinearLayout
                 android:layout_width="match_parent"
-                android:layout_height="170dp">
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
 
-                <ImageView
-                    android:id="@+id/img_save_dialog_thumbnail"
-                    android:layout_width="match_parent"
-                    android:layout_height="match_parent"
-                    android:background="#12121E"
-                    android:scaleType="centerCrop"
-                    android:contentDescription="Thumbnail Rekaman" />
-
-                <!-- Play Overlay Icon -->
                 <FrameLayout
-                    android:layout_width="56dp"
-                    android:layout_height="56dp"
-                    android:layout_centerInParent="true"
-                    android:background="@drawable/ic_play_circle_bg"
-                    android:backgroundTint="#99000000">
+                    android:layout_width="44dp"
+                    android:layout_height="44dp"
+                    android:background="@drawable/bg_chip_pill"
+                    android:backgroundTint="@color/colorSuccessContainer">
 
                     <ImageView
-                        android:layout_width="32dp"
-                        android:layout_height="32dp"
+                        android:layout_width="26dp"
+                        android:layout_height="26dp"
                         android:layout_gravity="center"
-                        android:contentDescription="Play Icon"
-                        android:src="@drawable/ic_play_arrow"
-                        app:tint="#FFFFFF" />
+                        android:contentDescription="Tersimpan"
+                        android:src="@drawable/ic_check_circle"
+                        app:tint="@color/colorOnSuccessContainer" />
                 </FrameLayout>
 
-                <!-- Duration Overlay Badge -->
-                <TextView
-                    android:id="@+id/text_save_dialog_overlay_duration"
-                    android:layout_width="wrap_content"
+                <LinearLayout
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_alignParentEnd="true"
-                    android:layout_alignParentBottom="true"
-                    android:layout_margin="10dp"
-                    android:background="@drawable/bg_chip_pill"
-                    android:backgroundTint="#CC000000"
-                    android:paddingHorizontal="8dp"
-                    android:paddingVertical="4dp"
-                    android:text="00:00"
-                    android:textColor="#FFFFFF"
-                    android:textSize="11sp"
-                    android:textStyle="bold" />
-            </RelativeLayout>
+                    android:layout_marginStart="14dp"
+                    android:orientation="vertical">
 
-            <TextView
-                android:id="@+id/text_save_dialog_title"
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Rekaman Berhasil Disimpan"
+                        android:textColor="@color/textTitle"
+                        android:textSize="18sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="2dp"
+                        android:text="Tersimpan aman di Galeri Rekamin Dulu"
+                        android:textColor="@color/colorSuccess"
+                        android:textSize="12sp"
+                        android:textStyle="bold" />
+                </LinearLayout>
+            </LinearLayout>
+
+            <!-- VIDEO PREVIEW CARD -->
+            <androidx.cardview.widget.CardView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="10dp"
-                android:ellipsize="middle"
-                android:singleLine="true"
-                android:text="Rekaman_20261026_1143.mp4"
-                android:textColor="@color/textTitle"
-                android:textSize="14sp"
-                android:textStyle="bold" />
+                android:layout_marginTop="16dp"
+                app:cardBackgroundColor="@color/colorBackground"
+                app:cardCornerRadius="18dp"
+                app:cardElevation="2dp">
 
-            <TextView
-                android:id="@+id/text_save_dialog_stats"
-                android:layout_width="wrap_content"
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="12dp">
+
+                    <RelativeLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="170dp">
+
+                        <ImageView
+                            android:id="@+id/img_save_dialog_thumbnail"
+                            android:layout_width="match_parent"
+                            android:layout_height="match_parent"
+                            android:background="#12121E"
+                            android:contentDescription="Thumbnail Rekaman"
+                            android:scaleType="centerCrop" />
+
+                        <!-- Play Overlay Icon -->
+                        <FrameLayout
+                            android:layout_width="56dp"
+                            android:layout_height="56dp"
+                            android:layout_centerInParent="true"
+                            android:background="@drawable/ic_play_circle_bg"
+                            android:backgroundTint="#99000000">
+
+                            <ImageView
+                                android:layout_width="32dp"
+                                android:layout_height="32dp"
+                                android:layout_gravity="center"
+                                android:contentDescription="Play Icon"
+                                android:src="@drawable/ic_play_arrow"
+                                app:tint="#FFFFFF" />
+                        </FrameLayout>
+
+                        <!-- Duration Overlay Badge -->
+                        <TextView
+                            android:id="@+id/text_save_dialog_overlay_duration"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_alignParentEnd="true"
+                            android:layout_alignParentBottom="true"
+                            android:layout_margin="10dp"
+                            android:background="@drawable/bg_chip_pill"
+                            android:backgroundTint="#CC000000"
+                            android:paddingHorizontal="8dp"
+                            android:paddingVertical="4dp"
+                            android:text="00:00"
+                            android:textColor="#FFFFFF"
+                            android:textSize="11sp"
+                            android:textStyle="bold" />
+                    </RelativeLayout>
+
+                    <TextView
+                        android:id="@+id/text_save_dialog_title"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="10dp"
+                        android:ellipsize="middle"
+                        android:singleLine="true"
+                        android:text="Rekaman_20261026_1143.mp4"
+                        android:textColor="@color/textTitle"
+                        android:textSize="14sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/text_save_dialog_stats"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="2dp"
+                        android:text="Durasi: 00:45 • Ukuran: 14.8 MB"
+                        android:textColor="@color/textCaption"
+                        android:textSize="12sp" />
+                </LinearLayout>
+            </androidx.cardview.widget.CardView>
+
+            <!-- ACTION BUTTONS -->
+            <LinearLayout
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="2dp"
-                android:text="Durasi: 00:45 • Ukuran: 14.8 MB"
-                android:textColor="@color/textCaption"
-                android:textSize="12sp" />
+                android:layout_marginTop="18dp"
+                android:orientation="vertical">
+
+                <!-- Play Button -->
+                <Button
+                    android:id="@+id/btn_save_dialog_play"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:minHeight="52dp"
+                    android:text="Putar Video Sekarang"
+                    android:textColor="@color/colorOnPrimary"
+                    android:textSize="14sp"
+                    android:textStyle="bold"
+                    app:backgroundTint="@color/colorPrimary"
+                    app:cornerRadius="16dp"
+                    app:icon="@drawable/ic_play_arrow"
+                    app:iconGravity="textStart"
+                    app:iconPadding="8dp"
+                    app:iconTint="@color/colorOnPrimary" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="10dp"
+                    android:orientation="horizontal">
+
+                    <Button
+                        android:id="@+id/btn_save_dialog_trim"
+                        style="@style/Widget.Material3.Button.TonalButton"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginEnd="6dp"
+                        android:layout_weight="1"
+                        android:minHeight="50dp"
+                        android:text="Potong Video"
+                        android:textColor="@color/textTitle"
+                        android:textSize="13sp"
+                        android:textStyle="bold"
+                        app:backgroundTint="@color/colorSurfaceVariant"
+                        app:cornerRadius="14dp"
+                        app:icon="@drawable/ic_trim"
+                        app:iconGravity="textStart"
+                        app:iconPadding="6dp"
+                        app:iconTint="@color/colorPrimaryNav" />
+
+                    <Button
+                        android:id="@+id/btn_save_dialog_share"
+                        style="@style/Widget.Material3.Button.TonalButton"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="6dp"
+                        android:layout_weight="1"
+                        android:minHeight="50dp"
+                        android:text="Bagikan"
+                        android:textColor="@color/textTitle"
+                        android:textSize="13sp"
+                        android:textStyle="bold"
+                        app:backgroundTint="@color/colorSurfaceVariant"
+                        app:cornerRadius="14dp"
+                        app:icon="@drawable/ic_share"
+                        app:iconGravity="textStart"
+                        app:iconPadding="6dp"
+                        app:iconTint="@color/colorSuccess" />
+                </LinearLayout>
+
+                <!-- View in Library / Done -->
+                <Button
+                    android:id="@+id/btn_save_dialog_library"
+                    style="@style/Widget.Material3.Button.TextButton"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:minHeight="48dp"
+                    android:text="Buka di Galeri Rekaman"
+                    android:textColor="@color/colorPrimaryNav"
+                    android:textSize="14sp"
+                    android:textStyle="bold"
+                    app:cornerRadius="14dp"
+                    app:icon="@drawable/ic_library"
+                    app:iconGravity="textStart"
+                    app:iconPadding="8dp"
+                    app:iconTint="@color/colorPrimaryNav" />
+            </LinearLayout>
         </LinearLayout>
-    </androidx.cardview.widget.CardView>
-
-    <!-- ACTION BUTTONS -->
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="18dp"
-        android:orientation="vertical">
-
-        <!-- Play Button -->
-        <Button
-            android:id="@+id/btn_save_dialog_play"
-            android:layout_width="match_parent"
-            android:layout_height="52dp"
-            android:text="Putar Video Sekarang"
-            android:textColor="@color/colorOnPrimary"
-            android:textSize="14sp"
-            android:textStyle="bold"
-            app:backgroundTint="@color/colorPrimary"
-            app:cornerRadius="16dp"
-            app:icon="@drawable/ic_play_arrow"
-            app:iconGravity="textStart"
-            app:iconPadding="8dp"
-            app:iconTint="@color/colorOnPrimary" />
-
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="10dp"
-            android:orientation="horizontal">
-
-            <Button
-                android:id="@+id/btn_save_dialog_trim"
-                style="@style/Widget.Material3.Button.TonalButton"
-                android:layout_width="0dp"
-                android:layout_height="50dp"
-                android:layout_marginEnd="6dp"
-                android:layout_weight="1"
-                android:text="Potong Video"
-                android:textColor="@color/textTitle"
-                android:textSize="13sp"
-                android:textStyle="bold"
-                app:backgroundTint="@color/colorSurfaceVariant"
-                app:cornerRadius="14dp"
-                app:icon="@drawable/ic_trim"
-                app:iconGravity="textStart"
-                app:iconPadding="6dp"
-                app:iconTint="@color/colorPrimary" />
-
-            <Button
-                android:id="@+id/btn_save_dialog_share"
-                style="@style/Widget.Material3.Button.TonalButton"
-                android:layout_width="0dp"
-                android:layout_height="50dp"
-                android:layout_marginStart="6dp"
-                android:layout_weight="1"
-                android:text="Bagikan"
-                android:textColor="@color/textTitle"
-                android:textSize="13sp"
-                android:textStyle="bold"
-                app:backgroundTint="@color/colorSurfaceVariant"
-                app:cornerRadius="14dp"
-                app:icon="@drawable/ic_share"
-                app:iconGravity="textStart"
-                app:iconPadding="6dp"
-                app:iconTint="@color/colorSuccess" />
-        </LinearLayout>
-
-        <!-- View in Library / Done -->
-        <Button
-            android:id="@+id/btn_save_dialog_library"
-            style="@style/Widget.Material3.Button.TextButton"
-            android:layout_width="match_parent"
-            android:layout_height="48dp"
-            android:layout_marginTop="8dp"
-            android:text="Buka di Galeri Rekaman"
-            android:textColor="@color/colorPrimary"
-            android:textSize="14sp"
-            android:textStyle="bold"
-            app:cornerRadius="14dp"
-            app:icon="@drawable/ic_library"
-            app:iconGravity="textStart"
-            app:iconPadding="8dp"
-            app:iconTint="@color/colorPrimary" />
-    </LinearLayout>
+    </androidx.core.widget.NestedScrollView>
 
 </LinearLayout>

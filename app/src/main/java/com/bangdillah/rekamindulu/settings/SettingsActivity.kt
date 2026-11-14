@@ -128,7 +128,8 @@ class SettingsActivity : AppCompatActivity() {
         UiHelper.applySystemBarInsets(
             anchorView = findViewById(R.id.settings_root_layout),
             topView = findViewById(R.id.settings_inner_content),
-            bottomView = findViewById(R.id.bottom_navigation_settings)
+            bottomView = findViewById(R.id.bottom_navigation_settings),
+            horizontalView = findViewById(R.id.settings_root_layout)
         )
 
         initViews()
@@ -1037,12 +1038,15 @@ class SettingsActivity : AppCompatActivity() {
     }
 
     private fun showSetPinDialog(callback: ((Boolean) -> Unit)? = null) {
+        val density = resources.displayMetrics.density
+        val padH = (20 * density).toInt()
+        val padV = (14 * density).toInt()
         val input = EditText(this).apply {
             inputType = InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_VARIATION_PASSWORD
             hint = "Masukkan PIN (4-6 angka)"
             filters = arrayOf(InputFilter.LengthFilter(6))
             maxLines = 1
-            setPadding(56, 40, 56, 40)
+            setPadding(padH, padV, padH, padV)
             setTextColor(ContextCompat.getColor(this@SettingsActivity, R.color.textTitle))
             setHintTextColor(ContextCompat.getColor(this@SettingsActivity, R.color.textCaption))
         }

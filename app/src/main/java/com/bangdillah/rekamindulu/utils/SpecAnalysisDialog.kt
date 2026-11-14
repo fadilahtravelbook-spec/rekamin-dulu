@@ -45,6 +45,7 @@ object SpecAnalysisDialog {
         val dm = context.resources.displayMetrics
         val dialogWidth = (dm.widthPixels * 0.94f).toInt().coerceAtMost((480 * dm.density).toInt())
 
+        AppLockHelper.syncWindowSecurityFlag(dialog.window, AppPreferences(context))
         dialog.window?.apply {
             setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
             setLayout(dialogWidth, ViewGroup.LayoutParams.WRAP_CONTENT)

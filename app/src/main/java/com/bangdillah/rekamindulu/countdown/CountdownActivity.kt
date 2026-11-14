@@ -30,7 +30,8 @@ class CountdownActivity : AppCompatActivity() {
         UiHelper.applySystemBarInsets(
             anchorView = rootLayout,
             topView = rootLayout,
-            bottomView = rootLayout
+            bottomView = rootLayout,
+            horizontalView = rootLayout
         )
 
         val numberText = findViewById<TextView>(R.id.countdown_number)

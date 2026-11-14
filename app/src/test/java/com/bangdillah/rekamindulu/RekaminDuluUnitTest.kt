@@ -1234,4 +1234,141 @@ class RekaminDuluUnitTest {
             com.bangdillah.rekamindulu.service.ScreenRecordingService.lastRecordedFilePath = originalLastPath
         }
     }
+
+    @Test
+    fun testCalculateCapturedDimensionsPreservesWindowAspectRatio() {
+        // 1. Split-screen wide window (1080x400) in AUTO mode must NOT distort height to 480
+        val splitWide = com.bangdillah.rekamindulu.service.RecordingEngineOptimizer.calculateCapturedDimensions(
+            rawWidth = 1080,
+            rawHeight = 400,
+            baseDensityDpi = 420,
+            resolutionPref = "1080p",
+            orientationPref = "AUTO"
+        )
+        assertEquals(1080, splitWide.width)
+        assertEquals(400, splitWide.height)
+        assertEquals(420, splitWide.densityDpi)
+
+        // 2. Landscape window rotation (3200x1440) at 720p scales proportionally to 1600x720
+        val rotated720 = com.bangdillah.rekamindulu.service.RecordingEngineOptimizer.calculateCapturedDimensions(
+            rawWidth = 3200,
+            rawHeight = 1440,
+            baseDensityDpi = 560,
+            resolutionPref = "720p",
+            orientationPref = "AUTO"
+        )
+        assertEquals(1600, rotated720.width)
+        assertEquals(720, rotated720.height)
+        assertEquals(280, rotated720.densityDpi)
+    }
+
+    @Test
+    fun testEvaluateCapturedResizeDecisionsAndErrorMessage() {
+        // 1. Invalid size -> ignore
+        val invalidEval = com.bangdillah.rekamindulu.service.ScreenRecordingService.evaluateCapturedResize(
+            rawWidth = 0,
+            rawHeight = 1080,
+            baseDensityDpi = 420,
+            resolutionPref = "1080p",
+            orientationPref = "AUTO",
+            currentEncoderWidth = 1080,
+            currentEncoderHeight = 2400,
+            currentVirtualDisplayWidth = 1080,
+            currentVirtualDisplayHeight = 2400,
+            currentVirtualDisplayDensityDpi = 420,
+            canReconfigureEncoder = false
+        )
+        assertEquals(
+            com.bangdillah.rekamindulu.service.ScreenRecordingService.Companion.ResizeAction.IGNORE_INVALID_OR_UNCHANGED,
+            invalidEval.action
+        )
+
+        // 2. Identical dimensions & density -> ignore
+        val unchangedEval = com.bangdillah.rekamindulu.service.ScreenRecordingService.evaluateCapturedResize(
+            rawWidth = 1080,
+            rawHeight = 2400,
+            baseDensityDpi = 420,
+            resolutionPref = "1080p",
+            orientationPref = "AUTO",
+            currentEncoderWidth = 1080,
+            currentEncoderHeight = 2400,
+            currentVirtualDisplayWidth = 1080,
+            currentVirtualDisplayHeight = 2400,
+            currentVirtualDisplayDensityDpi = 420,
+            canReconfigureEncoder = true
+        )
+        assertEquals(
+            com.bangdillah.rekamindulu.service.ScreenRecordingService.Companion.ResizeAction.IGNORE_INVALID_OR_UNCHANGED,
+            unchangedEval.action
+        )
+
+        // 3. Same encoder dimensions, different VirtualDisplay density -> update VD & relay cleanly
+        val densityEval = com.bangdillah.rekamindulu.service.ScreenRecordingService.evaluateCapturedResize(
+            rawWidth = 1080,
+            rawHeight = 2400,
+            baseDensityDpi = 480,
+            resolutionPref = "1080p",
+            orientationPref = "AUTO",
+            currentEncoderWidth = 1080,
+            currentEncoderHeight = 2400,
+            currentVirtualDisplayWidth = 1080,
+            currentVirtualDisplayHeight = 2400,
+            currentVirtualDisplayDensityDpi = 420,
+            canReconfigureEncoder = false
+        )
+        assertEquals(
+            com.bangdillah.rekamindulu.service.ScreenRecordingService.Companion.ResizeAction.UPDATE_VIRTUAL_DISPLAY_AND_RELAY,
+            densityEval.action
+        )
+        assertEquals(480, densityEval.targetDensityDpi)
+
+        // 4. Different window aspect before muxer starts -> reconfigure encoder & VD seamlessly
+        val preMuxerEval = com.bangdillah.rekamindulu.service.ScreenRecordingService.evaluateCapturedResize(
+            rawWidth = 1080,
+            rawHeight = 1180,
+            baseDensityDpi = 420,
+            resolutionPref = "1080p",
+            orientationPref = "AUTO",
+            currentEncoderWidth = 1080,
+            currentEncoderHeight = 2400,
+            currentVirtualDisplayWidth = 1080,
+            currentVirtualDisplayHeight = 2400,
+            currentVirtualDisplayDensityDpi = 420,
+            canReconfigureEncoder = true
+        )
+        assertEquals(
+            com.bangdillah.rekamindulu.service.ScreenRecordingService.Companion.ResizeAction.RECONFIGURE_ENCODER_AND_VIRTUAL_DISPLAY,
+            preMuxerEval.action
+        )
+        assertEquals(1080, preMuxerEval.targetWidth)
+        assertEquals(1180, preMuxerEval.targetHeight)
+
+        // 5. Window resize or rotation after muxer starts -> stop cleanly with clear message
+        val midRecordingEval = com.bangdillah.rekamindulu.service.ScreenRecordingService.evaluateCapturedResize(
+            rawWidth = 2400,
+            rawHeight = 1080,
+            baseDensityDpi = 420,
+            resolutionPref = "1080p",
+            orientationPref = "AUTO",
+            currentEncoderWidth = 1080,
+            currentEncoderHeight = 2400,
+            currentVirtualDisplayWidth = 1080,
+            currentVirtualDisplayHeight = 2400,
+            currentVirtualDisplayDensityDpi = 420,
+            canReconfigureEncoder = false
+        )
+        assertEquals(
+            com.bangdillah.rekamindulu.service.ScreenRecordingService.Companion.ResizeAction.STOP_UNSUPPORTED_ENCODER_RESIZE,
+            midRecordingEval.action
+        )
+        assertEquals(2400, midRecordingEval.targetWidth)
+        assertEquals(1080, midRecordingEval.targetHeight)
+
+        val errMsg = com.bangdillah.rekamindulu.service.ScreenRecordingService.buildUnsupportedResizeErrorMessage(
+            1080, 2400, 2400, 1080
+        )
+        assertTrue(errMsg.contains("1080×2400"))
+        assertTrue(errMsg.contains("2400×1080"))
+        assertTrue(errMsg.contains("encoder", ignoreCase = true))
+    }
 }

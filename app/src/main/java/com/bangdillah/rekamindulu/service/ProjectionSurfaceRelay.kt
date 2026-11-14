@@ -30,9 +30,16 @@ import java.util.concurrent.atomic.AtomicBoolean
  */
 class ProjectionSurfaceRelay(
     private val encoderSurface: Surface,
-    val width: Int,
-    val height: Int
+    width: Int,
+    height: Int
 ) {
+    @Volatile
+    var width: Int = width
+        private set
+
+    @Volatile
+    var height: Int = height
+        private set
     companion object {
         private const val TAG = "ProjectionSurfaceRelay"
         private const val EGL_RECORDABLE_ANDROID = 0x3142
@@ -83,6 +90,8 @@ class ProjectionSurfaceRelay(
     private var oesTextureId: Int = 0
     private var fboId: Int = 0
     private var fboTextureId: Int = 0
+    private var fboWidth: Int = 0
+    private var fboHeight: Int = 0
     private var programId: Int = 0
     private var aPositionLoc: Int = -1
     private var aTexCoordLoc: Int = -1
@@ -153,6 +162,23 @@ class ProjectionSurfaceRelay(
         isPaused.set(paused)
     }
 
+    fun updateSize(newWidth: Int, newHeight: Int) {
+        if (isReleased.get() || newWidth <= 0 || newHeight <= 0) return
+        handler.post {
+            if (isReleased.get()) return@post
+            if (width == newWidth && height == newHeight) return@post
+            width = newWidth
+            height = newHeight
+            try {
+                surfaceTexture?.setDefaultBufferSize(newWidth, newHeight)
+            } catch (e: Exception) {
+                Log.w(TAG, "setDefaultBufferSize gagal saat resize: ${e.message}")
+            }
+            deleteOffscreenFboOnThread()
+            Log.i(TAG, "ProjectionSurfaceRelay ukuran diperbarui ke ${newWidth}x${newHeight}")
+        }
+    }
+
     fun captureBitmap(callback: (Bitmap?) -> Unit) {
         if (isReleased.get()) {
             callback(null)
@@ -181,19 +207,21 @@ class ProjectionSurfaceRelay(
                     return@post
                 }
 
-                ensureOffscreenFbo()
+                val snapW = width.coerceAtLeast(1)
+                val snapH = height.coerceAtLeast(1)
+                ensureOffscreenFbo(snapW, snapH)
                 GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, fboId)
-                GLES20.glViewport(0, 0, width, height)
+                GLES20.glViewport(0, 0, snapW, snapH)
                 drawOesQuad(mvpMatrix = flipYMatrix)
                 GLES20.glFinish()
 
-                val pixelBuffer = ByteBuffer.allocateDirect(width * height * 4).order(ByteOrder.nativeOrder())
-                GLES20.glReadPixels(0, 0, width, height, GLES20.GL_RGBA, GLES20.GL_UNSIGNED_BYTE, pixelBuffer)
+                val pixelBuffer = ByteBuffer.allocateDirect(snapW * snapH * 4).order(ByteOrder.nativeOrder())
+                GLES20.glReadPixels(0, 0, snapW, snapH, GLES20.GL_RGBA, GLES20.GL_UNSIGNED_BYTE, pixelBuffer)
                 pixelBuffer.rewind()
 
                 GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, 0)
 
-                val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+                val bitmap = Bitmap.createBitmap(snapW, snapH, Bitmap.Config.ARGB_8888)
                 bitmap.copyPixelsFromBuffer(pixelBuffer)
                 callback(bitmap)
             } catch (e: Exception) {
@@ -288,8 +316,10 @@ class ProjectionSurfaceRelay(
 
             if (isPaused.get()) return
 
+            val snapW = width.coerceAtLeast(1)
+            val snapH = height.coerceAtLeast(1)
             GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, 0)
-            GLES20.glViewport(0, 0, width, height)
+            GLES20.glViewport(0, 0, snapW, snapH)
             drawOesQuad(mvpMatrix = identityMatrix)
 
             val rawPts = st.timestamp.takeIf { it > 0L } ?: System.nanoTime()
@@ -302,8 +332,24 @@ class ProjectionSurfaceRelay(
         }
     }
 
-    private fun ensureOffscreenFbo() {
-        if (fboId != 0 && fboTextureId != 0) return
+    private fun deleteOffscreenFboOnThread() {
+        try {
+            if (fboId != 0) {
+                GLES20.glDeleteFramebuffers(1, intArrayOf(fboId), 0)
+                fboId = 0
+            }
+            if (fboTextureId != 0) {
+                GLES20.glDeleteTextures(1, intArrayOf(fboTextureId), 0)
+                fboTextureId = 0
+            }
+        } catch (_: Exception) {}
+        fboWidth = 0
+        fboHeight = 0
+    }
+
+    private fun ensureOffscreenFbo(targetWidth: Int, targetHeight: Int) {
+        if (fboId != 0 && fboTextureId != 0 && fboWidth == targetWidth && fboHeight == targetHeight) return
+        deleteOffscreenFboOnThread()
 
         val tex = IntArray(1)
         GLES20.glGenTextures(1, tex, 0)
@@ -317,8 +363,8 @@ class ProjectionSurfaceRelay(
             GLES20.GL_TEXTURE_2D,
             0,
             GLES20.GL_RGBA,
-            width,
-            height,
+            targetWidth,
+            targetHeight,
             0,
             GLES20.GL_RGBA,
             GLES20.GL_UNSIGNED_BYTE,
@@ -339,8 +385,11 @@ class ProjectionSurfaceRelay(
         val status = GLES20.glCheckFramebufferStatus(GLES20.GL_FRAMEBUFFER)
         GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, 0)
         if (status != GLES20.GL_FRAMEBUFFER_COMPLETE) {
+            deleteOffscreenFboOnThread()
             throw IllegalStateException("Offscreen FBO tidak lengkap: status=$status")
         }
+        fboWidth = targetWidth
+        fboHeight = targetHeight
     }
 
     private fun drawOesQuad(mvpMatrix: FloatArray) {

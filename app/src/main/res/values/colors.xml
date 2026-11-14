@@ -8,6 +8,7 @@
     <color name="colorOnPrimary">#FFFFFF</color>
     <color name="colorPrimaryContainer">#ECE8FD</color>
     <color name="colorOnPrimaryContainer">#4435B8</color>
+    <color name="colorPrimaryNav">#6C5CE7</color>
 
     <!-- ========== SURFACE & BACKGROUND ========== -->
     <color name="colorSurface">#FFFFFF</color>
@@ -20,10 +21,12 @@
     <!-- ========== SYSTEM SEMANTICS ========== -->
     <color name="colorError">#E53935</color>
     <color name="colorErrorContainer">#FDECEC</color>
+    <color name="colorOnErrorContainer">#C62828</color>
     <color name="colorWarning">#FF9F43</color>
     <color name="colorWarningContainer">#FFF4E6</color>
     <color name="colorSuccess">#00B894</color>
     <color name="colorSuccessContainer">#E4F9F4</color>
+    <color name="colorOnSuccessContainer">#00896E</color>
 
     <!-- ========== ON SURFACE & TEXT ========== -->
     <color name="colorOnSurface">#1A1B25</color>

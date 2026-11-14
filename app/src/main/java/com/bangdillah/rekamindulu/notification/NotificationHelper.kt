@@ -32,6 +32,7 @@ class NotificationHelper(private val context: Context) {
         const val CHANNEL_COMPLETED = "rekam_selesai"
         const val NOTIFICATION_ID_RECORDING = 2001
         const val NOTIFICATION_ID_COMPLETED = 1002
+        const val NOTIFICATION_ID_NOTICE = 1003
     }
 
     init {
@@ -154,6 +155,65 @@ class NotificationHelper(private val context: Context) {
             notificationManager.notify(NOTIFICATION_ID_COMPLETED, builder.build())
         } catch (e: Exception) {
             Log.e(TAG, "Failed to display completed notification", e)
+        }
+    }
+
+    /**
+     * Menampilkan notifikasi jelas ketika perekaman dihentikan karena perubahan ukuran jendela/orientasi
+     * yang tidak didukung encoder aktif, lengkap dengan opsi memutar hasil sebelum perubahan (jika ada).
+     */
+    fun showRecordingStoppedWithNoticeNotification(
+        title: String,
+        message: String,
+        savedFile: File?
+    ) {
+        val validSavedFile = savedFile?.takeIf { it.exists() && it.length() > 10240L }
+        val primaryIntent = if (validSavedFile != null) {
+            Intent(context, PlayerActivity::class.java).apply {
+                putExtra("VIDEO_PATH", validSavedFile.absolutePath)
+                putExtra(MainActivity.EXTRA_CLEAR_PENDING_SAVE, true)
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            }
+        } else {
+            Intent(context, HomeActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            }
+        }
+        val pendingPrimary = PendingIntent.getActivity(
+            context,
+            204,
+            primaryIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        try {
+            val builder = NotificationCompat.Builder(context, CHANNEL_COMPLETED)
+                .setSmallIcon(R.drawable.ic_record)
+                .setContentTitle(title)
+                .setContentText(message)
+                .setStyle(NotificationCompat.BigTextStyle().bigText(message))
+                .setContentIntent(pendingPrimary)
+                .setAutoCancel(true)
+                .setPriority(NotificationCompat.PRIORITY_HIGH)
+
+            if (validSavedFile != null) {
+                val libraryIntent = Intent(context, LibraryActivity::class.java).apply {
+                    putExtra(MainActivity.EXTRA_CLEAR_PENDING_SAVE, true)
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+                }
+                val pendingLibrary = PendingIntent.getActivity(
+                    context,
+                    205,
+                    libraryIntent,
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                )
+                builder.addAction(R.drawable.ic_play_arrow, "Putar", pendingPrimary)
+                builder.addAction(R.drawable.ic_folder, "Galeri", pendingLibrary)
+            }
+
+            notificationManager.notify(NOTIFICATION_ID_NOTICE, builder.build())
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to display resize notice notification", e)
         }
     }
 }

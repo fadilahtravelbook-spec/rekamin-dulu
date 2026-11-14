@@ -3,6 +3,7 @@ package com.bangdillah.rekamindulu.utils
 import android.app.Activity
 import android.text.InputFilter
 import android.text.InputType
+import android.view.Window
 import android.view.WindowManager
 import android.widget.EditText
 import androidx.appcompat.app.AlertDialog
@@ -81,7 +82,11 @@ object AppLockHelper {
     }
 
     fun syncWindowSecurityFlag(activity: Activity, appPreferences: AppPreferences) {
-        val window = activity.window ?: return
+        syncWindowSecurityFlag(activity.window, appPreferences)
+    }
+
+    fun syncWindowSecurityFlag(window: Window?, appPreferences: AppPreferences) {
+        if (window == null) return
         if (shouldMaskScreenInRecents(appPreferences.isAppLockEnabled, appPreferences.appLockPin)) {
             window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
         } else {
@@ -126,12 +131,15 @@ object AppLockHelper {
             return currentDialog
         }
 
+        val density = activity.resources.displayMetrics.density
+        val padH = (20 * density).toInt()
+        val padV = (14 * density).toInt()
         val input = EditText(activity).apply {
             inputType = InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_VARIATION_PASSWORD
             hint = "Masukkan PIN (4-6 angka)"
             filters = arrayOf(InputFilter.LengthFilter(6))
             maxLines = 1
-            setPadding(48, 36, 48, 36)
+            setPadding(padH, padV, padH, padV)
             setTextColor(ContextCompat.getColor(activity, R.color.textTitle))
             setHintTextColor(ContextCompat.getColor(activity, R.color.textCaption))
         }
@@ -166,6 +174,7 @@ object AppLockHelper {
             currentDialog?.dismiss()
         } catch (ignored: Exception) {
         }
+        syncWindowSecurityFlag(dialog.window, appPreferences)
         dialog.show()
         return dialog
     }

@@ -92,6 +92,7 @@ class TrimActivity : AppCompatActivity() {
     private var textTrimSummary: TextView? = null
     private var progressBar: ProgressBar? = null
     private var btnApplyTrim: Button? = null
+    private var btnBrowse: Button? = null
     private var layoutNoVideoPlaceholder: View? = null
 
     private lateinit var appPreferences: AppPreferences
@@ -141,7 +142,8 @@ class TrimActivity : AppCompatActivity() {
         UiHelper.applySystemBarInsets(
             anchorView = findViewById(R.id.trim_root_scroll),
             topView = findViewById(R.id.trim_inner_content),
-            bottomView = findViewById(R.id.trim_inner_content)
+            bottomView = findViewById(R.id.trim_inner_content),
+            horizontalView = findViewById(R.id.trim_inner_content)
         )
 
         initViews()
@@ -238,6 +240,7 @@ class TrimActivity : AppCompatActivity() {
         textTrimSummary = findViewById(R.id.text_trim_summary)
         progressBar = findViewById(R.id.trim_progress_bar)
         btnApplyTrim = findViewById(R.id.btn_apply_trim)
+        btnBrowse = findViewById(R.id.btn_browse)
         layoutNoVideoPlaceholder = findViewById(R.id.layout_no_video_placeholder)
     }
 
@@ -246,7 +249,8 @@ class TrimActivity : AppCompatActivity() {
             finish()
         }
 
-        findViewById<Button>(R.id.btn_browse)?.setOnClickListener {
+        btnBrowse?.setOnClickListener {
+            if (isTrimming) return@setOnClickListener
             AppLockHelper.suppressNextBackgroundLock()
             try {
                 pickVideoLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.VideoOnly))
@@ -512,6 +516,9 @@ class TrimActivity : AppCompatActivity() {
         progressBar?.progress = 0
         btnApplyTrim?.isEnabled = false
         btnApplyTrim?.text = "Memproses Pemotongan Video..."
+        seekStartTime?.isEnabled = false
+        seekEndTime?.isEnabled = false
+        btnBrowse?.isEnabled = false
 
         isTrimming = true
         deleteTempAfterTrim = false
@@ -545,6 +552,9 @@ class TrimActivity : AppCompatActivity() {
                 progressBar?.visibility = View.GONE
                 btnApplyTrim?.isEnabled = true
                 btnApplyTrim?.text = "PANGKAS & SIMPAN SEKARANG"
+                seekStartTime?.isEnabled = true
+                seekEndTime?.isEnabled = true
+                btnBrowse?.isEnabled = true
 
                 if (success) {
                     // Daftarkan ke MediaStore dan Galeri Ponsel

@@ -63,8 +63,10 @@
         <com.google.android.material.button.MaterialButton
             android:id="@+id/btn_tambah_rekam"
             android:layout_width="wrap_content"
-            android:layout_height="38dp"
-            android:minHeight="38dp"
+            android:layout_height="wrap_content"
+            android:insetTop="4dp"
+            android:insetBottom="4dp"
+            android:minHeight="48dp"
             android:paddingHorizontal="14dp"
             android:text="+ Rekam Baru"
             android:textColor="@color/colorOnPrimary"
@@ -116,8 +118,10 @@
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/btn_library_stop_rec"
                 android:layout_width="wrap_content"
-                android:layout_height="34dp"
-                android:minHeight="34dp"
+                android:layout_height="wrap_content"
+                android:insetTop="6dp"
+                android:insetBottom="6dp"
+                android:minHeight="48dp"
                 android:text="Stop"
                 android:textColor="@color/colorError"
                 android:textSize="11sp"
@@ -131,7 +135,7 @@
     <com.google.android.material.card.MaterialCardView
         android:id="@+id/card_search_bar"
         android:layout_width="match_parent"
-        android:layout_height="48dp"
+        android:layout_height="wrap_content"
         android:layout_marginHorizontal="16dp"
         android:layout_marginTop="10dp"
         app:cardBackgroundColor="@color/colorSurface"
@@ -143,8 +147,9 @@
 
         <LinearLayout
             android:layout_width="match_parent"
-            android:layout_height="match_parent"
+            android:layout_height="wrap_content"
             android:gravity="center_vertical"
+            android:minHeight="50dp"
             android:orientation="horizontal"
             android:paddingHorizontal="12dp">
 
@@ -158,7 +163,7 @@
             <EditText
                 android:id="@+id/et_search_library"
                 android:layout_width="0dp"
-                android:layout_height="match_parent"
+                android:layout_height="wrap_content"
                 android:layout_marginStart="8dp"
                 android:layout_weight="1"
                 android:background="@android:color/transparent"
@@ -166,17 +171,20 @@
                 android:imeOptions="actionSearch"
                 android:inputType="text"
                 android:maxLines="1"
+                android:minHeight="48dp"
                 android:textColor="@color/textTitle"
                 android:textColorHint="@color/textCaption"
                 android:textSize="13sp" />
 
             <ImageView
                 android:id="@+id/btn_clear_search"
-                android:layout_width="44dp"
-                android:layout_height="44dp"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
                 android:background="?attr/selectableItemBackgroundBorderless"
+                android:clickable="true"
                 android:contentDescription="Hapus Pencarian"
-                android:padding="12dp"
+                android:focusable="true"
+                android:padding="13dp"
                 android:src="@drawable/ic_clear"
                 android:visibility="gone"
                 app:tint="@color/textCaption" />
@@ -189,13 +197,15 @@
 
             <ImageView
                 android:id="@+id/btn_sort_library"
-                android:layout_width="44dp"
-                android:layout_height="44dp"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
                 android:background="?attr/selectableItemBackgroundBorderless"
+                android:clickable="true"
                 android:contentDescription="Urutkan Rekaman"
-                android:padding="10dp"
+                android:focusable="true"
+                android:padding="12dp"
                 android:src="@drawable/ic_sort"
-                app:tint="@color/colorPrimary" />
+                app:tint="@color/colorPrimaryNav" />
         </LinearLayout>
     </com.google.android.material.card.MaterialCardView>
 
@@ -214,6 +224,7 @@
         app:layout_constraintTop_toBottomOf="@id/card_search_bar">
 
         <LinearLayout
+            android:id="@+id/layout_filter_chips_container"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:orientation="horizontal">
@@ -225,7 +236,7 @@
                 android:layout_marginEnd="8dp"
                 android:background="@drawable/bg_filter_chip"
                 android:gravity="center"
-                android:minHeight="38dp"
+                android:minHeight="44dp"
                 android:paddingHorizontal="14dp"
                 android:paddingVertical="8dp"
                 android:text="Semua"
@@ -240,7 +251,7 @@
                 android:layout_marginEnd="8dp"
                 android:background="@drawable/bg_filter_chip"
                 android:gravity="center"
-                android:minHeight="38dp"
+                android:minHeight="44dp"
                 android:paddingHorizontal="14dp"
                 android:paddingVertical="8dp"
                 android:text="🎮 Rekaman Game"
@@ -254,7 +265,7 @@
                 android:layout_marginEnd="8dp"
                 android:background="@drawable/bg_filter_chip"
                 android:gravity="center"
-                android:minHeight="38dp"
+                android:minHeight="44dp"
                 android:paddingHorizontal="14dp"
                 android:paddingVertical="8dp"
                 android:text="📁 Hari Ini"
@@ -267,7 +278,7 @@
                 android:layout_height="wrap_content"
                 android:background="@drawable/bg_filter_chip"
                 android:gravity="center"
-                android:minHeight="38dp"
+                android:minHeight="44dp"
                 android:paddingHorizontal="14dp"
                 android:paddingVertical="8dp"
                 android:text="⏱️ &gt; 1 Menit"
@@ -322,7 +333,7 @@
                 android:textSize="13sp" />
 
             <LinearLayout
-                android:layout_width="wrap_content"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="24dp"
                 android:gravity="center"
@@ -330,14 +341,15 @@
 
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/btn_empty_start"
-                    android:layout_width="wrap_content"
-                    android:layout_height="44dp"
-                    android:layout_marginEnd="10dp"
-                    android:minHeight="44dp"
-                    android:paddingHorizontal="16dp"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginEnd="8dp"
+                    android:layout_weight="1"
+                    android:minHeight="48dp"
+                    android:paddingHorizontal="10dp"
                     android:text="🔴 Mulai Merekam"
                     android:textColor="@color/colorOnPrimary"
-                    android:textSize="13sp"
+                    android:textSize="12.5sp"
                     android:textStyle="bold"
                     app:backgroundTint="@color/colorError"
                     app:cornerRadius="14dp" />
@@ -345,13 +357,14 @@
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/btn_empty_demo"
                     style="@style/Widget.Material3.Button.TonalButton"
-                    android:layout_width="wrap_content"
-                    android:layout_height="44dp"
-                    android:minHeight="44dp"
-                    android:paddingHorizontal="16dp"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:minHeight="48dp"
+                    android:paddingHorizontal="10dp"
                     android:text="✨ Buat Video Demo"
-                    android:textColor="@color/colorPrimary"
-                    android:textSize="13sp"
+                    android:textColor="@color/colorOnPrimaryContainer"
+                    android:textSize="12.5sp"
                     android:textStyle="bold"
                     app:backgroundTint="@color/colorPrimaryContainer"
                     app:cornerRadius="14dp" />
@@ -403,7 +416,7 @@
         android:layout_height="0dp"
         android:clipToPadding="false"
         android:paddingTop="6dp"
-        android:paddingBottom="84dp"
+        android:paddingBottom="12dp"
         android:scrollbars="vertical"
         app:layout_constraintBottom_toTopOf="@id/bottom_navigation_library"
         app:layout_constraintTop_toBottomOf="@id/scroll_filter_chips" />
@@ -413,7 +426,8 @@
         android:id="@+id/bottom_navigation_library"
         style="@style/Widget.App.BottomNav"
         android:layout_width="match_parent"
-        android:layout_height="68dp"
+        android:layout_height="wrap_content"
+        android:minHeight="68dp"
         app:elevation="12dp"
         app:layout_constraintBottom_toBottomOf="parent"
         app:menu="@menu/bottom_nav_menu" />

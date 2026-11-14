@@ -142,21 +142,26 @@
         </LinearLayout>
     </RelativeLayout>
 
-    <!-- BOTTOM CONTROLS DOCK (Edge-to-Edge with Inset Support) -->
-    <com.google.android.material.card.MaterialCardView
-        android:id="@+id/player_bottom_panel"
+    <!-- BOTTOM CONTROLS DOCK WRAPPER (Keeps rounded card cleanly above nav bar insets) -->
+    <FrameLayout
+        android:id="@+id/player_bottom_inset_wrapper"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginHorizontal="12dp"
-        android:layout_marginBottom="12dp"
-        app:cardBackgroundColor="#E60D0E1A"
-        app:cardCornerRadius="24dp"
-        app:cardElevation="16dp"
-        app:strokeColor="#2EFFFFFF"
-        app:strokeWidth="1.2dp"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent">
+
+        <com.google.android.material.card.MaterialCardView
+            android:id="@+id/player_bottom_panel"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginHorizontal="12dp"
+            android:layout_marginBottom="12dp"
+            app:cardBackgroundColor="#E60D0E1A"
+            app:cardCornerRadius="24dp"
+            app:cardElevation="16dp"
+            app:strokeColor="#2EFFFFFF"
+            app:strokeWidth="1.2dp">
 
         <LinearLayout
             android:layout_width="match_parent"
@@ -193,8 +198,8 @@
                     android:minHeight="48dp"
                     android:paddingHorizontal="12dp"
                     android:progress="0"
-                    android:progressTint="@color/colorPrimary"
-                    android:thumbTint="@color/colorPrimary" />
+                    android:progressTint="@color/colorPrimaryLight"
+                    android:thumbTint="@color/colorPrimaryLight" />
 
                 <TextView
                     android:id="@+id/total_time"
@@ -350,5 +355,6 @@
             </LinearLayout>
         </LinearLayout>
     </com.google.android.material.card.MaterialCardView>
+    </FrameLayout>
 
 </androidx.constraintlayout.widget.ConstraintLayout>

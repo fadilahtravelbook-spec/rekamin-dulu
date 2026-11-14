@@ -232,7 +232,7 @@
                         android:gravity="end"
                         android:minWidth="56dp"
                         android:text="00:00"
-                        android:textColor="@color/colorPrimary"
+                        android:textColor="@color/colorPrimaryNav"
                         android:textSize="13sp"
                         android:textStyle="bold" />
                 </LinearLayout>
@@ -267,7 +267,7 @@
                         android:gravity="end"
                         android:minWidth="56dp"
                         android:text="00:00"
-                        android:textColor="@color/colorPrimary"
+                        android:textColor="@color/colorPrimaryNav"
                         android:textSize="13sp"
                         android:textStyle="bold" />
                 </LinearLayout>
@@ -281,7 +281,7 @@
                     android:background="@drawable/bg_telemetry_box"
                     android:padding="12dp"
                     android:text="⏱️ Pilih video untuk menentukan rentang potongan"
-                    android:textColor="@color/colorPrimary"
+                    android:textColor="@color/colorPrimaryNav"
                     android:textSize="12sp"
                     android:textStyle="bold" />
 
@@ -301,8 +301,9 @@
         <com.google.android.material.button.MaterialButton
             android:id="@+id/btn_apply_trim"
             android:layout_width="match_parent"
-            android:layout_height="54dp"
+            android:layout_height="wrap_content"
             android:layout_marginBottom="20dp"
+            android:minHeight="54dp"
             android:text="PANGKAS &amp; SIMPAN SEKARANG"
             android:textColor="@color/colorOnPrimary"
             android:textSize="15sp"

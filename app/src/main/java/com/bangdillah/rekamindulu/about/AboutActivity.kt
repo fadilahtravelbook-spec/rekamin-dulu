@@ -36,7 +36,8 @@ class AboutActivity : AppCompatActivity() {
         UiHelper.applySystemBarInsets(
             anchorView = findViewById(R.id.about_root_scroll),
             topView = findViewById(R.id.about_inner_content),
-            bottomView = findViewById(R.id.about_inner_content)
+            bottomView = findViewById(R.id.about_inner_content),
+            horizontalView = findViewById(R.id.about_inner_content)
         )
 
         val appVersion = resolveAppVersionName()

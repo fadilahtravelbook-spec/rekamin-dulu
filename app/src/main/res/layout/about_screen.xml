@@ -91,7 +91,7 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="2dp"
             android:text="Dikembangkan oleh Bangdillah210"
-            android:textColor="@color/colorPrimary"
+            android:textColor="@color/colorPrimaryNav"
             android:textSize="13sp"
             android:textStyle="bold" />
 
@@ -165,8 +165,9 @@
         <Button
             android:id="@+id/btn_share_app"
             android:layout_width="match_parent"
-            android:layout_height="52dp"
+            android:layout_height="wrap_content"
             android:layout_marginTop="20dp"
+            android:minHeight="52dp"
             android:text="📤 BAGIKAN APLIKASI KE TEMAN"
             android:textColor="@color/colorOnPrimary"
             android:textStyle="bold"
@@ -177,10 +178,11 @@
         <Button
             android:id="@+id/btn_check_update"
             android:layout_width="match_parent"
-            android:layout_height="50dp"
+            android:layout_height="wrap_content"
             android:layout_marginTop="10dp"
+            android:minHeight="50dp"
             android:text="🚀 CEK PEMBARUAN VERSI"
-            android:textColor="@color/colorPrimary"
+            android:textColor="@color/colorOnPrimaryContainer"
             android:textStyle="bold"
             app:backgroundTint="@color/colorPrimaryContainer"
             app:cornerRadius="14dp" />
@@ -189,10 +191,11 @@
         <Button
             android:id="@+id/btn_about_diagnostics"
             android:layout_width="match_parent"
-            android:layout_height="50dp"
+            android:layout_height="wrap_content"
             android:layout_marginTop="10dp"
+            android:minHeight="50dp"
             android:text="🔍 ANALISIS SPESIFIKASI &amp; SKOR HP"
-            android:textColor="@color/colorPrimary"
+            android:textColor="@color/colorOnPrimaryContainer"
             android:textStyle="bold"
             app:backgroundTint="@color/colorPrimaryContainer"
             app:cornerRadius="14dp" />
@@ -201,8 +204,9 @@
         <Button
             android:id="@+id/btn_support_coffee"
             android:layout_width="match_parent"
-            android:layout_height="52dp"
+            android:layout_height="wrap_content"
             android:layout_marginTop="10dp"
+            android:minHeight="52dp"
             android:text="☕ TRAKTIR BANGDILLAH210 (DUKUNG PENGEMBANG)"
             android:textColor="@color/colorOnPrimary"
             android:textStyle="bold"

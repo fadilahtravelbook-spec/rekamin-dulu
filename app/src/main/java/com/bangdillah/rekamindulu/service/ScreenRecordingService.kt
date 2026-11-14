@@ -13,6 +13,7 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
+import android.content.res.Configuration
 import android.hardware.display.DisplayManager
 import android.hardware.display.VirtualDisplay
 import android.media.projection.MediaProjection
@@ -39,6 +40,8 @@ import com.bangdillah.rekamindulu.notification.NotificationHelper
 import com.bangdillah.rekamindulu.utils.AppPreferences
 import com.bangdillah.rekamindulu.utils.StorageHelper
 import java.io.File
+import java.util.concurrent.ExecutorService
+import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
@@ -66,6 +69,7 @@ open class ScreenRecordingService : Service() {
 
         const val EXTRA_FILE_PATH = "EXTRA_FILE_PATH"
         const val EXTRA_ERROR_MESSAGE = "EXTRA_ERROR_MESSAGE"
+        const val EXTRA_STOPPED_BY_ERROR = "EXTRA_STOPPED_BY_ERROR"
         const val EXTRA_MIC_MUTED = "EXTRA_MIC_MUTED"
         const val EXTRA_SCREENSHOT_SUCCESS = "EXTRA_SCREENSHOT_SUCCESS"
         const val EXTRA_SCREENSHOT_URI = "EXTRA_SCREENSHOT_URI"
@@ -151,6 +155,87 @@ open class ScreenRecordingService : Service() {
             fileExists: Boolean,
             fileLengthBytes: Long
         ): Boolean = muxerFinalized && fileExists && fileLengthBytes > 10240L
+
+        enum class ResizeAction {
+            IGNORE_INVALID_OR_UNCHANGED,
+            UPDATE_VIRTUAL_DISPLAY_AND_RELAY,
+            RECONFIGURE_ENCODER_AND_VIRTUAL_DISPLAY,
+            STOP_UNSUPPORTED_ENCODER_RESIZE
+        }
+
+        data class ResizeEvaluation(
+            val action: ResizeAction,
+            val targetWidth: Int,
+            val targetHeight: Int,
+            val targetDensityDpi: Int
+        )
+
+        /**
+         * Menentukan tindakan konsisten saat ukuran jendela/layar yang direkam berubah
+         * (misalnya dari MediaProjection.Callback.onCapturedContentResize di Android 14+).
+         */
+        fun evaluateCapturedResize(
+            rawWidth: Int,
+            rawHeight: Int,
+            baseDensityDpi: Int,
+            resolutionPref: String,
+            orientationPref: String,
+            currentEncoderWidth: Int,
+            currentEncoderHeight: Int,
+            currentVirtualDisplayWidth: Int,
+            currentVirtualDisplayHeight: Int,
+            currentVirtualDisplayDensityDpi: Int,
+            canReconfigureEncoder: Boolean
+        ): ResizeEvaluation {
+            if (rawWidth <= 0 || rawHeight <= 0) {
+                return ResizeEvaluation(
+                    action = ResizeAction.IGNORE_INVALID_OR_UNCHANGED,
+                    targetWidth = currentEncoderWidth,
+                    targetHeight = currentEncoderHeight,
+                    targetDensityDpi = currentVirtualDisplayDensityDpi
+                )
+            }
+
+            val target = RecordingEngineOptimizer.calculateCapturedDimensions(
+                rawWidth = rawWidth,
+                rawHeight = rawHeight,
+                baseDensityDpi = baseDensityDpi,
+                resolutionPref = resolutionPref,
+                orientationPref = orientationPref
+            )
+
+            val encoderMatches = (target.width == currentEncoderWidth && target.height == currentEncoderHeight)
+            val virtualDisplayMatches = (
+                target.width == currentVirtualDisplayWidth &&
+                    target.height == currentVirtualDisplayHeight &&
+                    target.densityDpi == currentVirtualDisplayDensityDpi
+                )
+
+            val action = when {
+                encoderMatches && virtualDisplayMatches -> ResizeAction.IGNORE_INVALID_OR_UNCHANGED
+                encoderMatches -> ResizeAction.UPDATE_VIRTUAL_DISPLAY_AND_RELAY
+                canReconfigureEncoder -> ResizeAction.RECONFIGURE_ENCODER_AND_VIRTUAL_DISPLAY
+                else -> ResizeAction.STOP_UNSUPPORTED_ENCODER_RESIZE
+            }
+
+            return ResizeEvaluation(
+                action = action,
+                targetWidth = target.width,
+                targetHeight = target.height,
+                targetDensityDpi = target.densityDpi
+            )
+        }
+
+        fun buildUnsupportedResizeErrorMessage(
+            oldWidth: Int,
+            oldHeight: Int,
+            newWidth: Int,
+            newHeight: Int
+        ): String {
+            return "Perekaman dihentikan karena ukuran jendela aplikasi atau orientasi layar berubah " +
+                "(${oldWidth}×${oldHeight} → ${newWidth}×${newHeight}) dan encoder video tidak mendukung " +
+                "perubahan resolusi di tengah rekaman."
+        }
     }
 
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -162,8 +247,23 @@ open class ScreenRecordingService : Service() {
     private var notificationHelper: NotificationHelper? = null
     private val isStopping = AtomicBoolean(false)
     private var screenOffReceiverRegistered = false
+    private var resizeExecutor: ExecutorService? = null
+
+    @Volatile
+    private var baseCaptureDensityDpi: Int = 0
+    @Volatile
+    private var virtualDisplayWidth: Int = 0
+    @Volatile
+    private var virtualDisplayHeight: Int = 0
+    @Volatile
+    private var virtualDisplayDensityDpi: Int = 0
 
     private val projectionCallback = object : MediaProjection.Callback() {
+        override fun onCapturedContentResize(width: Int, height: Int) {
+            Log.i(TAG, "MediaProjection onCapturedContentResize: ${width}x${height}")
+            handleCapturedContentResize(width, height)
+        }
+
         override fun onStop() {
             Log.i(TAG, "MediaProjection stopped by system/user")
             if (isRecording && !isStopping.get()) {
@@ -198,6 +298,17 @@ open class ScreenRecordingService : Service() {
     override fun onCreate() {
         super.onCreate()
         notificationHelper = NotificationHelper(this)
+        resizeExecutor = Executors.newSingleThreadExecutor()
+    }
+
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE &&
+            isRecording && !isStopping.get()
+        ) {
+            val metrics = obtainDisplayMetrics()
+            handleCapturedContentResize(metrics.widthPixels, metrics.heightPixels, metrics.densityDpi)
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -271,6 +382,7 @@ open class ScreenRecordingService : Service() {
                 prefs = prefs
             )
             val metrics = obtainDisplayMetrics()
+            baseCaptureDensityDpi = metrics.densityDpi
             val inputSurface = recorder.prepare(metrics)
             codecRecorder = recorder
 
@@ -299,6 +411,9 @@ open class ScreenRecordingService : Service() {
                 null,
                 mainHandler
             )
+            virtualDisplayWidth = recorder.actualWidth
+            virtualDisplayHeight = recorder.actualHeight
+            virtualDisplayDensityDpi = recorder.actualDensityDpi
 
             recorder.start()
 
@@ -433,7 +548,154 @@ open class ScreenRecordingService : Service() {
         }
     }
 
-    private fun stopRecordingInternal() {
+    private fun handleCapturedContentResize(
+        rawWidth: Int,
+        rawHeight: Int,
+        densityOverride: Int? = null
+    ) {
+        if (!isRecording || isStopping.get()) return
+        val executor = resizeExecutor ?: Executors.newSingleThreadExecutor().also { resizeExecutor = it }
+        try {
+            executor.execute {
+                if (!isRecording || isStopping.get()) return@execute
+                val recorder = codecRecorder ?: return@execute
+                val vd = virtualDisplay ?: return@execute
+                val prefs = AppPreferences(this)
+                val baseDensity = densityOverride
+                    ?: baseCaptureDensityDpi.takeIf { it > 0 }
+                    ?: obtainDisplayMetrics().densityDpi
+
+                val evaluation = evaluateCapturedResize(
+                    rawWidth = rawWidth,
+                    rawHeight = rawHeight,
+                    baseDensityDpi = baseDensity,
+                    resolutionPref = prefs.resolution,
+                    orientationPref = prefs.orientation,
+                    currentEncoderWidth = recorder.actualWidth,
+                    currentEncoderHeight = recorder.actualHeight,
+                    currentVirtualDisplayWidth = virtualDisplayWidth,
+                    currentVirtualDisplayHeight = virtualDisplayHeight,
+                    currentVirtualDisplayDensityDpi = virtualDisplayDensityDpi,
+                    canReconfigureEncoder = recorder.canReconfigureVideoSize()
+                )
+
+                when (evaluation.action) {
+                    ResizeAction.IGNORE_INVALID_OR_UNCHANGED -> return@execute
+
+                    ResizeAction.UPDATE_VIRTUAL_DISPLAY_AND_RELAY -> {
+                        try {
+                            surfaceRelay?.updateSize(evaluation.targetWidth, evaluation.targetHeight)
+                            vd.resize(
+                                evaluation.targetWidth,
+                                evaluation.targetHeight,
+                                evaluation.targetDensityDpi
+                            )
+                            virtualDisplayWidth = evaluation.targetWidth
+                            virtualDisplayHeight = evaluation.targetHeight
+                            virtualDisplayDensityDpi = evaluation.targetDensityDpi
+                            Log.i(
+                                TAG,
+                                "VirtualDisplay diperbarui ke ${evaluation.targetWidth}x${evaluation.targetHeight} (${evaluation.targetDensityDpi} dpi)"
+                            )
+                        } catch (e: Exception) {
+                            Log.e(TAG, "Gagal memperbarui VirtualDisplay saat resize: ${e.message}", e)
+                            stopRecordingInternal(
+                                stopErrorMessage = buildUnsupportedResizeErrorMessage(
+                                    recorder.actualWidth,
+                                    recorder.actualHeight,
+                                    evaluation.targetWidth,
+                                    evaluation.targetHeight
+                                )
+                            )
+                        }
+                    }
+
+                    ResizeAction.RECONFIGURE_ENCODER_AND_VIRTUAL_DISPLAY -> {
+                        val oldW = recorder.actualWidth
+                        val oldH = recorder.actualHeight
+                        try {
+                            try { vd.setSurface(null) } catch (_: Exception) {}
+                            try { surfaceRelay?.release() } catch (_: Exception) {}
+                            surfaceRelay = null
+
+                            val newInputSurface = recorder.reconfigureVideoSize(
+                                newWidth = evaluation.targetWidth,
+                                newHeight = evaluation.targetHeight,
+                                newDensityDpi = evaluation.targetDensityDpi,
+                                newBitrateBps = recorder.actualBitrateBps
+                            )
+
+                            if (newInputSurface == null) {
+                                stopRecordingInternal(
+                                    stopErrorMessage = buildUnsupportedResizeErrorMessage(
+                                        oldW,
+                                        oldH,
+                                        evaluation.targetWidth,
+                                        evaluation.targetHeight
+                                    )
+                                )
+                                return@execute
+                            }
+
+                            val newRelaySurface = try {
+                                ProjectionSurfaceRelay(
+                                    encoderSurface = newInputSurface,
+                                    width = recorder.actualWidth,
+                                    height = recorder.actualHeight
+                                ).also { relay ->
+                                    surfaceRelay = relay
+                                }.prepare()
+                            } catch (e: Exception) {
+                                Log.w(TAG, "ProjectionSurfaceRelay fallback setelah reconfigure: ${e.message}")
+                                try { surfaceRelay?.release() } catch (_: Exception) {}
+                                surfaceRelay = null
+                                newInputSurface
+                            }
+
+                            vd.setSurface(newRelaySurface)
+                            vd.resize(
+                                recorder.actualWidth,
+                                recorder.actualHeight,
+                                recorder.actualDensityDpi
+                            )
+                            virtualDisplayWidth = recorder.actualWidth
+                            virtualDisplayHeight = recorder.actualHeight
+                            virtualDisplayDensityDpi = recorder.actualDensityDpi
+                            Log.i(
+                                TAG,
+                                "VirtualDisplay & encoder diperbarui ke ${recorder.actualWidth}x${recorder.actualHeight}"
+                            )
+                        } catch (e: Exception) {
+                            Log.e(TAG, "Gagal rekonfigurasi encoder saat resize: ${e.message}", e)
+                            stopRecordingInternal(
+                                stopErrorMessage = buildUnsupportedResizeErrorMessage(
+                                    oldW,
+                                    oldH,
+                                    evaluation.targetWidth,
+                                    evaluation.targetHeight
+                                )
+                            )
+                        }
+                    }
+
+                    ResizeAction.STOP_UNSUPPORTED_ENCODER_RESIZE -> {
+                        val errorMsg = buildUnsupportedResizeErrorMessage(
+                            recorder.actualWidth,
+                            recorder.actualHeight,
+                            evaluation.targetWidth,
+                            evaluation.targetHeight
+                        )
+                        Log.w(TAG, errorMsg)
+                        stopRecordingInternal(stopErrorMessage = errorMsg)
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Resize executor tidak menerima tugas: ${e.message}")
+        }
+    }
+
+    private fun stopRecordingInternal(stopErrorMessage: String? = null) {
         if (isStopping.getAndSet(true)) return
 
         mainHandler.removeCallbacks(notificationUpdateRunnable)
@@ -446,6 +708,9 @@ open class ScreenRecordingService : Service() {
                 virtualDisplay?.release()
             } catch (ignored: Exception) {}
             virtualDisplay = null
+            virtualDisplayWidth = 0
+            virtualDisplayHeight = 0
+            virtualDisplayDensityDpi = 0
 
             try {
                 surfaceRelay?.release()
@@ -479,9 +744,33 @@ open class ScreenRecordingService : Service() {
                 MainActivity.hasPendingSaveDialog = false
             } else if (targetFile != null) {
                 lastRecordedFilePath = targetFile.absolutePath
-                MainActivity.hasPendingSaveDialog = true
                 StorageHelper.scanVideoFile(this, targetFile)
-                notificationHelper?.showRecordingCompletedNotification(targetFile)
+                if (stopErrorMessage == null) {
+                    MainActivity.hasPendingSaveDialog = true
+                    notificationHelper?.showRecordingCompletedNotification(targetFile)
+                } else {
+                    MainActivity.hasPendingSaveDialog = false
+                }
+            }
+
+            val resolvedErrorMessage = if (stopErrorMessage != null) {
+                if (isValidFile && targetFile != null) {
+                    "$stopErrorMessage Bagian sebelum perubahan ukuran tetap disimpan (${targetFile.name})."
+                } else {
+                    stopErrorMessage
+                }
+            } else if (!isValidFile) {
+                "Rekaman gagal difinalisasi dengan benar oleh encoder/muxer. File parsial dihapus."
+            } else {
+                null
+            }
+
+            if (stopErrorMessage != null && resolvedErrorMessage != null) {
+                notificationHelper?.showRecordingStoppedWithNoticeNotification(
+                    title = "Perekaman Dihentikan (Ukuran Berubah)",
+                    message = resolvedErrorMessage,
+                    savedFile = if (isValidFile) targetFile else null
+                )
             }
 
             mainHandler.post {
@@ -491,6 +780,7 @@ open class ScreenRecordingService : Service() {
                 unregisterScreenOffReceiver()
                 currentActiveFilePath = null
                 effectiveAudioMode = null
+                baseCaptureDensityDpi = 0
                 isRecording = false
                 isPaused = false
                 isMicMuted = false
@@ -504,13 +794,16 @@ open class ScreenRecordingService : Service() {
                     if (isValidFile && targetFile != null) {
                         putExtra(EXTRA_FILE_PATH, targetFile.absolutePath)
                     }
+                    if (resolvedErrorMessage != null) {
+                        putExtra(EXTRA_STOPPED_BY_ERROR, true)
+                    }
                 })
-                if (!isValidFile) {
+                if (resolvedErrorMessage != null) {
+                    if (stopErrorMessage != null) {
+                        Toast.makeText(this, resolvedErrorMessage, Toast.LENGTH_LONG).show()
+                    }
                     sendPackageBroadcast(Intent(ACTION_RECORDING_ERROR).apply {
-                        putExtra(
-                            EXTRA_ERROR_MESSAGE,
-                            "Rekaman gagal difinalisasi dengan benar oleh encoder/muxer. File parsial dihapus."
-                        )
+                        putExtra(EXTRA_ERROR_MESSAGE, resolvedErrorMessage)
                     })
                 }
 
@@ -623,10 +916,11 @@ open class ScreenRecordingService : Service() {
         val metrics = DisplayMetrics()
         val wm = getSystemService(Context.WINDOW_SERVICE) as WindowManager
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            val bounds = wm.currentWindowMetrics.bounds
+            val bounds = wm.maximumWindowMetrics.bounds
             metrics.widthPixels = bounds.width()
             metrics.heightPixels = bounds.height()
-            metrics.densityDpi = resources.configuration.densityDpi
+            metrics.densityDpi = resources.configuration.densityDpi.takeIf { it > 0 }
+                ?: resources.displayMetrics.densityDpi
         } else {
             @Suppress("DEPRECATION")
             wm.defaultDisplay?.getRealMetrics(metrics)
@@ -696,6 +990,10 @@ open class ScreenRecordingService : Service() {
         unregisterScreenOffReceiver()
         try { virtualDisplay?.release() } catch (_: Exception) {}
         virtualDisplay = null
+        virtualDisplayWidth = 0
+        virtualDisplayHeight = 0
+        virtualDisplayDensityDpi = 0
+        baseCaptureDensityDpi = 0
         try { surfaceRelay?.release() } catch (_: Exception) {}
         surfaceRelay = null
         try { codecRecorder?.releaseAll() } catch (_: Exception) {}
@@ -756,5 +1054,7 @@ open class ScreenRecordingService : Service() {
         if (!isStopping.get()) {
             cleanupResources()
         }
+        try { resizeExecutor?.shutdownNow() } catch (_: Exception) {}
+        resizeExecutor = null
     }
 }

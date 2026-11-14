@@ -51,13 +51,15 @@ object UiHelper {
         topView: View? = null,
         bottomView: View? = null,
         horizontalView: View? = null,
-        includeImeBottom: Boolean = false
+        includeImeBottom: Boolean = false,
+        extraHorizontalViews: List<View> = emptyList()
     ) {
         if (anchorView == null) return
 
         topView?.let { captureInitialPadding(it) }
         bottomView?.let { captureInitialPadding(it) }
         horizontalView?.let { captureInitialPadding(it) }
+        extraHorizontalViews.forEach { captureInitialPadding(it) }
 
         ViewCompat.setOnApplyWindowInsetsListener(anchorView) { _, windowInsets ->
             val systemBars = windowInsets.getInsets(
@@ -70,21 +72,26 @@ object UiHelper {
             }
             val effectiveBottomInset = maxOf(systemBars.bottom, imeInsets.bottom)
 
+            val applyHorizToTop = topView != null &&
+                (horizontalView === topView || extraHorizontalViews.any { it === topView })
+            val applyHorizToBottom = bottomView != null &&
+                (horizontalView === bottomView || extraHorizontalViews.any { it === bottomView })
+
             if (topView != null && topView === bottomView) {
                 val base = captureInitialPadding(topView)
                 topView.setPadding(
-                    if (horizontalView === topView) base.left + systemBars.left else base.left,
+                    if (applyHorizToTop) base.left + systemBars.left else base.left,
                     base.top + systemBars.top,
-                    if (horizontalView === topView) base.right + systemBars.right else base.right,
+                    if (applyHorizToTop) base.right + systemBars.right else base.right,
                     base.bottom + effectiveBottomInset
                 )
             } else {
                 topView?.let { target ->
                     val base = captureInitialPadding(target)
                     target.setPadding(
-                        if (horizontalView === target) base.left + systemBars.left else base.left,
+                        if (applyHorizToTop) base.left + systemBars.left else base.left,
                         base.top + systemBars.top,
-                        if (horizontalView === target) base.right + systemBars.right else base.right,
+                        if (applyHorizToTop) base.right + systemBars.right else base.right,
                         base.bottom
                     )
                 }
@@ -92,9 +99,9 @@ object UiHelper {
                 bottomView?.let { target ->
                     val base = captureInitialPadding(target)
                     target.setPadding(
-                        if (horizontalView === target) base.left + systemBars.left else base.left,
+                        if (applyHorizToBottom) base.left + systemBars.left else base.left,
                         base.top,
-                        if (horizontalView === target) base.right + systemBars.right else base.right,
+                        if (applyHorizToBottom) base.right + systemBars.right else base.right,
                         base.bottom + effectiveBottomInset
                     )
                 }
@@ -108,6 +115,18 @@ object UiHelper {
                     base.right + systemBars.right,
                     base.bottom
                 )
+            }
+
+            for (extraView in extraHorizontalViews) {
+                if (extraView !== topView && extraView !== bottomView && extraView !== horizontalView) {
+                    val base = captureInitialPadding(extraView)
+                    extraView.setPadding(
+                        base.left + systemBars.left,
+                        base.top,
+                        base.right + systemBars.right,
+                        base.bottom
+                    )
+                }
             }
 
             windowInsets

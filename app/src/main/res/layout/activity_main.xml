@@ -36,10 +36,12 @@
                 android:layout_marginBottom="16dp">
 
                 <LinearLayout
-                    android:layout_width="wrap_content"
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_alignParentStart="true"
                     android:layout_centerVertical="true"
+                    android:layout_marginEnd="8dp"
+                    android:layout_toStartOf="@id/home_header_actions"
                     android:gravity="center_vertical"
                     android:orientation="horizontal">
 
@@ -117,11 +119,11 @@
 
                     <!-- About Action -->
                     <com.google.android.material.card.MaterialCardView
-                        android:layout_width="44dp"
-                        android:layout_height="44dp"
+                        android:layout_width="48dp"
+                        android:layout_height="48dp"
                         android:layout_marginEnd="8dp"
                         app:cardBackgroundColor="@color/colorSurface"
-                        app:cardCornerRadius="22dp"
+                        app:cardCornerRadius="24dp"
                         app:cardElevation="1dp"
                         app:strokeColor="@color/colorBorder"
                         app:strokeWidth="1dp">
@@ -132,17 +134,17 @@
                             android:layout_height="match_parent"
                             android:background="?attr/selectableItemBackgroundBorderless"
                             android:contentDescription="Tentang"
-                            android:padding="11dp"
+                            android:padding="13dp"
                             android:src="@drawable/ic_info"
                             app:tint="@color/textTitle" />
                     </com.google.android.material.card.MaterialCardView>
 
                     <!-- Settings Action -->
                     <com.google.android.material.card.MaterialCardView
-                        android:layout_width="44dp"
-                        android:layout_height="44dp"
+                        android:layout_width="48dp"
+                        android:layout_height="48dp"
                         app:cardBackgroundColor="@color/colorSurface"
-                        app:cardCornerRadius="22dp"
+                        app:cardCornerRadius="24dp"
                         app:cardElevation="1dp"
                         app:strokeColor="@color/colorBorder"
                         app:strokeWidth="1dp">
@@ -153,7 +155,7 @@
                             android:layout_height="match_parent"
                             android:background="?attr/selectableItemBackgroundBorderless"
                             android:contentDescription="Settings"
-                            android:padding="11dp"
+                            android:padding="13dp"
                             android:src="@drawable/ic_settings"
                             app:tint="@color/textTitle" />
                     </com.google.android.material.card.MaterialCardView>
@@ -239,14 +241,16 @@
                             android:layout_height="wrap_content"
                             android:layout_alignParentEnd="true"
                             android:layout_centerVertical="true"
-                            android:minHeight="44dp"
+                            android:insetTop="2dp"
+                            android:insetBottom="2dp"
+                            android:minHeight="48dp"
                             android:paddingHorizontal="12dp"
                             android:text="Buka Galeri"
-                            android:textColor="@color/colorPrimary"
+                            android:textColor="@color/colorPrimaryNav"
                             android:textSize="11sp"
                             android:textStyle="bold"
                             app:cornerRadius="12dp"
-                            app:strokeColor="@color/colorPrimary"
+                            app:strokeColor="@color/colorPrimaryNav"
                             app:strokeWidth="1dp" />
                     </RelativeLayout>
 
@@ -277,7 +281,9 @@
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:layout_marginStart="8dp"
-                            android:minHeight="40dp"
+                            android:insetTop="4dp"
+                            android:insetBottom="4dp"
+                            android:minHeight="48dp"
                             android:paddingHorizontal="12dp"
                             android:text="Uji Kesiapan"
                             android:textSize="11sp"
@@ -339,8 +345,11 @@
                     <Button
                         android:id="@+id/btn_home_pause_recording"
                         android:layout_width="wrap_content"
-                        android:layout_height="36dp"
+                        android:layout_height="wrap_content"
                         android:layout_marginEnd="6dp"
+                        android:insetTop="4dp"
+                        android:insetBottom="4dp"
+                        android:minHeight="48dp"
                         android:minWidth="0dp"
                         android:paddingHorizontal="12dp"
                         android:text="Jeda"
@@ -353,7 +362,10 @@
                     <Button
                         android:id="@+id/btn_home_stop_recording"
                         android:layout_width="wrap_content"
-                        android:layout_height="36dp"
+                        android:layout_height="wrap_content"
+                        android:insetTop="4dp"
+                        android:insetBottom="4dp"
+                        android:minHeight="48dp"
                         android:minWidth="0dp"
                         android:paddingHorizontal="14dp"
                         android:text="Stop"
@@ -416,7 +428,7 @@
                                 android:layout_height="wrap_content"
                                 android:layout_marginStart="8dp"
                                 android:text="STUDIO PRO • REAL HD 1080P • 60 FPS"
-                                android:textColor="@color/colorPrimary"
+                                android:textColor="@color/colorOnPrimaryContainer"
                                 android:textSize="11sp"
                                 android:textStyle="bold" />
                         </LinearLayout>
@@ -452,7 +464,8 @@
                         <com.google.android.material.button.MaterialButton
                             android:id="@+id/btn_start_stop"
                             android:layout_width="match_parent"
-                            android:layout_height="56dp"
+                            android:layout_height="wrap_content"
+                            android:minHeight="56dp"
                             android:backgroundTint="@color/colorPrimary"
                             android:text="Mulai Merekam Layar (1080p HD)"
                             android:textColor="@color/colorOnPrimary"
@@ -476,6 +489,7 @@
 
                         <!-- Quick Resolution Chips Selector Row -->
                         <LinearLayout
+                            android:id="@+id/layout_quick_resolution_row"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:layout_marginTop="14dp"
@@ -485,7 +499,7 @@
                             <TextView
                                 android:id="@+id/chip_quick_1080p"
                                 android:layout_width="0dp"
-                                android:layout_height="34dp"
+                                android:layout_height="wrap_content"
                                 android:layout_marginEnd="4dp"
                                 android:layout_weight="1"
                                 android:background="@drawable/bg_chip_pill"
@@ -494,6 +508,9 @@
                                 android:focusable="true"
                                 android:foreground="?attr/selectableItemBackground"
                                 android:gravity="center"
+                                android:minHeight="42dp"
+                                android:paddingHorizontal="4dp"
+                                android:paddingVertical="8dp"
                                 android:text="★ 1080p Real HD"
                                 android:textColor="@color/colorOnPrimary"
                                 android:textSize="11sp"
@@ -502,7 +519,7 @@
                             <TextView
                                 android:id="@+id/chip_quick_720p"
                                 android:layout_width="0dp"
-                                android:layout_height="34dp"
+                                android:layout_height="wrap_content"
                                 android:layout_marginHorizontal="2dp"
                                 android:layout_weight="1"
                                 android:background="@drawable/bg_chip_pill"
@@ -511,6 +528,9 @@
                                 android:focusable="true"
                                 android:foreground="?attr/selectableItemBackground"
                                 android:gravity="center"
+                                android:minHeight="42dp"
+                                android:paddingHorizontal="4dp"
+                                android:paddingVertical="8dp"
                                 android:text="720p HD"
                                 android:textColor="@color/textTitle"
                                 android:textSize="11sp"
@@ -519,7 +539,7 @@
                             <TextView
                                 android:id="@+id/chip_quick_native"
                                 android:layout_width="0dp"
-                                android:layout_height="34dp"
+                                android:layout_height="wrap_content"
                                 android:layout_marginStart="4dp"
                                 android:layout_weight="1"
                                 android:background="@drawable/bg_chip_pill"
@@ -528,6 +548,9 @@
                                 android:focusable="true"
                                 android:foreground="?attr/selectableItemBackground"
                                 android:gravity="center"
+                                android:minHeight="42dp"
+                                android:paddingHorizontal="4dp"
+                                android:paddingVertical="8dp"
                                 android:text="Layar Asli"
                                 android:textColor="@color/textTitle"
                                 android:textSize="11sp"
@@ -536,6 +559,7 @@
 
                         <!-- Quick Audio Source Selector Row -->
                         <LinearLayout
+                            android:id="@+id/layout_quick_audio_row"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:layout_marginTop="8dp"
@@ -545,7 +569,7 @@
                             <TextView
                                 android:id="@+id/chip_quick_audio_online"
                                 android:layout_width="0dp"
-                                android:layout_height="32dp"
+                                android:layout_height="wrap_content"
                                 android:layout_marginEnd="3dp"
                                 android:layout_weight="1.2"
                                 android:background="@drawable/bg_chip_pill"
@@ -554,15 +578,18 @@
                                 android:focusable="true"
                                 android:foreground="?attr/selectableItemBackground"
                                 android:gravity="center"
+                                android:minHeight="40dp"
+                                android:paddingHorizontal="4dp"
+                                android:paddingVertical="7dp"
                                 android:text="🎵 Video Online"
-                                android:textColor="@color/colorPrimary"
+                                android:textColor="@color/colorOnPrimaryContainer"
                                 android:textSize="10.5sp"
                                 android:textStyle="bold" />
 
                             <TextView
                                 android:id="@+id/chip_quick_audio_both"
                                 android:layout_width="0dp"
-                                android:layout_height="32dp"
+                                android:layout_height="wrap_content"
                                 android:layout_marginHorizontal="2dp"
                                 android:layout_weight="1.1"
                                 android:background="@drawable/bg_chip_pill"
@@ -571,6 +598,9 @@
                                 android:focusable="true"
                                 android:foreground="?attr/selectableItemBackground"
                                 android:gravity="center"
+                                android:minHeight="40dp"
+                                android:paddingHorizontal="4dp"
+                                android:paddingVertical="7dp"
                                 android:text="🎙️+🎵 Mic+Audio"
                                 android:textColor="@color/textTitle"
                                 android:textSize="10.5sp"
@@ -579,7 +609,7 @@
                             <TextView
                                 android:id="@+id/chip_quick_audio_mic"
                                 android:layout_width="0dp"
-                                android:layout_height="32dp"
+                                android:layout_height="wrap_content"
                                 android:layout_marginHorizontal="2dp"
                                 android:layout_weight="1"
                                 android:background="@drawable/bg_chip_pill"
@@ -588,6 +618,9 @@
                                 android:focusable="true"
                                 android:foreground="?attr/selectableItemBackground"
                                 android:gravity="center"
+                                android:minHeight="40dp"
+                                android:paddingHorizontal="4dp"
+                                android:paddingVertical="7dp"
                                 android:text="🎙️ Mic"
                                 android:textColor="@color/textTitle"
                                 android:textSize="10.5sp"
@@ -596,7 +629,7 @@
                             <TextView
                                 android:id="@+id/chip_quick_audio_mute"
                                 android:layout_width="0dp"
-                                android:layout_height="32dp"
+                                android:layout_height="wrap_content"
                                 android:layout_marginStart="3dp"
                                 android:layout_weight="0.8"
                                 android:background="@drawable/bg_chip_pill"
@@ -605,6 +638,9 @@
                                 android:focusable="true"
                                 android:foreground="?attr/selectableItemBackground"
                                 android:gravity="center"
+                                android:minHeight="40dp"
+                                android:paddingHorizontal="4dp"
+                                android:paddingVertical="7dp"
                                 android:text="🔇 Mute"
                                 android:textColor="@color/textTitle"
                                 android:textSize="10.5sp"
@@ -616,7 +652,7 @@
                             android:layout_height="wrap_content"
                             android:layout_marginTop="10dp"
                             android:text="✓ Tanpa Watermark • ✓ Bebas Batas Durasi • ✓ 60 FPS Super Jernih"
-                            android:textColor="@color/colorPrimary"
+                            android:textColor="@color/colorPrimaryNav"
                             android:textSize="11sp"
                             android:textStyle="bold" />
                     </LinearLayout>
@@ -782,7 +818,7 @@
                                 android:layout_gravity="center"
                                 android:contentDescription="Mikrofon"
                                 android:src="@drawable/ic_mic"
-                                app:tint="@color/colorPrimary" />
+                                app:tint="@color/colorOnPrimaryContainer" />
                         </FrameLayout>
 
                         <TextView
@@ -798,8 +834,11 @@
                             android:id="@+id/toggle_mic"
                             style="@style/Widget.Material3.Button.TonalButton"
                             android:layout_width="match_parent"
-                            android:layout_height="36dp"
+                            android:layout_height="wrap_content"
                             android:layout_marginTop="8dp"
+                            android:insetTop="4dp"
+                            android:insetBottom="4dp"
+                            android:minHeight="48dp"
                             android:paddingHorizontal="4dp"
                             android:text="✓ AKTIF"
                             android:textSize="11sp"
@@ -843,7 +882,7 @@
                                 android:layout_gravity="center"
                                 android:contentDescription="Audio Internal Video dan Game"
                                 android:src="@drawable/ic_game"
-                                app:tint="@color/colorPrimary" />
+                                app:tint="@color/colorOnPrimaryContainer" />
                         </FrameLayout>
 
                         <TextView
@@ -859,8 +898,11 @@
                             android:id="@+id/toggle_game_audio"
                             style="@style/Widget.Material3.Button.TonalButton"
                             android:layout_width="match_parent"
-                            android:layout_height="36dp"
+                            android:layout_height="wrap_content"
                             android:layout_marginTop="8dp"
+                            android:insetTop="4dp"
+                            android:insetBottom="4dp"
+                            android:minHeight="48dp"
                             android:paddingHorizontal="4dp"
                             android:text="✓ AKTIF"
                             android:textSize="11sp"
@@ -920,8 +962,11 @@
                             android:id="@+id/toggle_facecam"
                             style="@style/Widget.Material3.Button.TonalButton"
                             android:layout_width="match_parent"
-                            android:layout_height="36dp"
+                            android:layout_height="wrap_content"
                             android:layout_marginTop="8dp"
+                            android:insetTop="4dp"
+                            android:insetBottom="4dp"
+                            android:minHeight="48dp"
                             android:paddingHorizontal="4dp"
                             android:text="OFF"
                             android:textSize="11sp"
@@ -967,7 +1012,7 @@
                             android:layout_gravity="center"
                             android:contentDescription="Stabilisator FPS"
                             android:src="@drawable/ic_speed"
-                            app:tint="@color/colorSuccess" />
+                            app:tint="@color/colorOnSuccessContainer" />
                     </FrameLayout>
 
                     <LinearLayout
@@ -1000,7 +1045,10 @@
                         android:id="@+id/btn_home_toggle_fps_stabilizer"
                         style="@style/Widget.Material3.Button.TonalButton"
                         android:layout_width="wrap_content"
-                        android:layout_height="36dp"
+                        android:layout_height="wrap_content"
+                        android:insetTop="4dp"
+                        android:insetBottom="4dp"
+                        android:minHeight="48dp"
                         android:paddingHorizontal="12dp"
                         android:text="✓ AKTIF"
                         android:textSize="11sp"
@@ -1044,7 +1092,7 @@
                             android:layout_gravity="center"
                             android:contentDescription="Resolusi"
                             android:src="@drawable/ic_video"
-                            app:tint="@color/colorPrimary" />
+                            app:tint="@color/colorOnPrimaryContainer" />
                     </FrameLayout>
 
                     <LinearLayout
@@ -1068,7 +1116,7 @@
                             android:layout_height="wrap_content"
                             android:layout_marginTop="2dp"
                             android:text="1080p • 60 FPS • 12 Mbps"
-                            android:textColor="@color/colorPrimary"
+                            android:textColor="@color/colorPrimaryNav"
                             android:textSize="12sp"
                             android:textStyle="bold" />
                     </LinearLayout>
@@ -1117,7 +1165,7 @@
                             android:layout_gravity="center"
                             android:contentDescription="Ikon Panduan"
                             android:src="@drawable/ic_check_circle"
-                            app:tint="@color/colorSuccess" />
+                            app:tint="@color/colorOnSuccessContainer" />
                     </FrameLayout>
 
                     <LinearLayout
@@ -1312,10 +1360,12 @@
                         android:layout_marginBottom="10dp">
 
                         <LinearLayout
-                            android:layout_width="wrap_content"
+                            android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:layout_alignParentStart="true"
                             android:layout_centerVertical="true"
+                            android:layout_marginEnd="8dp"
+                            android:layout_toStartOf="@id/btn_open_diagnostics"
                             android:gravity="center_vertical"
                             android:orientation="horizontal">
 
@@ -1324,7 +1374,7 @@
                                 android:layout_height="20dp"
                                 android:contentDescription="Spesifikasi"
                                 android:src="@drawable/ic_device"
-                                app:tint="@color/colorPrimary" />
+                                app:tint="@color/colorPrimaryNav" />
 
                             <TextView
                                 android:layout_width="wrap_content"
@@ -1345,7 +1395,7 @@
                             android:layout_centerVertical="true"
                             android:minHeight="48dp"
                             android:text="Uji Kesiapan"
-                            android:textColor="@color/colorPrimary"
+                            android:textColor="@color/colorPrimaryNav"
                             android:textSize="12sp"
                             android:textStyle="bold" />
                     </RelativeLayout>
@@ -1438,7 +1488,7 @@
                                 android:layout_gravity="center"
                                 android:contentDescription="Galeri Rekaman"
                                 android:src="@drawable/ic_library"
-                                app:tint="@color/colorPrimary" />
+                                app:tint="@color/colorOnPrimaryContainer" />
                         </FrameLayout>
 
                         <TextView
@@ -1556,7 +1606,7 @@
                                 android:layout_gravity="center"
                                 android:contentDescription="Mode Gaming"
                                 android:src="@drawable/ic_game"
-                                app:tint="@color/colorSuccess" />
+                                app:tint="@color/colorOnSuccessContainer" />
                         </FrameLayout>
 
                         <TextView
@@ -1657,10 +1707,12 @@
                         android:layout_marginBottom="12dp">
 
                         <LinearLayout
-                            android:layout_width="wrap_content"
+                            android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:layout_alignParentStart="true"
                             android:layout_centerVertical="true"
+                            android:layout_marginEnd="8dp"
+                            android:layout_toStartOf="@id/btn_home_view_all_recordings"
                             android:gravity="center_vertical"
                             android:orientation="horizontal">
 
@@ -1669,7 +1721,7 @@
                                 android:layout_height="22dp"
                                 android:contentDescription="Ikon Video"
                                 android:src="@drawable/ic_video"
-                                app:tint="@color/colorPrimary" />
+                                app:tint="@color/colorPrimaryNav" />
 
                             <TextView
                                 android:layout_width="wrap_content"
@@ -1692,7 +1744,7 @@
                             android:minHeight="48dp"
                             android:paddingHorizontal="8dp"
                             android:text="Lihat Semua →"
-                            android:textColor="@color/colorPrimary"
+                            android:textColor="@color/colorPrimaryNav"
                             android:textSize="12sp"
                             android:textStyle="bold" />
                     </RelativeLayout>
@@ -1729,7 +1781,7 @@
                             android:layout_marginTop="12dp"
                             android:minHeight="48dp"
                             android:text="✨ Buat Video Contoh Demo"
-                            android:textColor="@color/colorPrimary"
+                            android:textColor="@color/colorOnPrimaryContainer"
                             android:textSize="12sp"
                             android:textStyle="bold"
                             app:cornerRadius="12dp" />
@@ -1822,8 +1874,11 @@
                 android:id="@+id/btn_floating_pause"
                 style="@style/Widget.Material3.Button.TonalButton"
                 android:layout_width="wrap_content"
-                android:layout_height="40dp"
+                android:layout_height="wrap_content"
                 android:layout_marginEnd="6dp"
+                android:insetTop="4dp"
+                android:insetBottom="4dp"
+                android:minHeight="48dp"
                 android:minWidth="0dp"
                 android:paddingHorizontal="12dp"
                 android:text="Jeda"
@@ -1843,7 +1898,10 @@
                 android:id="@+id/btn_floating_stop"
                 style="@style/Widget.Material3.Button"
                 android:layout_width="wrap_content"
-                android:layout_height="40dp"
+                android:layout_height="wrap_content"
+                android:insetTop="4dp"
+                android:insetBottom="4dp"
+                android:minHeight="48dp"
                 android:minWidth="0dp"
                 android:paddingHorizontal="14dp"
                 android:text="Simpan"
@@ -1865,7 +1923,8 @@
         android:id="@+id/bottom_navigation"
         style="@style/Widget.App.BottomNav"
         android:layout_width="match_parent"
-        android:layout_height="68dp"
+        android:layout_height="wrap_content"
+        android:minHeight="68dp"
         app:elevation="12dp"
         app:layout_constraintBottom_toBottomOf="parent"
         app:menu="@menu/bottom_nav_menu" />
@@ -1936,17 +1995,19 @@
             <Button
                 android:id="@+id/btn_cancel_countdown_hud"
                 android:layout_width="wrap_content"
-                android:layout_height="48dp"
+                android:layout_height="wrap_content"
                 android:layout_marginEnd="12dp"
+                android:minHeight="48dp"
                 android:text="Batalkan"
-                android:textColor="@color/colorError"
+                android:textColor="#FF6B6B"
                 app:backgroundTint="#33FFFFFF"
                 app:cornerRadius="24dp" />
 
             <Button
                 android:id="@+id/btn_skip_countdown_hud"
                 android:layout_width="wrap_content"
-                android:layout_height="48dp"
+                android:layout_height="wrap_content"
+                android:minHeight="48dp"
                 android:text="Mulai Langsung"
                 android:textColor="#FFFFFF"
                 app:backgroundTint="@color/colorPrimary"

@@ -12,6 +12,7 @@ import android.widget.TextView
 import androidx.annotation.DrawableRes
 import androidx.core.content.ContextCompat
 import com.bangdillah.rekamindulu.R
+import com.google.android.material.bottomsheet.BottomSheetBehavior
 import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.google.android.material.card.MaterialCardView
 
@@ -37,8 +38,13 @@ object SelectionBottomSheetDialog {
         val dialog = BottomSheetDialog(context)
         val sheetView = LayoutInflater.from(context).inflate(R.layout.layout_selection_bottom_sheet, null)
         dialog.setContentView(sheetView)
+        AppLockHelper.syncWindowSecurityFlag(dialog.window, AppPreferences(context))
+        dialog.behavior.apply {
+            state = BottomSheetBehavior.STATE_EXPANDED
+            skipCollapsed = true
+        }
         dialog.window?.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
-        UiHelper.applySystemBarInsets(anchorView = sheetView, bottomView = sheetView)
+        UiHelper.applySystemBarInsets(anchorView = sheetView, bottomView = sheetView, horizontalView = sheetView)
 
         // Bind Header
         val imgIcon = sheetView.findViewById<ImageView>(R.id.img_selection_icon)
@@ -58,7 +64,8 @@ object SelectionBottomSheetDialog {
 
         containerOptions.removeAllViews()
 
-        val primaryColor = ContextCompat.getColor(context, R.color.colorPrimary)
+        val primaryNavColor = ContextCompat.getColor(context, R.color.colorPrimaryNav)
+        val onPrimaryContainerColor = ContextCompat.getColor(context, R.color.colorOnPrimaryContainer)
         val primaryContainerColor = ContextCompat.getColor(context, R.color.colorPrimaryContainer)
         val cardBgColor = ContextCompat.getColor(context, R.color.colorCardBackground)
         val borderColor = ContextCompat.getColor(context, R.color.colorBorder)
@@ -93,10 +100,10 @@ object SelectionBottomSheetDialog {
             val isSelected = (option.value == selectedValue)
             if (isSelected) {
                 card.setCardBackgroundColor(primaryContainerColor)
-                card.strokeColor = primaryColor
+                card.strokeColor = primaryNavColor
                 card.strokeWidth = (2 * context.resources.displayMetrics.density).toInt()
                 imgCheck.visibility = View.VISIBLE
-                imgCheck.setColorFilter(primaryColor)
+                imgCheck.setColorFilter(onPrimaryContainerColor)
             } else {
                 card.setCardBackgroundColor(cardBgColor)
                 card.strokeColor = borderColor
@@ -113,11 +120,12 @@ object SelectionBottomSheetDialog {
         }
 
         scrollOptions?.post {
-            val maxScrollHeight = (context.resources.displayMetrics.heightPixels * 0.52f).toInt()
+            val maxScrollHeight = (context.resources.displayMetrics.heightPixels * 0.45f).toInt()
             if (scrollOptions.height > maxScrollHeight) {
                 scrollOptions.layoutParams = scrollOptions.layoutParams.apply {
                     height = maxScrollHeight
                 }
+                scrollOptions.requestLayout()
             }
         }
 
