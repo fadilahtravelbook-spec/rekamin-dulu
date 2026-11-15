@@ -5,7 +5,6 @@ import android.media.MediaCodec
 import android.media.MediaExtractor
 import android.media.MediaFormat
 import android.media.MediaMuxer
-import android.media.MediaScannerConnection
 import android.util.Log
 import com.bangdillah.rekamindulu.utils.StorageHelper
 import java.io.File
@@ -77,6 +76,8 @@ object AudioExtractorHelper {
         var extractor: MediaExtractor? = null
         var muxer: MediaMuxer? = null
         var muxerStarted = false
+        var muxerStoppedCleanly = false
+        var extractionSucceeded = false
 
         try {
             extractor = MediaExtractor()
@@ -171,48 +172,52 @@ object AudioExtractorHelper {
             // Jika tidak ada frame audio yang valid ditulis, bersihkan file agar tidak tersisa file 0 byte corrupt
             if (lastWrittenPts == -1L) {
                 Log.w(TAG, "Tidak ada data audio yang terbaca dari track audio video")
-                if (outputFile.exists()) {
-                    outputFile.delete()
-                }
+                return Pair(false, null)
+            }
+
+            // Finalisasi moov atom sebelum mengklaim sukses atau memindai ke MediaStore
+            muxer.stop()
+            muxerStoppedCleanly = true
+            muxer.release()
+            muxer = null
+
+            if (!outputFile.exists() || outputFile.length() < 128L) {
+                Log.w(TAG, "Output audio file invalid after muxer.stop(): ${outputFile.absolutePath}")
                 return Pair(false, null)
             }
 
             progressCallback?.invoke(100)
-
-            // Register into system media scanner
-            MediaScannerConnection.scanFile(
-                context.applicationContext,
-                arrayOf(outputFile.absolutePath),
-                arrayOf("audio/mp4", "audio/m4a"),
-                null
-            )
+            StorageHelper.scanAudioFile(context, outputFile)
+            extractionSucceeded = true
 
             Log.i(TAG, "Audio extracted successfully: ${outputFile.absolutePath}")
             return Pair(true, outputFile)
 
         } catch (e: Exception) {
             Log.e(TAG, "Audio extraction failed", e)
-            if (outputFile.exists()) {
-                outputFile.delete()
-            }
             return Pair(false, null)
         } finally {
-            if (muxerStarted) {
+            if (muxer != null && muxerStarted && !muxerStoppedCleanly) {
                 try {
-                    muxer?.stop()
+                    muxer.stop()
                 } catch (e: Exception) {
                     Log.w(TAG, "Error stopping muxer", e)
                 }
             }
-            try {
-                muxer?.release()
-            } catch (e: Exception) {
-                Log.w(TAG, "Error releasing muxer", e)
+            if (muxer != null) {
+                try {
+                    muxer.release()
+                } catch (e: Exception) {
+                    Log.w(TAG, "Error releasing muxer", e)
+                }
             }
             try {
                 extractor?.release()
             } catch (e: Exception) {
                 Log.w(TAG, "Error releasing extractor", e)
+            }
+            if (!extractionSucceeded && outputFile.exists()) {
+                try { outputFile.delete() } catch (_: Exception) {}
             }
         }
     }

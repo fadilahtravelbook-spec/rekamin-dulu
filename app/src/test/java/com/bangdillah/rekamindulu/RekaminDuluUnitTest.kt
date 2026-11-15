@@ -1371,4 +1371,230 @@ class RekaminDuluUnitTest {
         assertTrue(errMsg.contains("2400×1080"))
         assertTrue(errMsg.contains("encoder", ignoreCase = true))
     }
+
+    @Test
+    fun testProjectionSurfaceRelayAspectFitScale() {
+        val (sameX, sameY) = com.bangdillah.rekamindulu.service.ProjectionSurfaceRelay.computeAspectFitScale(
+            sourceWidth = 1080,
+            sourceHeight = 2400,
+            targetWidth = 1080,
+            targetHeight = 2400
+        )
+        assertEquals(1.0f, sameX, 0.001f)
+        assertEquals(1.0f, sameY, 0.001f)
+
+        // Portrait encoder (1080x2400) receiving Landscape source (2400x1080) -> letterboxed vertically
+        val (landX, landY) = com.bangdillah.rekamindulu.service.ProjectionSurfaceRelay.computeAspectFitScale(
+            sourceWidth = 2400,
+            sourceHeight = 1080,
+            targetWidth = 1080,
+            targetHeight = 2400
+        )
+        assertEquals(1.0f, landX, 0.001f)
+        assertTrue(landY < 0.25f && landY > 0.15f)
+
+        // Landscape encoder (2400x1080) receiving Portrait source (1080x2400) -> pillarboxed horizontally
+        val (portX, portY) = com.bangdillah.rekamindulu.service.ProjectionSurfaceRelay.computeAspectFitScale(
+            sourceWidth = 1080,
+            sourceHeight = 2400,
+            targetWidth = 2400,
+            targetHeight = 1080
+        )
+        assertTrue(portX < 0.25f && portX > 0.15f)
+        assertEquals(1.0f, portY, 0.001f)
+    }
+
+    @Test
+    fun testEvaluateActiveRecordingHealthThresholds() {
+        assertEquals(
+            com.bangdillah.rekamindulu.service.RecordingEngineOptimizer.RecordingHealthStatus.OK,
+            com.bangdillah.rekamindulu.service.RecordingEngineOptimizer.evaluateActiveRecordingHealth(
+                freeStorageBytes = 500L * 1024L * 1024L,
+                currentFileBytes = 200L * 1024L * 1024L
+            )
+        )
+        assertEquals(
+            com.bangdillah.rekamindulu.service.RecordingEngineOptimizer.RecordingHealthStatus.LOW_STORAGE_STOP,
+            com.bangdillah.rekamindulu.service.RecordingEngineOptimizer.evaluateActiveRecordingHealth(
+                freeStorageBytes = 50L * 1024L * 1024L,
+                currentFileBytes = 200L * 1024L * 1024L
+            )
+        )
+        assertEquals(
+            com.bangdillah.rekamindulu.service.RecordingEngineOptimizer.RecordingHealthStatus.MAX_FILE_SIZE_STOP,
+            com.bangdillah.rekamindulu.service.RecordingEngineOptimizer.evaluateActiveRecordingHealth(
+                freeStorageBytes = 5_000L * 1024L * 1024L,
+                currentFileBytes = com.bangdillah.rekamindulu.service.RecordingEngineOptimizer.MAX_RECORDING_FILE_BYTES
+            )
+        )
+    }
+
+    @Test
+    fun testPcmRingBufferFifoAndOverflow() {
+        val ring = com.bangdillah.rekamindulu.service.MediaCodecScreenRecorder.PcmRingBuffer(1024)
+        val first = ShortArray(600) { (it + 1).toShort() }
+        val second = ShortArray(600) { (it + 1001).toShort() }
+
+        ring.write(first, 600)
+        assertEquals(600, ring.available())
+
+        // Overflow (total 1200 > capacity 1024): oldest 176 samples dropped cleanly
+        ring.write(second, 600)
+        assertEquals(1024, ring.available())
+
+        val out = ShortArray(1024)
+        val read = ring.readUpTo(out, 1024)
+        assertEquals(1024, read)
+        assertEquals(0, ring.available())
+        assertEquals(177.toShort(), out[0])
+        assertEquals(1600.toShort(), out[1023])
+
+        ring.write(first, 200)
+        ring.clear()
+        assertEquals(0, ring.available())
+    }
+
+    @Test
+    fun testTrimHelperOptimalSeekModeSelection() {
+        // Closest sync is much closer to startUs and leaves >= 500ms before endUs -> CLOSEST_SYNC
+        val modeClosest = com.bangdillah.rekamindulu.trim.TrimHelper.chooseOptimalSeekMode(
+            startUs = 4_900_000L,
+            endUs = 10_000_000L,
+            prevSyncUs = 0L,
+            closestSyncUs = 5_000_000L
+        )
+        assertEquals(android.media.MediaExtractor.SEEK_TO_CLOSEST_SYNC, modeClosest)
+
+        // Closest sync too close to endUs (< 500ms clip left) -> PREVIOUS_SYNC
+        val modePrevShort = com.bangdillah.rekamindulu.trim.TrimHelper.chooseOptimalSeekMode(
+            startUs = 4_900_000L,
+            endUs = 5_200_000L,
+            prevSyncUs = 2_000_000L,
+            closestSyncUs = 5_000_000L
+        )
+        assertEquals(android.media.MediaExtractor.SEEK_TO_PREVIOUS_SYNC, modePrevShort)
+
+        // Closest sync further away than prevSync -> PREVIOUS_SYNC
+        val modePrevCloser = com.bangdillah.rekamindulu.trim.TrimHelper.chooseOptimalSeekMode(
+            startUs = 2_100_000L,
+            endUs = 8_000_000L,
+            prevSyncUs = 2_000_000L,
+            closestSyncUs = 2_400_000L
+        )
+        assertEquals(android.media.MediaExtractor.SEEK_TO_PREVIOUS_SYNC, modePrevCloser)
+    }
+
+    @Test
+    fun testAppLockPinSaltedSha256HashingAndLegacyCompatibility() {
+        val hash1 = com.bangdillah.rekamindulu.utils.AppLockHelper.hashPin("4826")
+        val hash2 = com.bangdillah.rekamindulu.utils.AppLockHelper.hashPin("4826")
+
+        assertTrue(com.bangdillah.rekamindulu.utils.AppLockHelper.isHashedPin(hash1))
+        assertTrue(hash1 != hash2) // Random 16-byte salt ensures distinct stored digests
+        assertTrue(!hash1.contains("4826"))
+
+        assertTrue(com.bangdillah.rekamindulu.utils.AppLockHelper.verifyPin("4826", hash1))
+        assertTrue(com.bangdillah.rekamindulu.utils.AppLockHelper.verifyPin(" 4826 ", hash2))
+        assertEquals(false, com.bangdillah.rekamindulu.utils.AppLockHelper.verifyPin("9999", hash1))
+        assertEquals(false, com.bangdillah.rekamindulu.utils.AppLockHelper.verifyPin("4826", "sha256:malformed"))
+
+        // Legacy plaintext continues to verify cleanly
+        assertTrue(com.bangdillah.rekamindulu.utils.AppLockHelper.verifyPin("1234", "1234"))
+    }
+
+    @Test
+    fun testComputeAlignedAudioPtsUsResyncsAfterSilenceGap() {
+        // 1. Streaming kontinu (1024 sampel pada 44.1kHz ≈ 23.219ms): tidak resync
+        val (pts1, resync1) = com.bangdillah.rekamindulu.service.MediaCodecScreenRecorder.computeAlignedAudioPtsUs(
+            audioEpochBaseUs = 0L,
+            samplesSinceEpoch = 1024L,
+            sampleRate = 44100,
+            wallPtsUs = 25_000L,
+            lastQueuedPtsUs = 0L
+        )
+        assertEquals(false, resync1)
+        assertEquals(23_219L, pts1)
+
+        // 2. Setelah layar loading hening 5 detik (wall clock melonjak ke 5_025_000us): resync ke wall clock
+        val (ptsResync, resync2) = com.bangdillah.rekamindulu.service.MediaCodecScreenRecorder.computeAlignedAudioPtsUs(
+            audioEpochBaseUs = 0L,
+            samplesSinceEpoch = 2048L,
+            sampleRate = 44100,
+            wallPtsUs = 5_025_000L,
+            lastQueuedPtsUs = pts1
+        )
+        assertTrue(resync2)
+        assertEquals(5_025_000L, ptsResync)
+
+        // 3. Chunk berikutnya memakai epoch baru dari 5_025_000L + 1024 sampel
+        val (ptsAfterResync, resync3) = com.bangdillah.rekamindulu.service.MediaCodecScreenRecorder.computeAlignedAudioPtsUs(
+            audioEpochBaseUs = ptsResync,
+            samplesSinceEpoch = 1024L,
+            sampleRate = 44100,
+            wallPtsUs = 5_048_500L,
+            lastQueuedPtsUs = ptsResync
+        )
+        assertEquals(false, resync3)
+        assertEquals(5_025_000L + 23_219L, ptsAfterResync)
+    }
+
+    @Test
+    fun testPlayerActivityResolveSavedPlaybackState() {
+        // Android 9+: onPause() mem-pause VideoView lebih dulu sebelum onSaveInstanceState()
+        val (pos1, playing1) = com.bangdillah.rekamindulu.player.PlayerActivity.resolveSavedPlaybackState(
+            isPrepared = true,
+            isCurrentlyPlaying = false,
+            liveCurrentPositionMs = 42_500,
+            restoredPositionMs = 42_500,
+            restoredWasPlaying = true
+        )
+        assertEquals(42_500, pos1)
+        assertTrue(playing1)
+
+        // Jika surface sudah terlepas/unprepared (liveCurrentPositionMs == 0), posisi lama dipertahankan
+        val (pos2, playing2) = com.bangdillah.rekamindulu.player.PlayerActivity.resolveSavedPlaybackState(
+            isPrepared = false,
+            isCurrentlyPlaying = false,
+            liveCurrentPositionMs = 0,
+            restoredPositionMs = 18_750,
+            restoredWasPlaying = false
+        )
+        assertEquals(18_750, pos2)
+        assertEquals(false, playing2)
+    }
+
+    @Test
+    fun testAppLockSessionTrackerSuppressionAndClear() {
+        var lockedCount = 0
+        val tracker = com.bangdillah.rekamindulu.utils.AppLockSessionTracker {
+            lockedCount++
+        }
+        tracker.onActivityStarted()
+        tracker.suppressNextBackground()
+        tracker.onActivityStopped(isChangingConfigurations = false)
+        assertEquals(0, lockedCount)
+
+        // Jika penekanan dibatalkan (mis. Intent chooser gagal dibuka), background berikutnya tetap mengunci
+        tracker.onActivityStarted()
+        tracker.suppressNextBackground()
+        tracker.clearBackgroundSuppression()
+        tracker.onActivityStopped(isChangingConfigurations = false)
+        assertEquals(1, lockedCount)
+    }
+
+    @Test
+    fun testFacecamFgsBroadcastConstants() {
+        assertEquals(
+            "ACTION_FACECAM_FGS_UPDATED",
+            com.bangdillah.rekamindulu.service.ScreenRecordingService.ACTION_FACECAM_FGS_UPDATED
+        )
+        assertEquals(
+            "EXTRA_CAMERA_FGS_ACTIVE",
+            com.bangdillah.rekamindulu.service.ScreenRecordingService.EXTRA_CAMERA_FGS_ACTIVE
+        )
+        assertEquals(
+            "EXTRA_REQUEST_FACECAM_OPEN",
+            com.bangdillah.rekamindulu.service.ScreenRecordingService.EXTRA_REQUEST_FACECAM_OPEN
+        )
+    }
 }

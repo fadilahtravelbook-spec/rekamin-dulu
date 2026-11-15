@@ -875,7 +875,10 @@ class LibraryActivity : AppCompatActivity() {
                 setDataAndType(uri, "audio/*")
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             }
-            startActivity(Intent.createChooser(intent, "Putar Audio dengan"))
+            AppLockHelper.launchExternalWithLockBypass(
+                this,
+                Intent.createChooser(intent, "Putar Audio dengan")
+            )
         } catch (e: Exception) {
             Toast.makeText(this, "Tidak ada aplikasi pemutar audio eksternal", Toast.LENGTH_SHORT).show()
         }
@@ -893,7 +896,10 @@ class LibraryActivity : AppCompatActivity() {
                 putExtra(Intent.EXTRA_STREAM, uri)
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             }
-            startActivity(Intent.createChooser(shareIntent, "Bagikan Audio M4A"))
+            AppLockHelper.launchExternalWithLockBypass(
+                this,
+                Intent.createChooser(shareIntent, "Bagikan Audio M4A")
+            )
         } catch (e: Exception) {
             Toast.makeText(this, "Gagal membagikan audio: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
         }
@@ -911,7 +917,10 @@ class LibraryActivity : AppCompatActivity() {
                 putExtra(Intent.EXTRA_STREAM, uri)
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             }
-            startActivity(Intent.createChooser(shareIntent, "Bagikan Rekaman Layar"))
+            AppLockHelper.launchExternalWithLockBypass(
+                this,
+                Intent.createChooser(shareIntent, "Bagikan Rekaman Layar")
+            )
         } catch (e: Exception) {
             Toast.makeText(this, "Gagal membagikan video: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
         }

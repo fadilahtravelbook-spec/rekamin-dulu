@@ -71,6 +71,7 @@ class FloatingOverlayService : Service() {
     private var cameraHandler: Handler? = null
     private var cameraDevice: CameraDevice? = null
     private var cameraSession: CameraCaptureSession? = null
+    private var facecamPreviewSurface: Surface? = null
     private var previewSize: Size = Size(480, 640)
     private var cameraSensorOrientation: Int = 90
     private var cameraLensFacing: Int = CameraCharacteristics.LENS_FACING_FRONT
@@ -143,35 +144,50 @@ class FloatingOverlayService : Service() {
             return
         }
 
-        val count = bufferFilled.coerceAtLeast(1)
-        var sumDelta = 0L
-        for (i in 0 until count) {
-            sumDelta += frameIntervalBuffer[i]
-        }
-        val avgDeltaNanos = sumDelta.toDouble() / count
-        val instantFps = (1_000_000_000.0 / avgDeltaNanos.coerceAtLeast(1_000_000.0)).coerceIn(10.0, 144.0)
-
         val prefs = appPreferences ?: AppPreferences(this).also { appPreferences = it }
         val targetFps = prefs.fps
         val hardwareHz = getHardwareRefreshRate()
 
-        // Hitung frame jitter aktual (deviasi antar selang VSYNC dalam ms)
-        var sumJitter = 0.0
-        for (i in 0 until count) {
-            sumJitter += abs(frameIntervalBuffer[i] - avgDeltaNanos)
+        val liveCapture = if (ScreenRecordingService.isRecording) {
+            ScreenRecordingService.getLiveCaptureTelemetry()
+        } else {
+            null
         }
-        val avgJitterMs = (sumJitter / count) / 1_000_000.0
+        val useLiveCapture = liveCapture != null &&
+            liveCapture.fps > 0 &&
+            (frameTimeNanos - liveCapture.lastFrameTimeNanos) in 0L..600_000_000L
+
+        val instantFps: Double
+        val avgJitterMs: Double
+        if (useLiveCapture && liveCapture != null) {
+            instantFps = liveCapture.fps.toDouble().coerceIn(5.0, hardwareHz.toDouble())
+            avgJitterMs = liveCapture.jitterMs
+        } else {
+            val count = bufferFilled.coerceAtLeast(1)
+            var sumDelta = 0L
+            for (i in 0 until count) {
+                sumDelta += frameIntervalBuffer[i]
+            }
+            val avgDeltaNanos = sumDelta.toDouble() / count
+            instantFps = (1_000_000_000.0 / avgDeltaNanos.coerceAtLeast(1_000_000.0)).coerceIn(10.0, 144.0)
+
+            var sumJitter = 0.0
+            for (i in 0 until count) {
+                sumJitter += abs(frameIntervalBuffer[i] - avgDeltaNanos)
+            }
+            avgJitterMs = (sumJitter / count) / 1_000_000.0
+        }
 
         // Filter EMA adaptif:
         // Jika terjadi drop FPS nyata (instantFps < smoothedFps), respons cepat (bobot 45%)
         // agar gamer langsung melihat penurunan performa game secara real-time.
         val alpha = if (instantFps < smoothedFps) 0.45 else 0.30
         smoothedFps = (alpha * instantFps) + ((1.0 - alpha) * smoothedFps)
-        val finalFps = Math.round(smoothedFps).toInt().coerceIn(10, hardwareHz)
+        val finalFps = Math.round(smoothedFps).toInt().coerceIn(5, hardwareHz)
 
         currentMeasuredFps = finalFps
 
-        if (finalFps in 10..144) {
+        if (finalFps in 5..144) {
             if (finalFps < sessionMinFps) sessionMinFps = finalFps
             if (finalFps > sessionMaxFps) sessionMaxFps = finalFps
         }
@@ -402,6 +418,24 @@ class FloatingOverlayService : Service() {
                         container.alpha = transparencyLevels[transparencyIndex]
                     }
                 }
+                ScreenRecordingService.ACTION_FACECAM_FGS_UPDATED -> {
+                    val cameraFgsActive = intent.getBooleanExtra(ScreenRecordingService.EXTRA_CAMERA_FGS_ACTIVE, false)
+                    val prefs = appPreferences ?: AppPreferences(this@FloatingOverlayService).also { appPreferences = it }
+                    if (cameraFgsActive && prefs.facecamMode != "OFF") {
+                        syncFacecamButtonUi()
+                        syncFacecamWindowState()
+                        Toast.makeText(this@FloatingOverlayService, "📷 Facecam Kamera Depan Diaktifkan", Toast.LENGTH_SHORT).show()
+                    } else if (!cameraFgsActive && prefs.facecamMode != "OFF") {
+                        prefs.facecamMode = "OFF"
+                        syncFacecamButtonUi()
+                        closeFacecamWindowAndCamera()
+                        Toast.makeText(
+                            this@FloatingOverlayService,
+                            "⚠️ Sistem Android 14+ membatasi kamera baru dari latar belakang. Aktifkan Facecam sebelum mulai merekam.",
+                            Toast.LENGTH_LONG
+                        ).show()
+                    }
+                }
             }
         }
     }
@@ -413,6 +447,7 @@ class FloatingOverlayService : Service() {
             addAction(ScreenRecordingService.ACTION_RECORDING_STATUS_CHANGED)
             addAction(ScreenRecordingService.ACTION_RECORDING_STOPPED)
             addAction(ScreenRecordingService.ACTION_SCREENSHOT_RESULT)
+            addAction(ScreenRecordingService.ACTION_FACECAM_FGS_UPDATED)
         }
         ContextCompat.registerReceiver(
             this,
@@ -864,19 +899,27 @@ class FloatingOverlayService : Service() {
                     return@OnClickListener
                 }
                 prefs.facecamMode = "FRONT"
-                sendServiceCommand(Intent(this, ScreenRecordingService::class.java).apply {
-                    action = ScreenRecordingService.ACTION_REFRESH_FOREGROUND_TYPE
-                })
-                Toast.makeText(this, "📷 Facecam Kamera Depan Diaktifkan", Toast.LENGTH_SHORT).show()
+                syncFacecamButtonUi()
+                if (ScreenRecordingService.isRecording) {
+                    // Tunggu konfirmasi foregroundServiceType kamera dari ScreenRecordingService sebelum membuka Camera2
+                    sendServiceCommand(Intent(this, ScreenRecordingService::class.java).apply {
+                        action = ScreenRecordingService.ACTION_REFRESH_FOREGROUND_TYPE
+                        putExtra(ScreenRecordingService.EXTRA_REQUEST_FACECAM_OPEN, true)
+                    })
+                } else {
+                    syncFacecamWindowState()
+                    Toast.makeText(this, "📷 Facecam Kamera Depan Diaktifkan", Toast.LENGTH_SHORT).show()
+                }
             } else {
                 prefs.facecamMode = "OFF"
+                syncFacecamButtonUi()
+                syncFacecamWindowState()
                 sendServiceCommand(Intent(this, ScreenRecordingService::class.java).apply {
                     action = ScreenRecordingService.ACTION_REFRESH_FOREGROUND_TYPE
+                    putExtra(ScreenRecordingService.EXTRA_REQUEST_FACECAM_OPEN, false)
                 })
                 Toast.makeText(this, "📷 Facecam Dinonaktifkan", Toast.LENGTH_SHORT).show()
             }
-            syncFacecamButtonUi()
-            syncFacecamWindowState()
         }
         overlayView?.findViewById<View>(R.id.btn_overlay_facecam)?.setOnClickListener(onFacecamClick)
         overlayView?.findViewById<View>(R.id.action_overlay_facecam_wrapper)?.setOnClickListener(onFacecamClick)
@@ -1436,7 +1479,8 @@ class FloatingOverlayService : Service() {
         val st = tv.surfaceTexture ?: return
         try {
             st.setDefaultBufferSize(previewSize.width, previewSize.height)
-            val previewSurface = Surface(st)
+            try { facecamPreviewSurface?.release() } catch (ignored: Exception) {}
+            val previewSurface = Surface(st).also { facecamPreviewSurface = it }
             val reqBuilder = camera.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW).apply {
                 addTarget(previewSurface)
                 set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_VIDEO)
@@ -1529,6 +1573,8 @@ class FloatingOverlayService : Service() {
         cameraSession = null
         try { cameraDevice?.close() } catch (ignored: Exception) {}
         cameraDevice = null
+        try { facecamPreviewSurface?.release() } catch (ignored: Exception) {}
+        facecamPreviewSurface = null
     }
 
     private fun closeFacecamWindowAndCamera() {

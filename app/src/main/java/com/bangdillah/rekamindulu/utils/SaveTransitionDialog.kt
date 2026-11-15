@@ -149,7 +149,7 @@ object SaveTransitionDialog {
                         addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                     }
                 }
-                context.startActivity(chooser)
+                AppLockHelper.launchExternalWithLockBypass(context, chooser)
             } catch (e: Exception) {
                 Log.w(TAG, "Share video failed", e)
                 Toast.makeText(

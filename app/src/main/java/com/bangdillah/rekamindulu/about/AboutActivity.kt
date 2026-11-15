@@ -11,6 +11,7 @@ import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import com.bangdillah.rekamindulu.R
+import com.bangdillah.rekamindulu.utils.AppLockHelper
 import com.bangdillah.rekamindulu.utils.AppPreferences
 import com.bangdillah.rekamindulu.utils.SpecAnalysisDialog
 import com.bangdillah.rekamindulu.utils.UiHelper
@@ -60,7 +61,10 @@ class AboutActivity : AppCompatActivity() {
                     "Yuk gunakan Rekamin Dulu! Aplikasi perekam layar Android tanpa watermark, audio internal game super jernih, 1080p 60FPS & kontrol melayang profesional. Dikembangkan oleh Bangdillah210."
                 )
             }
-            startActivity(Intent.createChooser(sharingIntent, "Bagikan Rekamin Dulu"))
+            AppLockHelper.launchExternalWithLockBypass(
+                this,
+                Intent.createChooser(sharingIntent, "Bagikan Rekamin Dulu")
+            )
         }
 
         // 2. Hardware Diagnostics
@@ -130,7 +134,7 @@ class AboutActivity : AppCompatActivity() {
             .setPositiveButton("Buka Trakteer") { _, _ ->
                 try {
                     val browserIntent = Intent(Intent.ACTION_VIEW, Uri.parse("https://trakteer.id/bangdillah210"))
-                    startActivity(browserIntent)
+                    AppLockHelper.launchExternalWithLockBypass(this, browserIntent)
                 } catch (e: Exception) {
                     Toast.makeText(this, "Terima kasih atas niat baik Anda!", Toast.LENGTH_SHORT).show()
                 }

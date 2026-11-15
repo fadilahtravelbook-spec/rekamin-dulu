@@ -51,6 +51,29 @@ object TrimHelper {
     }
 
     /**
+     * Memilih mode seek keyframe terbaik: gunakan SEEK_TO_CLOSEST_SYNC apabila lebih dekat ke [startUs]
+     * dan tidak melampaui batas aman sebelum [endUs] (minimal tersisa 500ms klip).
+     * Jika terlalu dekat ke akhir atau melebihi margin 500ms, fallback ke SEEK_TO_PREVIOUS_SYNC.
+     */
+    fun chooseOptimalSeekMode(
+        startUs: Long,
+        endUs: Long,
+        prevSyncUs: Long,
+        closestSyncUs: Long
+    ): Int {
+        if (closestSyncUs < 0L) return MediaExtractor.SEEK_TO_PREVIOUS_SYNC
+        val leavesMinClip = closestSyncUs <= (endUs - 500_000L)
+        val withinForwardTolerance = closestSyncUs <= (startUs + 500_000L)
+        val closerThanPrev = prevSyncUs < 0L ||
+            kotlin.math.abs(closestSyncUs - startUs) < kotlin.math.abs(startUs - prevSyncUs)
+        return if (leavesMinClip && withinForwardTolerance && closerThanPrev) {
+            MediaExtractor.SEEK_TO_CLOSEST_SYNC
+        } else {
+            MediaExtractor.SEEK_TO_PREVIOUS_SYNC
+        }
+    }
+
+    /**
      * Memotong video dari startMs sampai endMs dan menyimpannya ke outputFile.
      * @return Pair<Boolean, String> (status sukses, pesan hasil)
      */
@@ -127,8 +150,13 @@ object TrimHelper {
             muxer.start()
             muxerStarted = true
 
-            // Seek ke keyframe sync terdekat sebelum startUs
+            // Bandingkan keyframe terdekat (CLOSEST_SYNC vs PREVIOUS_SYNC) agar hasil potong akurat tanpa memotong durasi klip
             extractor.seekTo(startUs, MediaExtractor.SEEK_TO_PREVIOUS_SYNC)
+            val prevSyncUs = extractor.sampleTime
+            extractor.seekTo(startUs, MediaExtractor.SEEK_TO_CLOSEST_SYNC)
+            val closestSyncUs = extractor.sampleTime
+            val chosenSeekMode = chooseOptimalSeekMode(startUs, endUs, prevSyncUs, closestSyncUs)
+            extractor.seekTo(startUs, chosenSeekMode)
 
             // Hitung buffer size optimal dari KEY_MAX_INPUT_SIZE setiap track (min 2MB untuk 1080p/4K)
             var maxInputSize = 2 * 1024 * 1024

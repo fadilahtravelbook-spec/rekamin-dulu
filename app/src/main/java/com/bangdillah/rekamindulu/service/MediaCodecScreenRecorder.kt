@@ -107,6 +107,89 @@ class MediaCodecScreenRecorder(
             }
             return output
         }
+
+        /**
+         * Menghitung PTS audio berikutnya agar tetap sinkron dengan jam dinding video ([wallPtsUs]).
+         * Pada kondisi normal/kontinu, PTS mengikuti jumlah sampel sejak epoch terakhir agar bebas jitter;
+         * namun bila terjadi jeda/hening (> 80 ms tertinggal dari wallPtsUs), epoch disinkronkan ulang
+         * ke [wallPtsUs] agar tidak terjadi A/V desync kumulatif di sisa rekaman.
+         */
+        fun computeAlignedAudioPtsUs(
+            audioEpochBaseUs: Long,
+            samplesSinceEpoch: Long,
+            sampleRate: Int,
+            wallPtsUs: Long,
+            lastQueuedPtsUs: Long
+        ): Pair<Long, Boolean> {
+            val safeRate = sampleRate.coerceAtLeast(8_000)
+            val contiguousPtsUs = audioEpochBaseUs + (samplesSinceEpoch * 1_000_000L) / safeRate
+            val driftUs = wallPtsUs - contiguousPtsUs
+            val resynced = driftUs > 80_000L
+            val rawPtsUs = if (resynced) wallPtsUs else contiguousPtsUs
+            val monotonicPtsUs = if (lastQueuedPtsUs >= 0L && rawPtsUs <= lastQueuedPtsUs) {
+                lastQueuedPtsUs + 1_000L
+            } else {
+                rawPtsUs.coerceAtLeast(0L)
+            }
+            return Pair(monotonicPtsUs, resynced)
+        }
+    }
+
+    /**
+     * Buffer sirkular thread-safe untuk PCM 16-bit agar pembacaan AudioPlaybackCapture
+     * tidak pernah memblokir thread penangkap Mikrofon saat audio internal game hening.
+     */
+    internal class PcmRingBuffer(private val capacityShorts: Int) {
+        private val buffer = ShortArray(capacityShorts.coerceAtLeast(1024))
+        private var readPos = 0
+        private var writePos = 0
+        private var size = 0
+
+        @Synchronized
+        fun write(src: ShortArray, count: Int) {
+            if (count <= 0) return
+            val cap = buffer.size
+            val startOffset = if (count >= cap) {
+                clear()
+                count - cap
+            } else {
+                val overflow = (size + count) - cap
+                if (overflow > 0) {
+                    readPos = (readPos + overflow) % cap
+                    size -= overflow
+                }
+                0
+            }
+            val toWrite = count - startOffset
+            for (i in 0 until toWrite) {
+                buffer[writePos] = src[startOffset + i]
+                writePos = (writePos + 1) % cap
+            }
+            size += toWrite
+        }
+
+        @Synchronized
+        fun readUpTo(dst: ShortArray, maxCount: Int): Int {
+            val toRead = minOf(maxCount.coerceAtLeast(0), minOf(size, dst.size))
+            if (toRead <= 0) return 0
+            val cap = buffer.size
+            for (i in 0 until toRead) {
+                dst[i] = buffer[readPos]
+                readPos = (readPos + 1) % cap
+            }
+            size -= toRead
+            return toRead
+        }
+
+        @Synchronized
+        fun available(): Int = size
+
+        @Synchronized
+        fun clear() {
+            readPos = 0
+            writePos = 0
+            size = 0
+        }
     }
 
     var actualWidth: Int = 720
@@ -169,6 +252,7 @@ class MediaCodecScreenRecorder(
 
     private var videoDrainThread: Thread? = null
     private var audioLoopThread: Thread? = null
+    private var playbackCaptureThread: Thread? = null
     private var audioDrainThread: Thread? = null
 
     /**
@@ -638,6 +722,8 @@ class MediaCodecScreenRecorder(
             Log.w(TAG, "signalEndOfInputStream notice: ${e.message}")
         }
 
+        try { playbackCaptureThread?.join(1500) } catch (ignored: InterruptedException) {}
+        playbackCaptureThread = null
         try { audioLoopThread?.join(2500) } catch (ignored: InterruptedException) {}
         try { audioDrainThread?.join(2500) } catch (ignored: InterruptedException) {}
         try { videoDrainThread?.join(3500) } catch (ignored: InterruptedException) {}
@@ -782,7 +868,9 @@ class MediaCodecScreenRecorder(
         val pbShortBuf = ShortArray(pbFramesPerRead * pbChannels.coerceAtLeast(1))
         val micShortBuf = ShortArray(pbFramesPerRead * micChannels.coerceAtLeast(1))
 
-        var samplesEncoded = 0L
+        var audioEpochBaseUs = 0L
+        var samplesSinceEpoch = 0L
+        var lastQueuedAudioPtsUs = -1L
 
         // Feed 1 frame silence awal agar AAC encoder segera mengeluarkan INFO_OUTPUT_FORMAT_CHANGED
         // sehingga MediaMuxer.start() tidak pernah menunggu saat sumber audio diam.
@@ -797,20 +885,82 @@ class MediaCodecScreenRecorder(
                         initBuf.put(0)
                     }
                     encoder.queueInputBuffer(initInIdx, 0, initShorts * 2, 0L, 0)
-                    samplesEncoded += (initShorts / audioChannelCount.coerceAtLeast(1))
+                    samplesSinceEpoch += (initShorts / audioChannelCount.coerceAtLeast(1))
+                    lastQueuedAudioPtsUs = 0L
                 }
             }
         } catch (ignored: Exception) {}
 
         var codecAborted = false
+        var activeMic = mic
+        var activeMicChannels = micChannels
+        var micRecoveredOnce = false
+        var micDead = (activeMic == null)
+        var playbackDead = (pb == null)
+        var pbConsecutiveErrors = 0
+        var micConsecutiveErrors = 0
+
+        val isDualMode = (effectiveAudioMode == "BOTH" && pb != null && activeMic != null)
+        val playbackRingBuffer = if (isDualMode) {
+            PcmRingBuffer(audioSampleRate * pbChannels.coerceAtLeast(1))
+        } else {
+            null
+        }
+
+        if (isDualMode && pb != null && playbackRingBuffer != null) {
+            playbackCaptureThread = Thread({
+                if (prefs.gamingTurboBoost) {
+                    try { Process.setThreadPriority(Process.THREAD_PRIORITY_URGENT_AUDIO) } catch (_: Exception) {}
+                }
+                val pbThreadBuf = ShortArray(pbFramesPerRead * pbChannels.coerceAtLeast(1))
+                while (!stopRequested.get() && !playbackDead) {
+                    if (isPaused.get()) {
+                        playbackRingBuffer.clear()
+                        try {
+                            if (pb.recordingState == AudioRecord.RECORDSTATE_RECORDING) {
+                                pb.read(pbThreadBuf, 0, pbThreadBuf.size)
+                            }
+                        } catch (_: Exception) {}
+                        try { Thread.sleep(15) } catch (_: InterruptedException) { break }
+                        continue
+                    }
+                    val readCount = if (pb.recordingState == AudioRecord.RECORDSTATE_RECORDING) {
+                        try { pb.read(pbThreadBuf, 0, pbThreadBuf.size) } catch (_: Exception) { AudioRecord.ERROR_INVALID_OPERATION }
+                    } else {
+                        try { Thread.sleep(10) } catch (_: InterruptedException) { break }
+                        0
+                    }
+                    if (stopRequested.get()) break
+                    when {
+                        readCount > 0 -> {
+                            pbConsecutiveErrors = 0
+                            playbackRingBuffer.write(pbThreadBuf, readCount)
+                        }
+                        readCount == 0 -> {
+                            try { Thread.sleep(4) } catch (_: InterruptedException) { break }
+                        }
+                        else -> {
+                            pbConsecutiveErrors++
+                            if (readCount == AudioRecord.ERROR_DEAD_OBJECT || pbConsecutiveErrors >= 5) {
+                                Log.w(TAG, "AudioPlaybackCapture terhenti (kode=$readCount); lanjutkan dengan mikrofon saja")
+                                playbackDead = true
+                                break
+                            }
+                            try { Thread.sleep(10) } catch (_: InterruptedException) { break }
+                        }
+                    }
+                }
+            }, "RekaminPlaybackCapture").apply { start() }
+        }
+
         while (!stopRequested.get() && !codecAborted) {
             if (isPaused.get()) {
-                // Kuras frame AudioRecord yang menumpuk selama pause agar saat resume audio tetap sinkron tanpa burst/delay
-                val drainedPb = if (pb != null && pb.recordingState == AudioRecord.RECORDSTATE_RECORDING) {
+                playbackRingBuffer?.clear()
+                val drainedPb = if (!isDualMode && pb != null && !playbackDead && pb.recordingState == AudioRecord.RECORDSTATE_RECORDING) {
                     try { pb.read(pbShortBuf, 0, pbShortBuf.size) } catch (_: Exception) { 0 }
                 } else 0
-                val drainedMic = if (mic != null && mic.recordingState == AudioRecord.RECORDSTATE_RECORDING) {
-                    try { mic.read(micShortBuf, 0, micShortBuf.size) } catch (_: Exception) { 0 }
+                val drainedMic = if (activeMic != null && !micDead && activeMic.recordingState == AudioRecord.RECORDSTATE_RECORDING) {
+                    try { activeMic.read(micShortBuf, 0, micShortBuf.size) } catch (_: Exception) { 0 }
                 } else 0
                 if (stopRequested.get()) break
                 if (drainedPb <= 0 && drainedMic <= 0) {
@@ -819,38 +969,121 @@ class MediaCodecScreenRecorder(
                 continue
             }
 
-            val pbRead = if (pb != null && pb.recordingState == AudioRecord.RECORDSTATE_RECORDING) {
-                pb.read(pbShortBuf, 0, pbShortBuf.size)
-            } else 0
-            if (stopRequested.get()) break
+            var micRead = 0
+            if (activeMic != null && !micDead) {
+                val rawMicRead = if (activeMic.recordingState == AudioRecord.RECORDSTATE_RECORDING) {
+                    try {
+                        activeMic.read(micShortBuf, 0, (pbFramesPerRead * activeMicChannels.coerceAtLeast(1)).coerceIn(1, micShortBuf.size))
+                    } catch (_: Exception) {
+                        AudioRecord.ERROR_INVALID_OPERATION
+                    }
+                } else 0
+                if (stopRequested.get()) break
 
-            val micRead = if (mic != null && mic.recordingState == AudioRecord.RECORDSTATE_RECORDING) {
-                val targetSamples = if (pbRead > 0 && pbChannels > 0) {
-                    (pbRead / pbChannels) * micChannels.coerceAtLeast(1)
-                } else {
-                    micShortBuf.size
+                if (rawMicRead > 0) {
+                    micConsecutiveErrors = 0
+                    micRead = rawMicRead
+                } else if (rawMicRead < 0) {
+                    micConsecutiveErrors++
+                    if (rawMicRead == AudioRecord.ERROR_DEAD_OBJECT || micConsecutiveErrors >= 5) {
+                        Log.w(TAG, "Mic AudioRecord error (kode=$rawMicRead), mencoba pemulihan ke mic bawaan")
+                        if (!micRecoveredOnce && ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+                            micRecoveredOnce = true
+                            try { activeMic.stop() } catch (_: Exception) {}
+                            try { activeMic.release() } catch (_: Exception) {}
+                            val fallbackMic = AudioHelper.createAudioRecord(
+                                audioSource = MediaRecorder.AudioSource.MIC,
+                                sampleRate = audioSampleRate,
+                                preferStereo = false
+                            )
+                            if (fallbackMic != null) {
+                                try {
+                                    fallbackMic.startRecording()
+                                    activeMic = fallbackMic
+                                    micAudioRecord = fallbackMic
+                                    activeMicChannels = fallbackMic.channelCount.coerceAtLeast(1)
+                                    micChannelCount = activeMicChannels
+                                    micConsecutiveErrors = 0
+                                    Log.i(TAG, "Mic dipulihkan ke mikrofon bawaan perangkat")
+                                } catch (e: Exception) {
+                                    try { fallbackMic.release() } catch (_: Exception) {}
+                                    micDead = true
+                                }
+                            } else {
+                                micDead = true
+                            }
+                        } else {
+                            micDead = true
+                        }
+                    }
                 }
-                mic.read(micShortBuf, 0, targetSamples.coerceIn(1, micShortBuf.size))
-            } else 0
-            if (stopRequested.get()) break
+            }
+
+            var pbRead = 0
+            if (isDualMode && playbackRingBuffer != null) {
+                if (!playbackDead) {
+                    val micFramesRead = if (activeMicChannels > 0 && micRead > 0) micRead / activeMicChannels else pbFramesPerRead
+                    val targetPbSamples = (micFramesRead * pbChannels.coerceAtLeast(1)).coerceIn(1, pbShortBuf.size)
+                    pbRead = playbackRingBuffer.readUpTo(pbShortBuf, targetPbSamples)
+                }
+            } else if (pb != null && !playbackDead) {
+                val rawPbRead = if (pb.recordingState == AudioRecord.RECORDSTATE_RECORDING) {
+                    try { pb.read(pbShortBuf, 0, pbShortBuf.size) } catch (_: Exception) { AudioRecord.ERROR_INVALID_OPERATION }
+                } else 0
+                if (stopRequested.get()) break
+                if (rawPbRead > 0) {
+                    pbConsecutiveErrors = 0
+                    pbRead = rawPbRead
+                } else if (rawPbRead < 0) {
+                    pbConsecutiveErrors++
+                    if (rawPbRead == AudioRecord.ERROR_DEAD_OBJECT || pbConsecutiveErrors >= 5) {
+                        Log.w(TAG, "AudioPlaybackCapture error (kode=$rawPbRead); kanal internal dinonaktifkan")
+                        playbackDead = true
+                    }
+                }
+            }
 
             val mixedShorts: ShortArray = when (effectiveAudioMode) {
-                "BOTH" -> mixPcm16Frames(
-                    playback = pbShortBuf,
-                    playbackSamplesRead = pbRead.coerceAtLeast(0),
-                    playbackChannels = pbChannels.coerceAtLeast(1),
-                    mic = micShortBuf,
-                    micSamplesRead = micRead.coerceAtLeast(0),
-                    micChannels = micChannels.coerceAtLeast(1),
-                    micMuted = isMicMuted.get()
-                )
+                "BOTH" -> {
+                    if (micDead && playbackDead) {
+                        ShortArray(pbFramesPerRead * audioChannelCount.coerceAtLeast(1))
+                    } else if (micDead && pbRead > 0) {
+                        mixPcm16Frames(
+                            playback = pbShortBuf,
+                            playbackSamplesRead = pbRead,
+                            playbackChannels = pbChannels.coerceAtLeast(1),
+                            mic = micShortBuf,
+                            micSamplesRead = 0,
+                            micChannels = activeMicChannels.coerceAtLeast(1),
+                            micMuted = true
+                        )
+                    } else if (micRead > 0 || pbRead > 0) {
+                        mixPcm16Frames(
+                            playback = pbShortBuf,
+                            playbackSamplesRead = pbRead.coerceAtLeast(0),
+                            playbackChannels = pbChannels.coerceAtLeast(1),
+                            mic = micShortBuf,
+                            micSamplesRead = micRead.coerceAtLeast(0),
+                            micChannels = activeMicChannels.coerceAtLeast(1),
+                            micMuted = isMicMuted.get() || micDead
+                        )
+                    } else {
+                        ShortArray(0)
+                    }
+                }
                 "INTERNAL" -> {
-                    if (pbRead > 0) pbShortBuf.copyOf(pbRead) else ShortArray(0)
+                    when {
+                        pbRead > 0 -> pbShortBuf.copyOf(pbRead)
+                        playbackDead -> ShortArray(pbFramesPerRead * audioChannelCount.coerceAtLeast(1))
+                        else -> ShortArray(0)
+                    }
                 }
                 "MIC" -> {
-                    if (micRead > 0) {
-                        if (isMicMuted.get()) ShortArray(micRead) else micShortBuf.copyOf(micRead)
-                    } else ShortArray(0)
+                    when {
+                        micRead > 0 -> if (isMicMuted.get()) ShortArray(micRead) else micShortBuf.copyOf(micRead)
+                        micDead -> ShortArray(pbFramesPerRead * audioChannelCount.coerceAtLeast(1))
+                        else -> ShortArray(0)
+                    }
                 }
                 else -> ShortArray(0)
             }
@@ -858,6 +1091,13 @@ class MediaCodecScreenRecorder(
             if (mixedShorts.isEmpty()) {
                 try { Thread.sleep(10) } catch (_: InterruptedException) {}
                 continue
+            }
+            if ((effectiveAudioMode == "INTERNAL" && playbackDead) ||
+                (effectiveAudioMode == "MIC" && micDead) ||
+                (effectiveAudioMode == "BOTH" && micDead && playbackDead)
+            ) {
+                // Jaga pace encoding silence ~21ms per chunk agar PTS tetap wajar tanpa membanjiri CPU
+                try { Thread.sleep(20) } catch (_: InterruptedException) {}
             }
 
             var offsetShorts = 0
@@ -894,11 +1134,22 @@ class MediaCodecScreenRecorder(
                     inBuf.put(((s.toInt() shr 8) and 0xFF).toByte())
                 }
 
-                val framesThisChunk = chunkShorts / audioChannelCount.coerceAtLeast(1)
-                val samplePtsUs = (samplesEncoded * 1_000_000L) / audioSampleRate
+                val framesThisChunk = (chunkShorts / audioChannelCount.coerceAtLeast(1)).toLong()
                 val wallPtsUs = currentNormalizedPtsUs()
-                val ptsUs = maxOf(samplePtsUs, minOf(wallPtsUs, samplePtsUs + 50_000L))
-                samplesEncoded += framesThisChunk
+                val (ptsUs, resynced) = computeAlignedAudioPtsUs(
+                    audioEpochBaseUs = audioEpochBaseUs,
+                    samplesSinceEpoch = samplesSinceEpoch,
+                    sampleRate = audioSampleRate,
+                    wallPtsUs = wallPtsUs,
+                    lastQueuedPtsUs = lastQueuedAudioPtsUs
+                )
+                if (resynced) {
+                    audioEpochBaseUs = ptsUs
+                    samplesSinceEpoch = framesThisChunk
+                } else {
+                    samplesSinceEpoch += framesThisChunk
+                }
+                lastQueuedAudioPtsUs = ptsUs
 
                 try {
                     encoder.queueInputBuffer(inIdx, 0, chunkShorts * 2, ptsUs, 0)
@@ -915,12 +1166,18 @@ class MediaCodecScreenRecorder(
         try {
             val inIdx = encoder.dequeueInputBuffer(50_000L)
             if (inIdx >= 0) {
-                val ptsUs = (samplesEncoded * 1_000_000L) / audioSampleRate
+                val (eosPtsUs, _) = computeAlignedAudioPtsUs(
+                    audioEpochBaseUs = audioEpochBaseUs,
+                    samplesSinceEpoch = samplesSinceEpoch,
+                    sampleRate = audioSampleRate,
+                    wallPtsUs = currentNormalizedPtsUs(),
+                    lastQueuedPtsUs = lastQueuedAudioPtsUs
+                )
                 encoder.queueInputBuffer(
                     inIdx,
                     0,
                     0,
-                    ptsUs,
+                    eosPtsUs,
                     MediaCodec.BUFFER_FLAG_END_OF_STREAM
                 )
             }

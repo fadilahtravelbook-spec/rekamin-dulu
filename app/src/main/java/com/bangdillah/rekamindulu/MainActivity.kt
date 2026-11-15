@@ -1463,7 +1463,10 @@ open class MainActivity : AppCompatActivity() {
                 setDataAndType(uri, "audio/*")
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             }
-            startActivity(Intent.createChooser(intent, "Putar Audio dengan"))
+            AppLockHelper.launchExternalWithLockBypass(
+                this,
+                Intent.createChooser(intent, "Putar Audio dengan")
+            )
         } catch (e: Exception) {
             Toast.makeText(this, "Tidak ada aplikasi pemutar audio eksternal", Toast.LENGTH_SHORT).show()
         }
@@ -1481,7 +1484,10 @@ open class MainActivity : AppCompatActivity() {
                 putExtra(Intent.EXTRA_STREAM, uri)
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             }
-            startActivity(Intent.createChooser(shareIntent, "Bagikan Audio"))
+            AppLockHelper.launchExternalWithLockBypass(
+                this,
+                Intent.createChooser(shareIntent, "Bagikan Audio")
+            )
         } catch (e: Exception) {
             Toast.makeText(this, "Gagal membagikan audio: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
         }
@@ -1571,7 +1577,10 @@ open class MainActivity : AppCompatActivity() {
                 putExtra(Intent.EXTRA_STREAM, uri)
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             }
-            startActivity(Intent.createChooser(shareIntent, "Bagikan Rekaman Layar"))
+            AppLockHelper.launchExternalWithLockBypass(
+                this,
+                Intent.createChooser(shareIntent, "Bagikan Rekaman Layar")
+            )
         } catch (e: Exception) {
             Toast.makeText(this, "Gagal membagikan video: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
         }
@@ -1618,6 +1627,16 @@ open class MainActivity : AppCompatActivity() {
     }
 
     private fun updateLibraryStats() {
+        if (AppLockHelper.shouldRequirePin(
+                appPreferences.isAppLockEnabled,
+                appPreferences.appLockPin,
+                HomeActivity.isSessionUnlocked
+            )
+        ) {
+            findViewById<TextView>(R.id.text_library_stats)?.text = "🔒 Terkunci"
+            findViewById<TextView>(R.id.text_cloud_sync_detail)?.text = "Buka kunci PIN untuk melihat ringkasan rekaman"
+            return
+        }
         lifecycleScope.launch(Dispatchers.IO) {
             try {
                 val files = StorageHelper.getAllVideoFiles(this@MainActivity)
@@ -2157,7 +2176,7 @@ open class MainActivity : AppCompatActivity() {
             val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
                 data = android.net.Uri.fromParts("package", packageName, null)
             }
-            startActivity(intent)
+            AppLockHelper.launchExternalWithLockBypass(this, intent)
         } catch (e: Exception) {
             Toast.makeText(this, "Buka Pengaturan HP > Aplikasi > Rekamin Dulu > Izin", Toast.LENGTH_SHORT).show()
         }

@@ -79,6 +79,32 @@ class ProjectionSurfaceRelay(
             0f, 1f,
             1f, 1f
         )
+
+        /**
+         * Menghitung matriks skala X/Y (letterbox/pillarbox presisi) agar sumber video dengan rasio
+         * aspek berbeda (misal rotasi layar atau split-screen) dirender proporsional tanpa distorsi
+         * ke permukaan encoder yang dimensinya sudah terkunci.
+         */
+        fun computeAspectFitScale(
+            sourceWidth: Int,
+            sourceHeight: Int,
+            targetWidth: Int,
+            targetHeight: Int
+        ): Pair<Float, Float> {
+            if (sourceWidth <= 0 || sourceHeight <= 0 || targetWidth <= 0 || targetHeight <= 0) {
+                return Pair(1f, 1f)
+            }
+            val srcRatio = sourceWidth.toFloat() / sourceHeight.toFloat()
+            val dstRatio = targetWidth.toFloat() / targetHeight.toFloat()
+            if (kotlin.math.abs(srcRatio - dstRatio) < 0.002f) {
+                return Pair(1f, 1f)
+            }
+            return if (srcRatio > dstRatio) {
+                Pair(1f, (dstRatio / srcRatio).coerceIn(0.05f, 1f))
+            } else {
+                Pair((srcRatio / dstRatio).coerceIn(0.05f, 1f), 1f)
+            }
+        }
     }
 
     private val thread = HandlerThread("RekaminSurfaceRelay").apply { start() }
@@ -118,17 +144,43 @@ class ProjectionSurfaceRelay(
         }
 
     private val texMatrix = FloatArray(16)
-    private val identityMatrix = FloatArray(16).apply { Matrix.setIdentityM(this, 0) }
+    private val renderMvpMatrix = FloatArray(16).apply { Matrix.setIdentityM(this, 0) }
+    private val screenshotMvpMatrix = FloatArray(16).apply {
+        Matrix.setIdentityM(this, 0)
+        Matrix.scaleM(this, 0, 1f, -1f, 1f)
+    }
     private val flipYMatrix = FloatArray(16).apply {
         Matrix.setIdentityM(this, 0)
         Matrix.scaleM(this, 0, 1f, -1f, 1f)
     }
+
+    @Volatile
+    private var sourceWidth: Int = width
+    @Volatile
+    private var sourceHeight: Int = height
 
     private val isPaused = AtomicBoolean(false)
     private val isReleased = AtomicBoolean(false)
     @Volatile
     private var hasFrame = false
     private var lastEncoderPtsNs: Long = 0L
+
+    // Real capture FPS & jitter telemetry dari SurfaceTexture VirtualDisplay
+    @Volatile
+    var currentCaptureFps: Int = 0
+        private set
+    @Volatile
+    var currentCaptureJitterMs: Double = 0.0
+        private set
+    @Volatile
+    var lastCaptureFrameTimeNanos: Long = 0L
+        private set
+
+    private var prevTelemetryNs: Long = 0L
+    private val telemetryDeltas = LongArray(12)
+    private var telemetryIdx = 0
+    private var telemetryCount = 0
+    private var telemetryEmaFps = 0.0
 
     fun prepare(): Surface {
         val latch = CountDownLatch(1)
@@ -160,15 +212,23 @@ class ProjectionSurfaceRelay(
 
     fun setPaused(paused: Boolean) {
         isPaused.set(paused)
+        if (paused) {
+            prevTelemetryNs = 0L
+            telemetryCount = 0
+            currentCaptureFps = 0
+        }
     }
 
     fun updateSize(newWidth: Int, newHeight: Int) {
         if (isReleased.get() || newWidth <= 0 || newHeight <= 0) return
         handler.post {
             if (isReleased.get()) return@post
-            if (width == newWidth && height == newHeight) return@post
+            if (width == newWidth && height == newHeight && sourceWidth == newWidth && sourceHeight == newHeight) return@post
             width = newWidth
             height = newHeight
+            sourceWidth = newWidth
+            sourceHeight = newHeight
+            recomputeMvpMatricesOnThread()
             try {
                 surfaceTexture?.setDefaultBufferSize(newWidth, newHeight)
             } catch (e: Exception) {
@@ -177,6 +237,38 @@ class ProjectionSurfaceRelay(
             deleteOffscreenFboOnThread()
             Log.i(TAG, "ProjectionSurfaceRelay ukuran diperbarui ke ${newWidth}x${newHeight}")
         }
+    }
+
+    /**
+     * Memperbarui dimensi konten sumber (VirtualDisplay/SurfaceTexture) di tengah rekaman
+     * saat ukuran encoder Video MediaCodec sudah terkunci. Frame akan dirender secara aspect-fit
+     * dengan letterbox/pillarbox hitam tanpa memutus rekaman.
+     */
+    fun updateSourceContentSize(newSourceWidth: Int, newSourceHeight: Int) {
+        if (isReleased.get() || newSourceWidth <= 0 || newSourceHeight <= 0) return
+        handler.post {
+            if (isReleased.get()) return@post
+            if (sourceWidth == newSourceWidth && sourceHeight == newSourceHeight) return@post
+            sourceWidth = newSourceWidth
+            sourceHeight = newSourceHeight
+            recomputeMvpMatricesOnThread()
+            try {
+                surfaceTexture?.setDefaultBufferSize(newSourceWidth, newSourceHeight)
+            } catch (e: Exception) {
+                Log.w(TAG, "setDefaultBufferSize gagal saat updateSourceContentSize: ${e.message}")
+            }
+            Log.i(
+                TAG,
+                "ProjectionSurfaceRelay konten sumber disesuaikan ke ${newSourceWidth}x${newSourceHeight} (encoder tetap ${width}x${height})"
+            )
+        }
+    }
+
+    private fun recomputeMvpMatricesOnThread() {
+        val (sx, sy) = computeAspectFitScale(sourceWidth, sourceHeight, width, height)
+        Matrix.setIdentityM(renderMvpMatrix, 0)
+        Matrix.scaleM(renderMvpMatrix, 0, sx, sy, 1f)
+        Matrix.multiplyMM(screenshotMvpMatrix, 0, flipYMatrix, 0, renderMvpMatrix, 0)
     }
 
     fun captureBitmap(callback: (Bitmap?) -> Unit) {
@@ -212,7 +304,9 @@ class ProjectionSurfaceRelay(
                 ensureOffscreenFbo(snapW, snapH)
                 GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, fboId)
                 GLES20.glViewport(0, 0, snapW, snapH)
-                drawOesQuad(mvpMatrix = flipYMatrix)
+                GLES20.glClearColor(0f, 0f, 0f, 1f)
+                GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT)
+                drawOesQuad(mvpMatrix = screenshotMvpMatrix)
                 GLES20.glFinish()
 
                 val pixelBuffer = ByteBuffer.allocateDirect(snapW * snapH * 4).order(ByteOrder.nativeOrder())
@@ -316,19 +410,60 @@ class ProjectionSurfaceRelay(
 
             if (isPaused.get()) return
 
+            val nowNs = System.nanoTime()
+            updateCaptureTelemetry(nowNs)
+
             val snapW = width.coerceAtLeast(1)
             val snapH = height.coerceAtLeast(1)
             GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, 0)
             GLES20.glViewport(0, 0, snapW, snapH)
-            drawOesQuad(mvpMatrix = identityMatrix)
+            GLES20.glClearColor(0f, 0f, 0f, 1f)
+            GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT)
+            drawOesQuad(mvpMatrix = renderMvpMatrix)
 
-            val rawPts = st.timestamp.takeIf { it > 0L } ?: System.nanoTime()
+            val stTs = st.timestamp
+            val rawPts = if (stTs > 0L && kotlin.math.abs(stTs - nowNs) <= 5_000_000_000L) {
+                stTs
+            } else {
+                nowNs
+            }
             val monotonicPts = if (rawPts > lastEncoderPtsNs) rawPts else lastEncoderPtsNs + 1_000_000L
             lastEncoderPtsNs = monotonicPts
             EGLExt.eglPresentationTimeANDROID(eglDisplay, encoderEglSurface, monotonicPts)
             EGL14.eglSwapBuffers(eglDisplay, encoderEglSurface)
         } catch (e: Exception) {
             Log.w(TAG, "onFrameAvailable error: ${e.message}")
+        }
+    }
+
+    private fun updateCaptureTelemetry(nowNs: Long) {
+        lastCaptureFrameTimeNanos = nowNs
+        val prev = prevTelemetryNs
+        prevTelemetryNs = nowNs
+        if (prev <= 0L) return
+        val delta = nowNs - prev
+        if (delta in 4_000_000L..350_000_000L) {
+            telemetryDeltas[telemetryIdx] = delta
+            telemetryIdx = (telemetryIdx + 1) % telemetryDeltas.size
+            if (telemetryCount < telemetryDeltas.size) telemetryCount++
+            if (telemetryCount >= 2) {
+                var sum = 0L
+                for (i in 0 until telemetryCount) sum += telemetryDeltas[i]
+                val avg = sum.toDouble() / telemetryCount
+                val instantFps = (1_000_000_000.0 / avg.coerceAtLeast(1_000_000.0)).coerceIn(5.0, 144.0)
+                telemetryEmaFps = if (telemetryEmaFps <= 0.0) {
+                    instantFps
+                } else {
+                    val alpha = if (instantFps < telemetryEmaFps) 0.45 else 0.30
+                    (alpha * instantFps) + ((1.0 - alpha) * telemetryEmaFps)
+                }
+                var sumJitter = 0.0
+                for (i in 0 until telemetryCount) {
+                    sumJitter += kotlin.math.abs(telemetryDeltas[i] - avg)
+                }
+                currentCaptureJitterMs = (sumJitter / telemetryCount) / 1_000_000.0
+                currentCaptureFps = Math.round(telemetryEmaFps).toInt().coerceIn(5, 144)
+            }
         }
     }
 

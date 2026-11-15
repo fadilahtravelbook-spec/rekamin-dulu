@@ -21,6 +21,27 @@ import com.bangdillah.rekamindulu.utils.AppPreferences
 object RecordingEngineOptimizer {
 
     private const val TAG = "RecordingEngineOptimizer"
+    const val CRITICAL_STORAGE_BYTES = 80L * 1024L * 1024L // 80 MB sisa aman agar moov atom tetap bisa ditulis
+    const val MAX_RECORDING_FILE_BYTES = 3_850L * 1024L * 1024L // ~3.76 GB aman di bawah batas 4 GB MP4/FAT32
+
+    enum class RecordingHealthStatus {
+        OK,
+        LOW_STORAGE_STOP,
+        MAX_FILE_SIZE_STOP
+    }
+
+    fun evaluateActiveRecordingHealth(
+        freeStorageBytes: Long,
+        currentFileBytes: Long
+    ): RecordingHealthStatus {
+        if (freeStorageBytes in 0L until CRITICAL_STORAGE_BYTES) {
+            return RecordingHealthStatus.LOW_STORAGE_STOP
+        }
+        if (currentFileBytes >= MAX_RECORDING_FILE_BYTES) {
+            return RecordingHealthStatus.MAX_FILE_SIZE_STOP
+        }
+        return RecordingHealthStatus.OK
+    }
 
     data class OutputDimensions(
         val width: Int,

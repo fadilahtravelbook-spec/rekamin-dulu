@@ -44,6 +44,28 @@ class PlayerActivity : AppCompatActivity() {
         }
 
         fun formatTime(ms: Int): String = UiHelper.formatDurationMs(ms.toLong())
+
+        /**
+         * Menentukan posisi & status play/pause yang harus disimpan pada onSaveInstanceState.
+         * Pada Android 9+, onPause() berjalan sebelum onSaveInstanceState() sehingga VideoView
+         * sudah dalam kondisi pause saat state disimpan; helper ini mencegah status wasPlaying
+         * dan posisi video tertimpa menjadi false/0 saat rotasi layar.
+         */
+        fun resolveSavedPlaybackState(
+            isPrepared: Boolean,
+            isCurrentlyPlaying: Boolean,
+            liveCurrentPositionMs: Int,
+            restoredPositionMs: Int,
+            restoredWasPlaying: Boolean
+        ): Pair<Int, Boolean> {
+            val resolvedPos = if (isPrepared) {
+                liveCurrentPositionMs.coerceAtLeast(0)
+            } else {
+                restoredPositionMs.coerceAtLeast(0)
+            }
+            val resolvedPlaying = if (isCurrentlyPlaying) true else restoredWasPlaying
+            return Pair(resolvedPos, resolvedPlaying)
+        }
     }
 
     private var videoView: VideoView? = null
@@ -74,6 +96,8 @@ class PlayerActivity : AppCompatActivity() {
     private var appLockDialog: AlertDialog? = null
     private var isVideoLoaded = false
     private var surfaceLostInStop = false
+    private var isPrepared = false
+    private var hasPendingSpeedChange = false
 
     private val handler = Handler(Looper.getMainLooper())
     private val updateSeekRunnable = object : Runnable {
@@ -81,6 +105,7 @@ class PlayerActivity : AppCompatActivity() {
             videoView?.let { vv ->
                 if (vv.isPlaying) {
                     val current = vv.currentPosition
+                    restoredPosition = current
                     seekBar?.progress = current
                     currentTimeText?.text = formatTime(current)
                     handler.postDelayed(this, 300)
@@ -236,6 +261,7 @@ class PlayerActivity : AppCompatActivity() {
         }
 
         surfaceLostInStop = false
+        isPrepared = false
         handler.removeCallbacks(updateSeekRunnable)
         handler.removeCallbacks(hideControlsRunnable)
         videoView?.stopPlayback()
@@ -308,12 +334,20 @@ class PlayerActivity : AppCompatActivity() {
         playPauseBtn?.setOnClickListener {
             videoView?.let { vv ->
                 if (vv.isPlaying) {
+                    if (isPrepared) {
+                        restoredPosition = vv.currentPosition.coerceAtLeast(0)
+                    }
+                    restoredWasPlaying = false
                     vv.pause()
                     playPauseBtn?.setImageResource(R.drawable.ic_play_arrow)
                     handler.removeCallbacks(updateSeekRunnable)
                     handler.removeCallbacks(hideControlsRunnable)
                 } else {
+                    restoredWasPlaying = true
                     vv.start()
+                    if (hasPendingSpeedChange) {
+                        applyPlaybackSpeed(speedValues[currentSpeedIndex])
+                    }
                     playPauseBtn?.setImageResource(R.drawable.ic_pause)
                     handler.post(updateSeekRunnable)
                     scheduleControlsAutoHide()
@@ -334,6 +368,7 @@ class PlayerActivity : AppCompatActivity() {
         findViewById<ImageView>(R.id.btn_rewind)?.setOnClickListener {
             videoView?.let { vv ->
                 val newPos = (vv.currentPosition - 10000).coerceAtLeast(0)
+                restoredPosition = newPos
                 vv.seekTo(newPos)
                 seekBar?.progress = newPos
                 currentTimeText?.text = formatTime(newPos)
@@ -345,6 +380,7 @@ class PlayerActivity : AppCompatActivity() {
             videoView?.let { vv ->
                 val maxDur = if (vv.duration > 0) vv.duration else (vv.currentPosition + 10000)
                 val newPos = (vv.currentPosition + 10000).coerceIn(0, maxDur)
+                restoredPosition = newPos
                 vv.seekTo(newPos)
                 seekBar?.progress = newPos
                 currentTimeText?.text = formatTime(newPos)
@@ -364,7 +400,10 @@ class PlayerActivity : AppCompatActivity() {
             }
 
             override fun onStopTrackingTouch(sb: SeekBar?) {
-                sb?.let { videoView?.seekTo(it.progress) }
+                sb?.let {
+                    restoredPosition = it.progress.coerceAtLeast(0)
+                    videoView?.seekTo(it.progress)
+                }
                 scheduleControlsAutoHide()
             }
         })
@@ -474,15 +513,17 @@ class PlayerActivity : AppCompatActivity() {
     private fun applyPlaybackSpeed(speed: Float) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             try {
-                currentMediaPlayer?.let { mp ->
-                    val wasPlaying = videoView?.isPlaying == true || mp.isPlaying
+                val mp = currentMediaPlayer
+                val isCurrentlyPlaying = isPrepared && (videoView?.isPlaying == true || mp?.isPlaying == true)
+                if (mp != null && isCurrentlyPlaying) {
                     val params = mp.playbackParams ?: PlaybackParams()
                     params.speed = speed
                     mp.playbackParams = params
-                    if (!wasPlaying) {
-                        videoView?.pause()
-                        playPauseBtn?.setImageResource(R.drawable.ic_play_arrow)
-                    }
+                    hasPendingSpeedChange = false
+                } else {
+                    // Jangan panggil mp.playbackParams saat pause karena MediaPlayer Android otomatis
+                    // memulai pemutaran dan menyebabkan letupan audio sesaat; terapkan saat Play ditekan.
+                    hasPendingSpeedChange = true
                 }
             } catch (e: Exception) {
                 Toast.makeText(this, "Kecepatan pemutaran tidak didukung pada hardware ini", Toast.LENGTH_SHORT).show()
@@ -493,27 +534,29 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     private fun loadAndPlayVideo(file: File) {
+        isPrepared = false
         videoView?.setVideoPath(file.absolutePath)
 
         videoView?.setOnPreparedListener { mp ->
             currentMediaPlayer = mp
+            isPrepared = true
             val duration = mp.duration.coerceAtLeast(0)
             seekBar?.max = duration
             totalTimeText?.text = formatTime(duration)
 
-            if (currentSpeedIndex != 2) {
-                val speed = speedValues[currentSpeedIndex]
-                applyPlaybackSpeed(speed)
-            }
-
             if (restoredPosition > 0) {
-                videoView?.seekTo(restoredPosition)
-                seekBar?.progress = restoredPosition
-                currentTimeText?.text = formatTime(restoredPosition)
+                val targetPos = if (duration > 0) restoredPosition.coerceAtMost(duration) else restoredPosition
+                videoView?.seekTo(targetPos)
+                seekBar?.progress = targetPos
+                currentTimeText?.text = formatTime(targetPos)
             }
 
+            hasPendingSpeedChange = (currentSpeedIndex != 2)
             if (restoredWasPlaying) {
                 videoView?.start()
+                if (hasPendingSpeedChange) {
+                    applyPlaybackSpeed(speedValues[currentSpeedIndex])
+                }
                 playPauseBtn?.setImageResource(R.drawable.ic_pause)
                 handler.post(updateSeekRunnable)
                 scheduleControlsAutoHide()
@@ -524,6 +567,8 @@ class PlayerActivity : AppCompatActivity() {
         }
 
         videoView?.setOnCompletionListener {
+            restoredWasPlaying = false
+            restoredPosition = 0
             playPauseBtn?.setImageResource(R.drawable.ic_play_arrow)
             handler.removeCallbacks(updateSeekRunnable)
             showControls()
@@ -533,6 +578,7 @@ class PlayerActivity : AppCompatActivity() {
         }
 
         videoView?.setOnErrorListener { _, what, extra ->
+            isPrepared = false
             if (!isFinishing && !isDestroyed) {
                 try { activeDialog?.dismiss() } catch (ignored: Exception) {}
                 activeDialog = MaterialAlertDialogBuilder(this)
@@ -559,7 +605,10 @@ class PlayerActivity : AppCompatActivity() {
                 putExtra(Intent.EXTRA_STREAM, uri)
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             }
-            startActivity(Intent.createChooser(shareIntent, "Bagikan Video Rekaman"))
+            AppLockHelper.launchExternalWithLockBypass(
+                this,
+                Intent.createChooser(shareIntent, "Bagikan Video Rekaman")
+            )
         } catch (e: Exception) {
             Toast.makeText(this, "Gagal membagikan video: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
         }
@@ -576,7 +625,10 @@ class PlayerActivity : AppCompatActivity() {
                 setDataAndType(uri, "video/mp4")
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             }
-            startActivity(Intent.createChooser(viewIntent, "Buka Video dengan"))
+            AppLockHelper.launchExternalWithLockBypass(
+                this,
+                Intent.createChooser(viewIntent, "Buka Video dengan")
+            )
         } catch (e: Exception) {
             Toast.makeText(this, "Tidak ada aplikasi pemutar video eksternal", Toast.LENGTH_SHORT).show()
         }
@@ -642,7 +694,10 @@ class PlayerActivity : AppCompatActivity() {
                                             setDataAndType(uri, "audio/*")
                                             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                                         }
-                                        startActivity(Intent.createChooser(playIntent, "Putar Audio dengan"))
+                                        AppLockHelper.launchExternalWithLockBypass(
+                                            this,
+                                            Intent.createChooser(playIntent, "Putar Audio dengan")
+                                        )
                                     } catch (e: Exception) {
                                         Toast.makeText(this, "Tidak ada pemutar audio eksternal", Toast.LENGTH_SHORT).show()
                                     }
@@ -659,7 +714,10 @@ class PlayerActivity : AppCompatActivity() {
                                             putExtra(Intent.EXTRA_STREAM, uri)
                                             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                                         }
-                                        startActivity(Intent.createChooser(shareIntent, "Bagikan Audio"))
+                                        AppLockHelper.launchExternalWithLockBypass(
+                                            this,
+                                            Intent.createChooser(shareIntent, "Bagikan Audio")
+                                        )
                                     } catch (e: Exception) {
                                         Toast.makeText(this, "Gagal membagikan: ${e.message}", Toast.LENGTH_SHORT).show()
                                     }
@@ -677,8 +735,13 @@ class PlayerActivity : AppCompatActivity() {
 
     override fun onSaveInstanceState(outState: Bundle) {
         super.onSaveInstanceState(outState)
-        val pos = videoView?.currentPosition ?: restoredPosition
-        val playing = videoView?.isPlaying ?: restoredWasPlaying
+        val (pos, playing) = resolveSavedPlaybackState(
+            isPrepared = isPrepared,
+            isCurrentlyPlaying = videoView?.isPlaying == true,
+            liveCurrentPositionMs = videoView?.currentPosition ?: 0,
+            restoredPositionMs = restoredPosition,
+            restoredWasPlaying = restoredWasPlaying
+        )
         outState.putInt("KEY_PLAYBACK_POSITION", pos)
         outState.putBoolean("KEY_WAS_PLAYING", playing)
         outState.putInt("KEY_SPEED_INDEX", currentSpeedIndex)
@@ -686,15 +749,17 @@ class PlayerActivity : AppCompatActivity() {
 
     override fun onPause() {
         super.onPause()
-        if (videoView?.isPlaying == true) {
-            restoredPosition = videoView?.currentPosition ?: 0
+        val isPlayingNow = videoView?.isPlaying == true
+        if (isPrepared) {
+            restoredPosition = (videoView?.currentPosition ?: restoredPosition).coerceAtLeast(0)
+        }
+        if (isPlayingNow) {
             restoredWasPlaying = true
             videoView?.pause()
             playPauseBtn?.setImageResource(R.drawable.ic_play_arrow)
             handler.removeCallbacks(updateSeekRunnable)
             handler.removeCallbacks(hideControlsRunnable)
         } else {
-            restoredPosition = videoView?.currentPosition ?: restoredPosition
             restoredWasPlaying = false
         }
     }

@@ -19,7 +19,7 @@
     <!-- ========== APPLICATION CONFIG ========== -->
     <application
         android:name=".RekaminDuluApplication"
-        android:allowBackup="true"
+        android:allowBackup="false"
         android:icon="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:label="@string/app_name"
@@ -58,18 +58,6 @@
             android:name=".HomeActivity"
             android:exported="false"
             android:launchMode="singleTop"
-            android:theme="@style/Theme.RekaminDulu.NoActionBar" />
-
-        <!-- PERMISSION DIALOG ACTIVITY -->
-        <activity
-            android:name=".permission.PermissionDialogActivity"
-            android:exported="false"
-            android:theme="@style/Theme.RekaminDulu.Dialog" />
-
-        <!-- COUNTDOWN ACTIVITY -->
-        <activity
-            android:name=".countdown.CountdownActivity"
-            android:exported="false"
             android:theme="@style/Theme.RekaminDulu.NoActionBar" />
 
         <!-- SETTINGS ACTIVITY -->
@@ -111,12 +99,6 @@
         <!-- SCREEN RECORDING SERVICE -->
         <service
             android:name=".service.ScreenRecordingService"
-            android:exported="false"
-            android:foregroundServiceType="mediaProjection|microphone|camera" />
-
-        <!-- SCREEN RECORDER SERVICE -->
-        <service
-            android:name=".service.ScreenRecorderService"
             android:exported="false"
             android:foregroundServiceType="mediaProjection|microphone|camera" />
 

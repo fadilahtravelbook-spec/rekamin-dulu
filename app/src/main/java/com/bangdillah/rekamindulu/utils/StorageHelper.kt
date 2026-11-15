@@ -18,10 +18,12 @@ import android.os.Looper
 import android.provider.MediaStore
 import android.util.Log
 import java.io.File
+import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.util.concurrent.Executors
 
 
 /**
@@ -33,6 +35,7 @@ object StorageHelper {
     private const val TAG = "StorageHelper"
     private const val FOLDER_NAME = "RekaminDulu"
     private val mainHandler = Handler(Looper.getMainLooper())
+    private val mediaStoreExecutor = Executors.newSingleThreadExecutor()
 
     /**
      * Mendapatkan direktori penyimpanan untuk rekaman video.
@@ -208,8 +211,10 @@ object StorageHelper {
     }
 
     /**
-     * Mendaftarkan file video ke MediaStore galeri Android melalui MediaScannerConnection
-     * dan mengupdate MediaStore ContentResolver agar video seketika muncul di galeri ponsel.
+     * Mendaftarkan file video ke MediaStore galeri Android.
+     * Di Android 10+ (API 29+), juga mempublikasikan salinan resmi ke galeri publik
+     * (Movies/RekaminDulu) tanpa memerlukan izin storage tambahan agar tetap terlihat
+     * di Galeri sistem dan aman saat aplikasi dicopot.
      */
     fun scanVideoFile(
         context: Context,
@@ -218,17 +223,195 @@ object StorageHelper {
     ) {
         if (!file.exists() || file.length() < 100) return
 
+        val appCtx = context.applicationContext
+        val work = Runnable {
+            var publishedUri: Uri? = null
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                publishedUri = publishVideoToPublicGallery(appCtx, file)
+            }
+            try {
+                MediaScannerConnection.scanFile(
+                    appCtx,
+                    arrayOf(file.absolutePath),
+                    arrayOf("video/mp4")
+                ) { path, uri ->
+                    Log.i(TAG, "MediaScanner indexed: $path -> ${publishedUri ?: uri}")
+                    onScanned?.invoke(path, publishedUri ?: uri)
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed scanning video file ${file.absolutePath}", e)
+                if (publishedUri != null) {
+                    onScanned?.invoke(file.absolutePath, publishedUri)
+                }
+            }
+        }
+
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            mediaStoreExecutor.execute(work)
+        } else {
+            work.run()
+        }
+    }
+
+    /**
+     * Menyalin video MP4 yang sudah final ke koleksi publik MediaStore.Video (Movies/RekaminDulu)
+     * menggunakan scoped IS_PENDING tanpa izin storage tambahan (Play-policy compliant).
+     */
+    fun publishVideoToPublicGallery(context: Context, file: File): Uri? {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return null
+        if (!file.exists() || file.length() < 1024L) return null
+
+        val resolver = context.contentResolver
+        val relPathPrefix = "${Environment.DIRECTORY_MOVIES}/$FOLDER_NAME"
         try {
-            MediaScannerConnection.scanFile(
-                context.applicationContext,
-                arrayOf(file.absolutePath),
-                arrayOf("video/mp4")
-            ) { path, uri ->
-                Log.i(TAG, "MediaScanner indexed: $path -> $uri")
-                onScanned?.invoke(path, uri)
+            val projection = arrayOf(MediaStore.Video.Media._ID, MediaStore.Video.Media.SIZE)
+            val selection = "${MediaStore.Video.Media.DISPLAY_NAME} = ? AND ${MediaStore.Video.Media.RELATIVE_PATH} LIKE ?"
+            val args = arrayOf(file.name, "%$FOLDER_NAME%")
+            resolver.query(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, projection, selection, args, null)?.use { cursor ->
+                if (cursor.moveToFirst()) {
+                    val idCol = cursor.getColumnIndexOrThrow(MediaStore.Video.Media._ID)
+                    val sizeCol = cursor.getColumnIndexOrThrow(MediaStore.Video.Media.SIZE)
+                    val existingSize = cursor.getLong(sizeCol)
+                    if (existingSize == file.length()) {
+                        val id = cursor.getLong(idCol)
+                        return Uri.withAppendedPath(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, id.toString())
+                    }
+                }
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Failed scanning video file ${file.absolutePath}", e)
+            Log.w(TAG, "MediaStore deduplication check skipped: ${e.message}")
+        }
+
+        var insertedUri: Uri? = null
+        return try {
+            val values = ContentValues().apply {
+                put(MediaStore.Video.Media.DISPLAY_NAME, file.name)
+                put(MediaStore.Video.Media.MIME_TYPE, "video/mp4")
+                put(MediaStore.Video.Media.RELATIVE_PATH, relPathPrefix)
+                put(MediaStore.Video.Media.DATE_TAKEN, file.lastModified())
+                put(MediaStore.Video.Media.IS_PENDING, 1)
+            }
+            val uri = resolver.insert(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, values) ?: return null
+            insertedUri = uri
+
+            resolver.openOutputStream(uri)?.use { out ->
+                FileInputStream(file).use { input ->
+                    input.copyTo(out, 64 * 1024)
+                }
+            } ?: throw IllegalStateException("Gagal membuka OutputStream MediaStore untuk ${file.name}")
+
+            val publishValues = ContentValues().apply {
+                put(MediaStore.Video.Media.IS_PENDING, 0)
+            }
+            resolver.update(uri, publishValues, null, null)
+            Log.i(TAG, "Video dipublikasikan ke Galeri publik ($relPathPrefix/${file.name})")
+            uri
+        } catch (e: Exception) {
+            Log.w(TAG, "Gagal mempublikasikan video ke Galeri publik: ${e.message}")
+            insertedUri?.let { staleUri ->
+                try { resolver.delete(staleUri, null, null) } catch (_: Exception) {}
+            }
+            null
+        }
+    }
+
+    /**
+     * Mendaftarkan file audio (.m4a) hasil ekstraksi ke MediaStore.Audio publik (Music/RekaminDulu)
+     * pada Android 10+ dan memindai file dengan MediaScannerConnection agar terbaca pemutar musik.
+     */
+    fun scanAudioFile(
+        context: Context,
+        file: File,
+        onScanned: ((path: String, uri: Uri?) -> Unit)? = null
+    ) {
+        if (!file.exists() || file.length() < 128L) return
+
+        val appCtx = context.applicationContext
+        val work = Runnable {
+            var publishedUri: Uri? = null
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                publishedUri = publishAudioToPublicMusic(appCtx, file)
+            }
+            try {
+                MediaScannerConnection.scanFile(
+                    appCtx,
+                    arrayOf(file.absolutePath),
+                    arrayOf("audio/mp4")
+                ) { path, uri ->
+                    Log.i(TAG, "Audio MediaScanner indexed: $path -> ${publishedUri ?: uri}")
+                    onScanned?.invoke(path, publishedUri ?: uri)
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed scanning audio file ${file.absolutePath}", e)
+                if (publishedUri != null) {
+                    onScanned?.invoke(file.absolutePath, publishedUri)
+                }
+            }
+        }
+
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            mediaStoreExecutor.execute(work)
+        } else {
+            work.run()
+        }
+    }
+
+    fun publishAudioToPublicMusic(context: Context, file: File): Uri? {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return null
+        if (!file.exists() || file.length() < 128L) return null
+
+        val resolver = context.contentResolver
+        val relPathPrefix = "${Environment.DIRECTORY_MUSIC}/$FOLDER_NAME"
+        try {
+            val projection = arrayOf(MediaStore.Audio.Media._ID, MediaStore.Audio.Media.SIZE)
+            val selection = "${MediaStore.Audio.Media.DISPLAY_NAME} = ? AND ${MediaStore.Audio.Media.RELATIVE_PATH} LIKE ?"
+            val args = arrayOf(file.name, "%$FOLDER_NAME%")
+            resolver.query(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, projection, selection, args, null)?.use { cursor ->
+                if (cursor.moveToFirst()) {
+                    val idCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media._ID)
+                    val sizeCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.SIZE)
+                    val existingSize = cursor.getLong(sizeCol)
+                    if (existingSize == file.length()) {
+                        val id = cursor.getLong(idCol)
+                        return Uri.withAppendedPath(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, id.toString())
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Audio MediaStore deduplication check skipped: ${e.message}")
+        }
+
+        var insertedUri: Uri? = null
+        return try {
+            val values = ContentValues().apply {
+                put(MediaStore.Audio.Media.DISPLAY_NAME, file.name)
+                put(MediaStore.Audio.Media.MIME_TYPE, "audio/mp4")
+                put(MediaStore.Audio.Media.RELATIVE_PATH, relPathPrefix)
+                put(MediaStore.Audio.Media.DATE_ADDED, file.lastModified() / 1000L)
+                put(MediaStore.Audio.Media.IS_MUSIC, 1)
+                put(MediaStore.Audio.Media.IS_PENDING, 1)
+            }
+            val uri = resolver.insert(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, values) ?: return null
+            insertedUri = uri
+
+            resolver.openOutputStream(uri)?.use { out ->
+                FileInputStream(file).use { input ->
+                    input.copyTo(out, 64 * 1024)
+                }
+            } ?: throw IllegalStateException("Gagal membuka OutputStream MediaStore audio untuk ${file.name}")
+
+            val publishValues = ContentValues().apply {
+                put(MediaStore.Audio.Media.IS_PENDING, 0)
+            }
+            resolver.update(uri, publishValues, null, null)
+            Log.i(TAG, "Audio dipublikasikan ke Musik publik ($relPathPrefix/${file.name})")
+            uri
+        } catch (e: Exception) {
+            Log.w(TAG, "Gagal mempublikasikan audio ke MediaStore.Audio: ${e.message}")
+            insertedUri?.let { staleUri ->
+                try { resolver.delete(staleUri, null, null) } catch (_: Exception) {}
+            }
+            null
         }
     }
 
@@ -246,8 +429,8 @@ object StorageHelper {
             @Suppress("DEPRECATION")
             val where = "${MediaStore.Video.Media.DATA} = ?"
             val args = arrayOf(file.absolutePath)
-            val deletedRows = resolver.delete(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, where, args)
-            if (deletedRows == 0 && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            resolver.delete(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, where, args)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 val relWhere = "${MediaStore.Video.Media.DISPLAY_NAME} = ? AND ${MediaStore.Video.Media.RELATIVE_PATH} LIKE ?"
                 val relArgs = arrayOf(file.name, "%$FOLDER_NAME%")
                 resolver.delete(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, relWhere, relArgs)
@@ -272,6 +455,31 @@ object StorageHelper {
      * Sinkronisasi perubahan nama file pada MediaStore galeri ponsel.
      */
     fun scanRenamedFile(context: Context, oldFile: File, newFile: File) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            try {
+                val resolver = context.contentResolver
+                val values = ContentValues().apply {
+                    put(MediaStore.Video.Media.DISPLAY_NAME, newFile.name)
+                }
+                val where = "${MediaStore.Video.Media.DISPLAY_NAME} = ? AND ${MediaStore.Video.Media.RELATIVE_PATH} LIKE ?"
+                val args = arrayOf(oldFile.name, "%$FOLDER_NAME%")
+                val updated = resolver.update(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, values, where, args)
+                if (updated > 0) {
+                    try {
+                        com.bangdillah.rekamindulu.library.LibraryAdapter.invalidateCache(oldFile.absolutePath)
+                    } catch (_: Exception) {}
+                    MediaScannerConnection.scanFile(
+                        context.applicationContext,
+                        arrayOf(newFile.absolutePath),
+                        arrayOf("video/mp4"),
+                        null
+                    )
+                    return
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "MediaStore rename update fallback: ${e.message}")
+            }
+        }
         scanDeletedFile(context, oldFile)
         scanVideoFile(context, newFile)
     }

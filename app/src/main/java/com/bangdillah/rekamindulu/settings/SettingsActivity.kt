@@ -364,10 +364,32 @@ class SettingsActivity : AppCompatActivity() {
                     updateUIValues(skipAppLockSwitch = true)
                 }
             } else {
-                appPreferences.isAppLockEnabled = false
-                HomeActivity.isSessionUnlocked = false
-                AppLockHelper.syncWindowSecurityFlag(this, appPreferences)
-                updateUIValues(skipAppLockSwitch = true)
+                if (appPreferences.appLockPin.isNotEmpty()) {
+                    showVerifyCurrentPinDialog(
+                        title = "Verifikasi PIN Keamanan",
+                        message = "Masukkan PIN Anda saat ini untuk menonaktifkan kunci aplikasi:"
+                    ) { verified ->
+                        if (verified) {
+                            appPreferences.isAppLockEnabled = false
+                            HomeActivity.isSessionUnlocked = false
+                            AppLockHelper.syncWindowSecurityFlag(this, appPreferences)
+                            updateUIValues(skipAppLockSwitch = true)
+                            Toast.makeText(this, "Kunci aplikasi dinonaktifkan", Toast.LENGTH_SHORT).show()
+                        } else {
+                            isUpdatingUi = true
+                            try {
+                                toggleAppLock?.isChecked = true
+                            } finally {
+                                isUpdatingUi = false
+                            }
+                        }
+                    }
+                } else {
+                    appPreferences.isAppLockEnabled = false
+                    HomeActivity.isSessionUnlocked = false
+                    AppLockHelper.syncWindowSecurityFlag(this, appPreferences)
+                    updateUIValues(skipAppLockSwitch = true)
+                }
             }
         }
 
@@ -408,7 +430,18 @@ class SettingsActivity : AppCompatActivity() {
 
         // Change PIN row
         rowSettingPin?.setOnClickListener {
-            showSetPinDialog()
+            if (appPreferences.appLockPin.isNotEmpty()) {
+                showVerifyCurrentPinDialog(
+                    title = "Verifikasi PIN Lama",
+                    message = "Masukkan PIN keamanan saat ini sebelum mengganti dengan PIN baru:"
+                ) { verified ->
+                    if (verified) {
+                        showSetPinDialog()
+                    }
+                }
+            } else {
+                showSetPinDialog()
+            }
         }
 
         // Theme picker
@@ -502,7 +535,7 @@ class SettingsActivity : AppCompatActivity() {
                         android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
                         android.net.Uri.parse("package:$packageName")
                     )
-                    startActivity(intent)
+                    AppLockHelper.launchExternalWithLockBypass(this, intent)
                 } catch (e: Exception) {
                     Toast.makeText(this, "Buka Pengaturan HP > Aplikasi > Rekamin Dulu > Izin Menimpa", Toast.LENGTH_LONG).show()
                 }
@@ -1037,6 +1070,65 @@ class SettingsActivity : AppCompatActivity() {
         }
     }
 
+    private fun showVerifyCurrentPinDialog(
+        title: String,
+        message: String,
+        callback: (Boolean) -> Unit
+    ) {
+        val density = resources.displayMetrics.density
+        val padH = (20 * density).toInt()
+        val padV = (14 * density).toInt()
+        val input = EditText(this).apply {
+            inputType = InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_VARIATION_PASSWORD
+            hint = "Masukkan PIN saat ini"
+            filters = arrayOf(InputFilter.LengthFilter(6))
+            maxLines = 1
+            setPadding(padH, padV, padH, padV)
+            setTextColor(ContextCompat.getColor(this@SettingsActivity, R.color.textTitle))
+            setHintTextColor(ContextCompat.getColor(this@SettingsActivity, R.color.textCaption))
+        }
+
+        var completed = false
+        try { activeDialog?.dismiss() } catch (ignored: Exception) {}
+        val dialog = MaterialAlertDialogBuilder(this)
+            .setIcon(R.drawable.ic_lock)
+            .setTitle(title)
+            .setMessage(message)
+            .setView(input)
+            .setPositiveButton("Verifikasi", null)
+            .setNegativeButton("Batal") { _, _ ->
+                if (!completed) {
+                    completed = true
+                    callback(false)
+                }
+            }
+            .setOnCancelListener {
+                if (!completed) {
+                    completed = true
+                    callback(false)
+                }
+            }
+            .create()
+        activeDialog = dialog
+
+        dialog.setOnShowListener {
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE)?.setOnClickListener {
+                val entered = input.text?.toString().orEmpty()
+                if (AppLockHelper.verifyPin(entered, appPreferences.appLockPin)) {
+                    AppLockHelper.migrateLegacyPinIfNeeded(appPreferences, entered)
+                    completed = true
+                    dialog.dismiss()
+                    callback(true)
+                } else {
+                    input.error = "PIN salah! Coba lagi."
+                    input.text?.clear()
+                }
+            }
+        }
+        AppLockHelper.syncWindowSecurityFlag(dialog.window, appPreferences)
+        dialog.show()
+    }
+
     private fun showSetPinDialog(callback: ((Boolean) -> Unit)? = null) {
         val density = resources.displayMetrics.density
         val padH = (20 * density).toInt()
@@ -1073,7 +1165,7 @@ class SettingsActivity : AppCompatActivity() {
                 if (pin.length < 4) {
                     input.error = "PIN minimal 4 angka"
                 } else {
-                    appPreferences.appLockPin = pin
+                    appPreferences.appLockPin = AppLockHelper.hashPin(pin)
                     appPreferences.isAppLockEnabled = true
                     HomeActivity.isSessionUnlocked = true
                     AppLockHelper.syncWindowSecurityFlag(this, appPreferences)

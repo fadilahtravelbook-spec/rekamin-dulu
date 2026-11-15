@@ -61,6 +61,7 @@ open class ScreenRecordingService : Service() {
         const val ACTION_SET_MIC_MUTED = "ACTION_SET_MIC_MUTED"
         const val ACTION_CAPTURE_SCREENSHOT = "ACTION_CAPTURE_SCREENSHOT"
         const val ACTION_REFRESH_FOREGROUND_TYPE = "ACTION_REFRESH_FOREGROUND_TYPE"
+        const val ACTION_FACECAM_FGS_UPDATED = "ACTION_FACECAM_FGS_UPDATED"
 
         const val ACTION_RECORDING_STOPPED = "ACTION_RECORDING_STOPPED"
         const val ACTION_RECORDING_STATUS_CHANGED = "ACTION_RECORDING_STATUS_CHANGED"
@@ -71,6 +72,8 @@ open class ScreenRecordingService : Service() {
         const val EXTRA_ERROR_MESSAGE = "EXTRA_ERROR_MESSAGE"
         const val EXTRA_STOPPED_BY_ERROR = "EXTRA_STOPPED_BY_ERROR"
         const val EXTRA_MIC_MUTED = "EXTRA_MIC_MUTED"
+        const val EXTRA_CAMERA_FGS_ACTIVE = "EXTRA_CAMERA_FGS_ACTIVE"
+        const val EXTRA_REQUEST_FACECAM_OPEN = "EXTRA_REQUEST_FACECAM_OPEN"
         const val EXTRA_SCREENSHOT_SUCCESS = "EXTRA_SCREENSHOT_SUCCESS"
         const val EXTRA_SCREENSHOT_URI = "EXTRA_SCREENSHOT_URI"
         const val EXTRA_RESULT_CODE = "EXTRA_RESULT_CODE"
@@ -103,6 +106,24 @@ open class ScreenRecordingService : Service() {
         @Volatile
         var effectiveAudioMode: String? = null
             internal set
+
+        @Volatile
+        internal var activeRelayInstance: ProjectionSurfaceRelay? = null
+
+        data class CaptureTelemetry(
+            val fps: Int,
+            val jitterMs: Double,
+            val lastFrameTimeNanos: Long
+        )
+
+        fun getLiveCaptureTelemetry(): CaptureTelemetry? {
+            val relay = activeRelayInstance ?: return null
+            return CaptureTelemetry(
+                fps = relay.currentCaptureFps,
+                jitterMs = relay.currentCaptureJitterMs,
+                lastFrameTimeNanos = relay.lastCaptureFrameTimeNanos
+            )
+        }
 
         @Volatile
         private var pausedAtMillis: Long = 0L
@@ -246,6 +267,8 @@ open class ScreenRecordingService : Service() {
     private var outputFile: File? = null
     private var notificationHelper: NotificationHelper? = null
     private val isStopping = AtomicBoolean(false)
+    @Volatile
+    private var pendingStartIntent: Intent? = null
     private var screenOffReceiverRegistered = false
     private var resizeExecutor: ExecutorService? = null
 
@@ -284,13 +307,48 @@ open class ScreenRecordingService : Service() {
         }
     }
 
+    private var healthCheckTickCount = 0
+
     private val notificationUpdateRunnable = object : Runnable {
         override fun run() {
             if (isRecording && !isStopping.get()) {
                 updateForegroundNotification()
+                healthCheckTickCount++
+                if (!isPaused && healthCheckTickCount % 3 == 0) {
+                    checkActiveRecordingHealthAsync()
+                }
                 mainHandler.postDelayed(this, 1000L)
             }
         }
+    }
+
+    private fun checkActiveRecordingHealthAsync() {
+        val currentFile = outputFile ?: return
+        val executor = resizeExecutor ?: return
+        try {
+            executor.execute {
+                if (!isRecording || isStopping.get()) return@execute
+                val freeBytes = RecordingEngineOptimizer.getAvailableStorageBytes(this)
+                val fileBytes = try { currentFile.length() } catch (_: Exception) { 0L }
+                when (RecordingEngineOptimizer.evaluateActiveRecordingHealth(freeBytes, fileBytes)) {
+                    RecordingEngineOptimizer.RecordingHealthStatus.LOW_STORAGE_STOP -> {
+                        Log.w(TAG, "Low storage detected during recording (free=$freeBytes); stopping cleanly")
+                        stopRecordingInternal(
+                            stopErrorMessage = "Penyimpanan hampir penuh (< 80 MB). Perekaman dihentikan aman agar file video tetap utuh.",
+                            stopNoticeTitle = "Rekaman Dihentikan (Penyimpanan Hampir Penuh)"
+                        )
+                    }
+                    RecordingEngineOptimizer.RecordingHealthStatus.MAX_FILE_SIZE_STOP -> {
+                        Log.w(TAG, "Max safe MP4 size reached (size=$fileBytes); stopping cleanly")
+                        stopRecordingInternal(
+                            stopErrorMessage = "Ukuran rekaman mendekati batas aman 4 GB. Perekaman dihentikan agar video tidak rusak.",
+                            stopNoticeTitle = "Rekaman Disimpan (Batas Ukuran Aman 4 GB)"
+                        )
+                    }
+                    RecordingEngineOptimizer.RecordingHealthStatus.OK -> Unit
+                }
+            }
+        } catch (_: Exception) {}
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -323,12 +381,22 @@ open class ScreenRecordingService : Service() {
                 handleSetMicMuted(muted)
             }
             ACTION_CAPTURE_SCREENSHOT -> handleCaptureScreenshot()
-            ACTION_REFRESH_FOREGROUND_TYPE -> startOrUpdateForegroundService()
+            ACTION_REFRESH_FOREGROUND_TYPE -> {
+                if (isRecording && !isStopping.get()) {
+                    val notifyFacecam = intent.getBooleanExtra(EXTRA_REQUEST_FACECAM_OPEN, false)
+                    startOrUpdateForegroundService(isInitialStart = false, broadcastFacecamResult = notifyFacecam)
+                }
+            }
         }
         return START_NOT_STICKY
     }
 
     private fun handleStart(intent: Intent) {
+        if (isStopping.get()) {
+            Log.i(TAG, "Finalizing previous recording; queuing incoming ACTION_START")
+            pendingStartIntent = Intent(intent)
+            return
+        }
         if (isRecording) {
             Log.w(TAG, "Recording already active; ignoring duplicate ACTION_START")
             return
@@ -341,7 +409,7 @@ open class ScreenRecordingService : Service() {
         MainActivity.hasPendingSaveDialog = false
 
         // Harus masuk ke foreground terlebih dahulu sebelum memanggil getMediaProjection (Android 14+)
-        startOrUpdateForegroundService()
+        startOrUpdateForegroundService(isInitialStart = true, broadcastFacecamResult = false)
 
         val resultCode = intent.getIntExtra(EXTRA_RESULT_CODE, Activity.RESULT_CANCELED)
         val resultData: Intent? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -393,11 +461,13 @@ open class ScreenRecordingService : Service() {
                     height = recorder.actualHeight
                 ).also { relay ->
                     surfaceRelay = relay
+                    activeRelayInstance = relay
                 }.prepare()
             } catch (e: Exception) {
                 Log.w(TAG, "ProjectionSurfaceRelay fallback ke inputSurface langsung: ${e.message}")
                 try { surfaceRelay?.release() } catch (_: Exception) {}
                 surfaceRelay = null
+                activeRelayInstance = null
                 inputSurface
             }
 
@@ -644,11 +714,13 @@ open class ScreenRecordingService : Service() {
                                     height = recorder.actualHeight
                                 ).also { relay ->
                                     surfaceRelay = relay
+                                    activeRelayInstance = relay
                                 }.prepare()
                             } catch (e: Exception) {
                                 Log.w(TAG, "ProjectionSurfaceRelay fallback setelah reconfigure: ${e.message}")
                                 try { surfaceRelay?.release() } catch (_: Exception) {}
                                 surfaceRelay = null
+                                activeRelayInstance = null
                                 newInputSurface
                             }
 
@@ -679,14 +751,43 @@ open class ScreenRecordingService : Service() {
                     }
 
                     ResizeAction.STOP_UNSUPPORTED_ENCODER_RESIZE -> {
-                        val errorMsg = buildUnsupportedResizeErrorMessage(
-                            recorder.actualWidth,
-                            recorder.actualHeight,
-                            evaluation.targetWidth,
-                            evaluation.targetHeight
-                        )
-                        Log.w(TAG, errorMsg)
-                        stopRecordingInternal(stopErrorMessage = errorMsg)
+                        val relay = surfaceRelay
+                        if (relay != null) {
+                            try {
+                                relay.updateSourceContentSize(evaluation.targetWidth, evaluation.targetHeight)
+                                vd.resize(
+                                    evaluation.targetWidth,
+                                    evaluation.targetHeight,
+                                    evaluation.targetDensityDpi
+                                )
+                                virtualDisplayWidth = evaluation.targetWidth
+                                virtualDisplayHeight = evaluation.targetHeight
+                                virtualDisplayDensityDpi = evaluation.targetDensityDpi
+                                Log.i(
+                                    TAG,
+                                    "Aspect-fit resize aktif di tengah rekaman: sumber ${evaluation.targetWidth}x${evaluation.targetHeight} -> encoder tetap ${recorder.actualWidth}x${recorder.actualHeight}"
+                                )
+                            } catch (e: Exception) {
+                                Log.e(TAG, "Gagal menerapkan aspect-fit resize: ${e.message}", e)
+                                stopRecordingInternal(
+                                    stopErrorMessage = buildUnsupportedResizeErrorMessage(
+                                        recorder.actualWidth,
+                                        recorder.actualHeight,
+                                        evaluation.targetWidth,
+                                        evaluation.targetHeight
+                                    )
+                                )
+                            }
+                        } else {
+                            val errorMsg = buildUnsupportedResizeErrorMessage(
+                                recorder.actualWidth,
+                                recorder.actualHeight,
+                                evaluation.targetWidth,
+                                evaluation.targetHeight
+                            )
+                            Log.w(TAG, errorMsg)
+                            stopRecordingInternal(stopErrorMessage = errorMsg)
+                        }
                     }
                 }
             }
@@ -695,10 +796,14 @@ open class ScreenRecordingService : Service() {
         }
     }
 
-    private fun stopRecordingInternal(stopErrorMessage: String? = null) {
+    private fun stopRecordingInternal(
+        stopErrorMessage: String? = null,
+        stopNoticeTitle: String = "Perekaman Dihentikan (Ukuran Berubah)"
+    ) {
         if (isStopping.getAndSet(true)) return
 
         mainHandler.removeCallbacks(notificationUpdateRunnable)
+        healthCheckTickCount = 0
         val recorder = codecRecorder
         val targetFile = outputFile
         outputFile = null
@@ -712,6 +817,7 @@ open class ScreenRecordingService : Service() {
             virtualDisplayHeight = 0
             virtualDisplayDensityDpi = 0
 
+            activeRelayInstance = null
             try {
                 surfaceRelay?.release()
             } catch (ignored: Exception) {}
@@ -767,7 +873,7 @@ open class ScreenRecordingService : Service() {
 
             if (stopErrorMessage != null && resolvedErrorMessage != null) {
                 notificationHelper?.showRecordingStoppedWithNoticeNotification(
-                    title = "Perekaman Dihentikan (Ukuran Berubah)",
+                    title = stopNoticeTitle,
                     message = resolvedErrorMessage,
                     savedFile = if (isValidFile) targetFile else null
                 )
@@ -807,13 +913,31 @@ open class ScreenRecordingService : Service() {
                     })
                 }
 
-                stopForegroundCompat()
-                stopSelf()
+                val queuedStart = pendingStartIntent
+                pendingStartIntent = null
+                if (queuedStart != null) {
+                    Log.i(TAG, "Executing queued ACTION_START after previous recording finalized")
+                    handleStart(queuedStart)
+                } else {
+                    stopForegroundCompat()
+                    stopSelf()
+                }
             }
         }, "RekaminStopThread").start()
     }
 
-    private fun startOrUpdateForegroundService() {
+    private fun startForegroundWithType(notification: Notification, fgsType: Int) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            startForeground(NotificationHelper.NOTIFICATION_ID_RECORDING, notification, fgsType)
+        } else {
+            startForeground(NotificationHelper.NOTIFICATION_ID_RECORDING, notification)
+        }
+    }
+
+    private fun startOrUpdateForegroundService(
+        isInitialStart: Boolean = true,
+        broadcastFacecamResult: Boolean = false
+    ): Boolean {
         val prefs = AppPreferences(this)
         val hasMic = ContextCompat.checkSelfPermission(
             this,
@@ -834,11 +958,44 @@ open class ScreenRecordingService : Service() {
         )
 
         val notification = buildRecordingNotification()
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            startForeground(NotificationHelper.NOTIFICATION_ID_RECORDING, notification, fgsType)
-        } else {
-            startForeground(NotificationHelper.NOTIFICATION_ID_RECORDING, notification)
+        var cameraFgsActive = hasCamera && wantsFacecam
+        try {
+            startForegroundWithType(notification, fgsType)
+        } catch (e: Exception) {
+            Log.w(TAG, "startForeground gagal dengan tipe $fgsType (initial=$isInitialStart): ${e.message}")
+            cameraFgsActive = false
+            val fallbackType = resolveForegroundServiceType(
+                hasMicPermission = hasMic,
+                hasCameraPermission = false,
+                wantsAudio = wantsAudio,
+                wantsFacecam = false
+            )
+            try {
+                startForegroundWithType(notification, fallbackType)
+            } catch (e2: Exception) {
+                Log.w(TAG, "Fallback startForeground tanpa kamera gagal: ${e2.message}")
+                if (isInitialStart) {
+                    val minimalType = resolveForegroundServiceType(
+                        hasMicPermission = false,
+                        hasCameraPermission = false,
+                        wantsAudio = false,
+                        wantsFacecam = false
+                    )
+                    try {
+                        startForegroundWithType(notification, minimalType)
+                    } catch (e3: Exception) {
+                        Log.e(TAG, "Minimal startForeground gagal: ${e3.message}")
+                    }
+                }
+            }
         }
+
+        if (broadcastFacecamResult) {
+            sendPackageBroadcast(Intent(ACTION_FACECAM_FGS_UPDATED).apply {
+                putExtra(EXTRA_CAMERA_FGS_ACTIVE, cameraFgsActive)
+            })
+        }
+        return cameraFgsActive
     }
 
     private fun updateForegroundNotification() {
@@ -994,6 +1151,7 @@ open class ScreenRecordingService : Service() {
         virtualDisplayHeight = 0
         virtualDisplayDensityDpi = 0
         baseCaptureDensityDpi = 0
+        activeRelayInstance = null
         try { surfaceRelay?.release() } catch (_: Exception) {}
         surfaceRelay = null
         try { codecRecorder?.releaseAll() } catch (_: Exception) {}
@@ -1054,6 +1212,7 @@ open class ScreenRecordingService : Service() {
         if (!isStopping.get()) {
             cleanupResources()
         }
+        pendingStartIntent = null
         try { resizeExecutor?.shutdownNow() } catch (_: Exception) {}
         resizeExecutor = null
     }

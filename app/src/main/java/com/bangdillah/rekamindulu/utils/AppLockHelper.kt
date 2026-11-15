@@ -1,6 +1,8 @@
 package com.bangdillah.rekamindulu.utils
 
 import android.app.Activity
+import android.content.Context
+import android.content.Intent
 import android.text.InputFilter
 import android.text.InputType
 import android.view.Window
@@ -13,6 +15,8 @@ import com.bangdillah.rekamindulu.HomeActivity
 import com.bangdillah.rekamindulu.MainActivity
 import com.bangdillah.rekamindulu.R
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import java.security.MessageDigest
+import java.security.SecureRandom
 
 /**
  * Melacak transisi foreground/background aplikasi agar sesi PIN otomatis terkunci kembali
@@ -74,6 +78,20 @@ object AppLockHelper {
         sessionTracker.clearBackgroundSuppression()
     }
 
+    /**
+     * Membuka chooser/aplikasi sistem eksternal sambil menahan penguncian sesi PIN sementara,
+     * dan otomatis membatalkan penahanan tersebut bila startActivity gagal melempar exception.
+     */
+    fun launchExternalWithLockBypass(context: Context, intent: Intent) {
+        suppressNextBackgroundLock()
+        try {
+            context.startActivity(intent)
+        } catch (t: Throwable) {
+            clearBackgroundLockSuppression()
+            throw t
+        }
+    }
+
     fun shouldMaskScreenInRecents(
         isAppLockEnabled: Boolean,
         savedPin: String
@@ -94,6 +112,41 @@ object AppLockHelper {
         }
     }
 
+    private const val HASH_PREFIX = "sha256:"
+    private val secureRandom = SecureRandom()
+
+    fun isHashedPin(savedPin: String): Boolean {
+        return savedPin.startsWith(HASH_PREFIX)
+    }
+
+    /**
+     * Menghasilkan hash SHA-256 bersalt acak 16-byte dengan format:
+     * `sha256:<hex_salt>:<hex_digest>`
+     */
+    fun hashPin(pin: String): String {
+        val cleanPin = pin.trim()
+        val salt = ByteArray(16)
+        secureRandom.nextBytes(salt)
+        val saltHex = salt.joinToString("") { "%02x".format(it) }
+        val digestHex = computeSha256Hex(saltHex, cleanPin)
+        return "$HASH_PREFIX$saltHex:$digestHex"
+    }
+
+    private fun computeSha256Hex(saltHex: String, cleanPin: String): String {
+        val md = MessageDigest.getInstance("SHA-256")
+        md.update(saltHex.toByteArray(Charsets.UTF_8))
+        md.update(":".toByteArray(Charsets.UTF_8))
+        md.update(cleanPin.toByteArray(Charsets.UTF_8))
+        return md.digest().joinToString("") { "%02x".format(it) }
+    }
+
+    fun migrateLegacyPinIfNeeded(appPreferences: AppPreferences, verifiedPlaintextPin: String) {
+        val current = appPreferences.appLockPin
+        if (current.isNotEmpty() && !isHashedPin(current) && verifiedPlaintextPin.trim() == current) {
+            appPreferences.appLockPin = hashPin(verifiedPlaintextPin)
+        }
+    }
+
     fun shouldRequirePin(
         isAppLockEnabled: Boolean,
         savedPin: String,
@@ -103,7 +156,22 @@ object AppLockHelper {
     }
 
     fun verifyPin(enteredPin: String, savedPin: String): Boolean {
-        return savedPin.isNotEmpty() && enteredPin.trim() == savedPin
+        if (savedPin.isEmpty()) return false
+        val cleanEntered = enteredPin.trim()
+        if (cleanEntered.isEmpty()) return false
+        if (savedPin.startsWith(HASH_PREFIX)) {
+            val payload = savedPin.removePrefix(HASH_PREFIX)
+            val sep = payload.indexOf(':')
+            if (sep <= 0 || sep >= payload.lastIndex) return false
+            val saltHex = payload.substring(0, sep)
+            val expectedHex = payload.substring(sep + 1)
+            val actualHex = computeSha256Hex(saltHex, cleanEntered)
+            return MessageDigest.isEqual(
+                actualHex.toByteArray(Charsets.UTF_8),
+                expectedHex.toByteArray(Charsets.UTF_8)
+            )
+        }
+        return cleanEntered == savedPin
     }
 
     fun showPinGateIfNeeded(
@@ -159,6 +227,7 @@ object AppLockHelper {
             dialog.getButton(AlertDialog.BUTTON_POSITIVE)?.setOnClickListener {
                 val entered = input.text?.toString().orEmpty()
                 if (verifyPin(entered, appPreferences.appLockPin)) {
+                    migrateLegacyPinIfNeeded(appPreferences, entered)
                     HomeActivity.isSessionUnlocked = true
                     dialog.dismiss()
                     onPinVerified()
